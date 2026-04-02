@@ -5,6 +5,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { TenantService } from './tenant.service';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
+import { RegisterTenantDto } from './dto/tenant.dto';
 
 const PLAN_LIMITS: Record<string, number> = { BASICO: 5, PRO: 20, ENTERPRISE: 100 };
 
@@ -15,16 +16,8 @@ export class TenantController {
   // ===================== PUBLIC — Self-Service Register =====================
   @Throttle({ default: { limit: 5, ttl: 3600 } })
   @Post('tenants/register')
-  async register(@Body() body: any) {
-    const { tipoPessoa, cpfCnpj, razaoSocial, nomeFantasia, nomeCompleto, email, telefone,
-            cep, numero, complemento, nome, senha } = body;
-    if (!cpfCnpj || !email || !nome || !senha) {
-      throw new BadRequestException('Campos obrigatórios: cpfCnpj, email, nome, senha.');
-    }
-    if (!tipoPessoa || !['FISICA', 'JURIDICA'].includes(tipoPessoa)) {
-      throw new BadRequestException("tipoPessoa deve ser 'FISICA' ou 'JURIDICA'.");
-    }
-    return this.tenantService.register({ tipoPessoa, cpfCnpj, razaoSocial, nomeFantasia, nomeCompleto, email, telefone, cep, numero, complemento, nome, senha });
+  async register(@Body() dto: RegisterTenantDto) {
+    return this.tenantService.register(dto);
   }
 
   // ===================== Verificar E-mail =====================

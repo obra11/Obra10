@@ -4,6 +4,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
+const LOCKOUT_THRESHOLD = 10;
+const LOCKOUT_MINUTES = 15;
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -32,8 +35,36 @@ export class AuthService {
       throw new UnauthorizedException('Credenciais inválidas ou usuário inativo.');
     }
 
+    // --- Bloqueio de conta por tentativas falhas ---
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+      throw new UnauthorizedException(
+        `Conta temporariamente bloqueada. Tente novamente em ${minutesLeft} minuto(s).`,
+      );
+    }
+
     const senhaOk = await bcrypt.compare(senhaPlana, user.senhaHash);
-    if (!senhaOk) throw new UnauthorizedException('Credenciais inválidas.');
+
+    if (!senhaOk) {
+      const newAttempts = user.loginAttempts + 1;
+      const updateData: any = { loginAttempts: newAttempts };
+      if (newAttempts >= LOCKOUT_THRESHOLD) {
+        updateData.lockedUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000);
+        this.logger.warn(
+          `[LOCKOUT] Conta bloqueada por ${LOCKOUT_MINUTES}min | email=${email} | tentativas=${newAttempts}`,
+        );
+      }
+      await this.prisma.usuario.update({ where: { id: user.id }, data: updateData });
+      throw new UnauthorizedException('Credenciais inválidas.');
+    }
+
+    // Login OK — resetar contadores
+    if (user.loginAttempts > 0 || user.lockedUntil) {
+      await this.prisma.usuario.update({
+        where: { id: user.id },
+        data: { loginAttempts: 0, lockedUntil: null },
+      });
+    }
 
     const obrasPermitidas = await this.buildObrasPermitidas(user.id, user.empresaId, user.perfilGlobal);
 
@@ -174,11 +205,63 @@ export class AuthService {
     const hash = await bcrypt.hash(novaSenha, 10);
     await this.prisma.usuario.update({
       where: { id: user.id },
-      data: { senhaHash: hash, resetToken: null, resetTokenExp: null },
+      data: {
+        senhaHash: hash,
+        resetToken: null,
+        resetTokenExp: null,
+        jwtVersion: { increment: 1 }, // Invalidates all existing sessions
+        loginAttempts: 0,
+        lockedUntil: null,
+      },
     });
 
-    this.logger.warn(`[RESET SENHA] Senha redefinida com sucesso para userId=${user.id}`);
+    this.logger.warn(`[RESET SENHA] Senha redefinida + sessões invalidadas para userId=${user.id}`);
     return { success: true, message: 'Senha redefinida com segurança!' };
   }
-}
 
+  // ==================== LGPD ====================
+
+  async getMeusDados(userId: string) {
+    const user = await this.prisma.usuario.findUnique({
+      where: { id: userId },
+      select: {
+        id: true, nome: true, email: true, telefone: true,
+        perfilGlobal: true, fotoUrl: true, ativo: true,
+        createdAt: true, updatedAt: true, aceitouTermos: true, dataAceite: true,
+        empresa: { select: { id: true, razaoSocial: true, nomeFantasia: true } },
+        userObraRole: {
+          select: {
+            obra: { select: { id: true, nome: true } },
+            perfil: { select: { nomeInterno: true } },
+          },
+        },
+      },
+    });
+    if (!user) throw new BadRequestException('Usuário não encontrado.');
+    return { dadosPessoais: user, exportadoEm: new Date().toISOString() };
+  }
+
+  async anonimizarConta(userId: string) {
+    const user = await this.prisma.usuario.findUnique({ where: { id: userId } });
+    if (!user) throw new BadRequestException('Usuário não encontrado.');
+
+    const anonId = crypto.randomUUID().slice(0, 8);
+    await this.prisma.usuario.update({
+      where: { id: userId },
+      data: {
+        nome: 'Usuário removido',
+        email: `removido-${anonId}@deleted.obra10.com`,
+        telefone: null,
+        fotoUrl: null,
+        senhaHash: 'ANONIMIZADO',
+        ativo: false,
+        resetToken: null,
+        resetTokenExp: null,
+        jwtVersion: { increment: 1 }, // Invalidate all sessions
+      },
+    });
+
+    this.logger.warn(`[LGPD] Conta anonimizada: userId=${userId}`);
+    return { success: true };
+  }
+}

@@ -1,9 +1,10 @@
 import { Controller, Get, Post, Body, Param, Query, Req, UseGuards } from '@nestjs/common';
 import { AnexosService } from './anexos.service';
 import { ObraContextGuard } from '../../core/guards/obra-context.guard';
+import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 
 
-@UseGuards(ObraContextGuard)
+@UseGuards(JwtAuthGuard, ObraContextGuard)
 @Controller('anexos')
 export class AnexosController {
   constructor(private readonly anexosService: AnexosService) {}

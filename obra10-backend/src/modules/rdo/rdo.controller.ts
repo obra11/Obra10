@@ -5,6 +5,7 @@ import { ObraContextGuard } from '../../core/guards/obra-context.guard';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { ModuloGuard } from '../../core/guards/modulo.guard';
 import { Modulo } from '../../core/decorators/modulo.decorator';
+import { CreateRdoDto, SaveRascunhoDto, SubmeterRdoDto, ReprovarRdoDto } from './dto/rdo.dto';
 
 @Modulo('RDO')
 @UseGuards(JwtAuthGuard, ObraContextGuard, ModuloGuard)
@@ -58,15 +59,15 @@ export class RdoController {
 
   // ── CRUD RDO BASE ─────────────────────────────────────────────────────────────
   @Post()
-  async criar(@Body() body: any, @Req() req: any) {
-    return this.rdoService.create(req.headers['x-obra-id'], req.user.sub, body);
+  async criar(@Body() dto: CreateRdoDto, @Req() req: any) {
+    return this.rdoService.create(req.headers['x-obra-id'], req.user.sub, dto);
   }
 
   // ── SALVAR RASCUNHO COMPLETO (DiarioDeObra) ───────────────────────────────────
   /** PUT /rdos/:id/rascunho — Persiste o JSON completo do formulário no campo dadosExtras. */
   @Put(':id/rascunho')
-  async salvarRascunho(@Param('id') id: string, @Body() body: any, @Req() req: any) {
-    return this.rdoService.saveRascunho(id, req.headers['x-obra-id'], body);
+  async salvarRascunho(@Param('id') id: string, @Body() dto: SaveRascunhoDto, @Req() req: any) {
+    return this.rdoService.saveRascunho(id, req.headers['x-obra-id'], dto);
   }
 
   // ── REGISTROS FILHOS ──────────────────────────────────────────────────────────
@@ -98,8 +99,8 @@ export class RdoController {
 
   // ── MÁQUINA DE STATUS ────────────────────────────────────────────────────────
   @Put(':id/submeter')
-  async submeter(@Param('id') id: string, @Body() body: any, @Req() req: any) {
-    return this.rdoService.submeter(id, req.headers['x-obra-id'], req.obraRole, body?.aprovadorIdSelecionado);
+  async submeter(@Param('id') id: string, @Body() dto: SubmeterRdoDto, @Req() req: any) {
+    return this.rdoService.submeter(id, req.headers['x-obra-id'], req.obraRole, dto?.aprovadorIdSelecionado);
   }
 
   @Put(':id/aprovar')
@@ -108,8 +109,8 @@ export class RdoController {
   }
 
   @Put(':id/rejeitar')
-  async rejeitar(@Param('id') id: string, @Body() body: any, @Req() req: any) {
-    return this.rdoService.rejeitar(id, req.headers['x-obra-id'], req.obraRole, req.user.sub, body.motivo);
+  async rejeitar(@Param('id') id: string, @Body() dto: ReprovarRdoDto, @Req() req: any) {
+    return this.rdoService.rejeitar(id, req.headers['x-obra-id'], req.obraRole, req.user.sub, dto.motivo);
   }
 
   /** PUT /rdos/:id/revisar — Reabre um RDO rejeitado para reedição. */
@@ -118,3 +119,4 @@ export class RdoController {
     return this.rdoService.revisar(id, req.headers['x-obra-id']);
   }
 }
+

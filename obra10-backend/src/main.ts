@@ -5,6 +5,7 @@ import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { AuditInterceptor } from './core/interceptors/audit.interceptor';
+import { SanitizePipe } from './core/pipes/sanitize.pipe';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -12,10 +13,33 @@ async function bootstrap() {
   // 0. Logging Interceptor de Auditoria
   app.useGlobalInterceptors(new AuditInterceptor());
 
-  // 1. Helmet: Security Headers (DNS Prefetch, MIME Sniffing, XSS Filters)
+  // 1. Helmet: Security Headers completos
   app.use(helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" }
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+      },
+    },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    hsts: { maxAge: 31536000, includeSubDomains: true },
+    frameguard: { action: 'deny' },
   }));
+
+  // 1b. Custom security headers not covered by helmet
+  app.use((req: any, res: any, next: any) => {
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    next();
+  });
 
   // 2. Parsers
   app.use(cookieParser());
@@ -29,13 +53,17 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // 4. Global Validation Pipe: Rejeita payloads fantasmas e não mapados em DTOs
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }));
+  // 4. Global Pipes: Sanitização XSS + Validação de DTOs
+  app.useGlobalPipes(
+    new SanitizePipe(),
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
 bootstrap();
+

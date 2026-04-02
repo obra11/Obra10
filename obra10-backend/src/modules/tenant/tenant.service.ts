@@ -7,6 +7,7 @@ import { AsaasService } from '../cobranca/asaas.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import axios from 'axios';
+import { CryptoService } from '../../core/services/crypto.service';
 
 // ===================== VALIDATORS =====================
 function validarCPF(cpf: string): boolean {
@@ -54,6 +55,7 @@ export class TenantService {
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
     private readonly asaas: AsaasService,
+    private readonly cryptoService: CryptoService,
   ) {}
 
   // ===================== SELF-SERVICE REGISTER (PF/PJ) =====================
@@ -110,8 +112,8 @@ export class TenantService {
       const empresa = await tx.empresa.create({
         data: {
           tipoPessoa: dto.tipoPessoa,
-          cpfCnpj: cpfCnpjLimpo,
-          cnpj: dto.tipoPessoa === 'JURIDICA' ? cpfCnpjLimpo : undefined,
+          cpfCnpj: this.cryptoService.encrypt(cpfCnpjLimpo),
+          cnpj: dto.tipoPessoa === 'JURIDICA' ? this.cryptoService.encrypt(cpfCnpjLimpo) : undefined,
           razaoSocial: dto.razaoSocial,
           nomeFantasia: dto.nomeFantasia,
           nomeCompleto: dto.nomeCompleto,

@@ -1,6 +1,8 @@
-import { Controller, Post, Body, Get, Req, Res, UseGuards, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, Get, Delete, Req, Res, UseGuards, UnauthorizedException } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { LoginDto, EsqueciSenhaDto, RedefinirSenhaDto } from './dto/auth.dto';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 
@@ -11,33 +13,27 @@ export class AuthController {
     private readonly prisma: PrismaService,
   ) {}
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
-  async login(@Body() body: any, @Res({ passthrough: true }) res: Response) {
-    const email = body.email;
-    const senha = body.senha; // padronizado: apenas 'senha'
-    let empresaId = body.empresaId;
-
-    if (!email || !senha) {
-      throw new BadRequestException('Email e senha são obrigatórios.');
-    }
-
-    // Auto-lookup empresaId if not provided (find empresa by user email)
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+    // Auto-lookup empresaId if not provided
+    let empresaId = dto.empresaId;
     if (!empresaId) {
       const usuario = await this.prisma.usuario.findFirst({
-        where: { email, ativo: true },
+        where: { email: dto.email, ativo: true },
         select: { empresaId: true },
       });
       if (!usuario) throw new UnauthorizedException('Credenciais inválidas.');
       empresaId = usuario.empresaId;
     }
 
-    const result = await this.authService.login(email, senha, empresaId);
-    
+    const result = await this.authService.login(dto.email, dto.senha, empresaId);
+
     res.cookie('obra10_token', result.access_token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 3600000 // 1h
+      sameSite: 'strict',
+      maxAge: 3600000, // 1h
     });
 
     const { access_token, ...userData } = result;
@@ -58,16 +54,31 @@ export class AuthController {
     return this.authService.getMe(userId);
   }
 
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   @Post('esqueci-senha')
-  async esqueciSenha(@Body('email') email: string) {
-    if (!email) throw new BadRequestException('E-mail é obrigatório');
-    return this.authService.esqueciSenha(email);
+  async esqueciSenha(@Body() dto: EsqueciSenhaDto) {
+    return this.authService.esqueciSenha(dto.email);
   }
 
   @Post('redefinir-senha')
-  async redefinirSenha(@Body() body: any) {
-    const { token, novaSenha } = body;
-    if (!token || !novaSenha) throw new BadRequestException('Token e Nova Senha são obrigatórios');
-    return this.authService.redefinirSenha(token, novaSenha);
+  async redefinirSenha(@Body() dto: RedefinirSenhaDto) {
+    return this.authService.redefinirSenha(dto.token, dto.novaSenha);
+  }
+
+  // ==================== LGPD ====================
+
+  @UseGuards(JwtAuthGuard)
+  @Get('meus-dados')
+  async getMeusDados(@Req() req: any) {
+    return this.authService.getMeusDados(req.user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('minha-conta')
+  async anonimizarConta(@Req() req: any, @Res({ passthrough: true }) res: Response) {
+    await this.authService.anonimizarConta(req.user.sub);
+    res.clearCookie('obra10_token');
+    return { success: true, message: 'Conta anonimizada com sucesso. Seus dados pessoais foram removidos.' };
   }
 }
+

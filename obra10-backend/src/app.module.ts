@@ -19,11 +19,13 @@ import { EmailModule } from './modules/email/email.module';
 import { ModulosModule } from './modules/modulos/modulos.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
+import { CryptoModule } from './core/services/crypto.module';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
+    CryptoModule,
     ThrottlerModule.forRoot([{
       ttl: 60000,
       limit: 100, // max 100 requests per IP per minute

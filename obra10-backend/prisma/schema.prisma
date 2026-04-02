@@ -85,6 +85,10 @@ model Usuario {
   jwtVersion     Int             @default(0) @map("jwt_version")
   perfilGlobal   PerfilGlobal    @default(USER) @map("perfil_global")
   fotoUrl        String?         @map("foto_url")
+  loginAttempts  Int             @default(0) @map("login_attempts")
+  lockedUntil    DateTime?       @map("locked_until")
+  aceitouTermos  Boolean         @default(false) @map("aceitou_termos")
+  dataAceite     DateTime?       @map("data_aceite")
   anexosUpados   Anexo[]
   auditLogs      AuditLog[]
   atividades     RdoAtividade[]
