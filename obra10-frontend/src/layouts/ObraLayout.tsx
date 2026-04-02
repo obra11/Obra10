@@ -189,9 +189,9 @@ export const ObraLayout: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header Mobile */}
-        <header className="h-16 bg-white shadow-sm flex items-center justify-between px-4 md:hidden shrink-0 z-10 relative">
+        <header className="h-14 bg-white shadow-sm flex items-center justify-between px-4 md:hidden shrink-0 z-10 relative">
           <div className="flex items-center text-lunardeli-dark min-w-0">
-            <button onClick={handleBackToCompany} className="p-2 -ml-2 mr-1 text-gray-500 hover:text-lunardeli-red">
+            <button onClick={handleBackToCompany} className="p-2.5 -ml-2 mr-1 text-gray-500 hover:text-lunardeli-red active:bg-gray-100 rounded-lg">
                <ArrowLeft size={20} />
             </button>
              <div className="min-w-0">
@@ -200,8 +200,8 @@ export const ObraLayout: React.FC = () => {
              </div>
           </div>
           
-          <div className="flex items-center gap-3">
-            <label className="relative cursor-pointer flex items-center justify-center w-8 h-8 rounded-full overflow-hidden bg-gray-100 border border-gray-300 shrink-0">
+          <div className="flex items-center gap-2">
+            <label className="relative cursor-pointer flex items-center justify-center w-9 h-9 rounded-full overflow-hidden bg-gray-100 border border-gray-300 shrink-0">
                {uploadingUserPhoto ? (
                  <Loader2 className="animate-spin text-lunardeli-red" size={14} />
                ) : user?.fotoUrl ? (
@@ -211,17 +211,47 @@ export const ObraLayout: React.FC = () => {
                )}
                <input type="file" className="hidden" accept="image/*" onChange={handleUserPhotoUpload} />
             </label>
-            <button onClick={handleLogout} className="text-gray-500 hover:text-lunardeli-red p-2 shrink-0 border-l border-gray-200">
+            <button onClick={handleLogout} className="text-gray-500 hover:text-lunardeli-red p-2.5 shrink-0 active:bg-gray-100 rounded-lg">
               <LogOut size={20} />
             </button>
           </div>
         </header>
 
-        {/* Dynamic Nested Content */}
-        <div className="flex-1 overflow-y-auto">
-          <Outlet />
+        {/* Dynamic Nested Content — add bottom padding on mobile for bottom nav */}
+        <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)] md:pb-0">
+          <div className="md:pb-0 pb-20">
+            <Outlet />
+          </div>
         </div>
       </main>
+
+      {/* ═══ Bottom Navigation Bar — Mobile Only ═══ */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <div className="flex items-center justify-around h-16 px-1">
+          {menuItems.slice(0, 5).map(item => {
+            const isActive = location.pathname.startsWith(item.path);
+            return (
+              <button
+                key={item.name}
+                onClick={() => navigate(item.path)}
+                className={`flex flex-col items-center justify-center flex-1 h-full min-w-0 relative transition-colors ${
+                  isActive ? 'text-lunardeli-red' : 'text-gray-400'
+                }`}
+              >
+                {/* Active indicator bar */}
+                {isActive && (
+                  <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-lunardeli-red rounded-b-full" />
+                )}
+                <item.icon size={22} strokeWidth={isActive ? 2.5 : 1.8} className="shrink-0" />
+                <span className={`text-[10px] mt-0.5 leading-tight truncate max-w-full px-1 ${isActive ? 'font-bold' : 'font-medium'}`}>
+                  {item.name}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 };
+

@@ -166,7 +166,7 @@ export const CompanyDashboard: React.FC = () => {
     <div className="min-h-screen bg-lunardeli-gray">
       {/* Header Construtora */}
       <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 md:h-20 flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <div className="relative flex-shrink-0">
               {empresa?.logoUrl ? (
@@ -180,7 +180,7 @@ export const CompanyDashboard: React.FC = () => {
             
             <div className="border-l pl-4 border-gray-200">
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-lunardeli-dark truncate max-w-[200px]">{empresa?.nomeFantasia || empresa?.razaoSocial}</h1>
+                <h1 className="text-base md:text-xl font-bold text-lunardeli-dark truncate max-w-[140px] md:max-w-[200px]">{empresa?.nomeFantasia || empresa?.razaoSocial}</h1>
                 {user?.perfilGlobal === 'GESTOR' && (
                   <button onClick={() => { setEmpresaEdit({ nomeFantasia: empresa?.nomeFantasia || empresa?.razaoSocial || '' }); setShowEditEmpresaModal(true); }} className="text-gray-400 hover:text-lunardeli-red transition-colors shrink-0" title="Editar Empresa">
                     <Edit2 size={16} />
@@ -246,8 +246,8 @@ export const CompanyDashboard: React.FC = () => {
                 <p className="text-gray-500 text-sm mt-1">Selecione um canteiro de obras para acessar seus módulos e RDOs.</p>
             </div>
             {user?.perfilGlobal === 'GESTOR' && (
-              <button onClick={() => setShowNovoModal(true)} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 flex items-center gap-2">
-                <Plus size={18} /> Nova Obra
+              <button onClick={() => setShowNovoModal(true)} className="px-3 md:px-4 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 active:bg-red-800 flex items-center gap-1.5 md:gap-2 text-sm">
+                <Plus size={18} /> <span className="hidden sm:inline">Nova </span>Obra
               </button>
             )}
         </div>
@@ -278,7 +278,7 @@ export const CompanyDashboard: React.FC = () => {
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleToggleStatus(obra); }}
                     title={user?.perfilGlobal === 'GESTOR' ? "Clique para alterar o status" : ""}
-                    className={`absolute top-4 left-4 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm transition-colors ${
+                    className={`absolute top-3 left-3 text-white text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-full shadow-sm transition-colors ${
                       obra.status === 'ATIVA' ? 'bg-green-500 hover:bg-green-600' :
                       obra.status === 'INATIVA' ? 'bg-yellow-500 hover:bg-yellow-600' :
                       obra.status === 'FINALIZADA' ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-500'
@@ -291,7 +291,7 @@ export const CompanyDashboard: React.FC = () => {
                   {user?.perfilGlobal === 'GESTOR' && (
                     <button 
                       onClick={(e) => { e.stopPropagation(); setObraEdit({ id: obra.id, nome: obra.nome, endereco: obra.endereco || '' }); setShowEditModal(true); }}
-                      className="absolute top-4 right-24 bg-blue-500/90 hover:bg-blue-600 text-white p-2 rounded-full cursor-pointer shadow-sm transition-all"
+                      className="absolute top-3 right-[88px] md:right-24 bg-blue-500/90 hover:bg-blue-600 text-white p-2.5 rounded-full cursor-pointer shadow-sm transition-all"
                       title="Editar Obra"
                     >
                       <Edit2 size={16} />
@@ -302,7 +302,7 @@ export const CompanyDashboard: React.FC = () => {
                   {user?.perfilGlobal === 'GESTOR' && (
                     <button 
                       onClick={(e) => { e.stopPropagation(); handleExcluirObra(obra.id, obra.nome); }}
-                      className="absolute top-4 right-14 bg-red-500/90 hover:bg-red-600 text-white p-2 rounded-full cursor-pointer shadow-sm transition-all"
+                      className="absolute top-3 right-12 bg-red-500/90 hover:bg-red-600 text-white p-2.5 rounded-full cursor-pointer shadow-sm transition-all"
                       title="Excluir Obra"
                     >
                       {loadingExcluirId === obra.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}

@@ -477,22 +477,23 @@ export const DiarioDeObra: React.FC = () => {
      Main Render
      ═══════════════════════════════════════════════════════════════ */
   return (
-    <div className="min-h-screen bg-lunardeli-gray font-sans pb-20 relative">
+    <div className="min-h-screen bg-lunardeli-gray font-sans pb-20 md:pb-20 relative">
+      {/* Toast — Responsive */}
       {toast && (
-        <div className="fixed top-6 right-6 z-50 px-6 py-3 bg-white border-l-4 border-lunardeli-red shadow-lg rounded-r-lg text-sm font-semibold animate-bounce">
+        <div className="fixed top-4 left-4 right-4 md:left-auto md:right-6 md:top-6 md:max-w-sm z-[60] px-4 py-3 bg-white border-l-4 border-lunardeli-red shadow-lg rounded-lg text-sm font-semibold animate-bounce">
           {toast}
         </div>
       )}
 
       {/* Header Sticky */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 md:px-8 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Diário de Obra</h1>
-            <p className="text-sm text-gray-500 font-medium">{initLoading ? 'Carregando informações...' : `Registro Diário de Ocorrências · ${rdoNumberStr}`}</p>
+        <div className="max-w-4xl mx-auto px-4 md:px-8 py-3 md:py-4 flex flex-row items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-lg md:text-2xl font-bold text-gray-900 tracking-tight truncate">Diário de Obra</h1>
+            <p className="text-xs md:text-sm text-gray-500 font-medium truncate">{initLoading ? 'Carregando...' : `${rdoNumberStr}`}</p>
           </div>
-          <div className="flex items-center gap-3">
-            <span className={`px-3 py-1 rounded-full text-xs font-bold border ${statusBadgeColor[status]}`}>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border whitespace-nowrap ${statusBadgeColor[status]}`}>
               {statusLabels[status].toUpperCase()}
             </span>
           </div>
@@ -882,6 +883,28 @@ export const DiarioDeObra: React.FC = () => {
         </SectionContainer>
         
       </div>
+
+      {/* ═══ Mobile Floating Action Bar ═══ */}
+      {status === 'rascunho' && (
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+          <div className="flex items-center gap-2 px-4 py-3">
+            <button
+              onClick={handleSalvarRascunho}
+              disabled={saving}
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-3 bg-white border-2 border-gray-200 text-gray-700 text-sm font-bold rounded-xl active:bg-gray-50 transition-colors disabled:opacity-60"
+            >
+              <Save size={18} /> {saving ? '...' : 'Salvar'}
+            </button>
+            <button
+              onClick={handleEnviar}
+              disabled={saving}
+              className="flex-[2] flex items-center justify-center gap-2 px-3 py-3 bg-lunardeli-red text-white text-sm font-bold rounded-xl active:bg-red-700 shadow-sm transition-colors disabled:opacity-60"
+            >
+              <Send size={18} /> {saving ? 'Enviando...' : 'Enviar p/ aprovação'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
