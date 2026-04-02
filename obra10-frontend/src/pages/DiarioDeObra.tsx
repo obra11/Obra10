@@ -92,13 +92,13 @@ function getFileExt(name: string): string {
    Render Helpers
    ═══════════════════════════════════════════════════════════════ */
 const SectionContainer = ({ children }: { children: React.ReactNode }) => (
-  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">{children}</div>
+  <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 border-t-[3px] border-t-lunardeli-red/80">{children}</div>
 );
 
 const SectionTitle = ({ icon: Icon, title, badge }: { icon: any; title: string; badge?: React.ReactNode }) => (
-  <h2 className="text-lg font-bold text-gray-900 mb-5 flex items-center gap-2">
-    <Icon className="text-lunardeli-red" size={22} />
-    {title}
+  <h2 className="text-base md:text-lg font-bold text-gray-900 mb-4 md:mb-5 flex items-center gap-2">
+    <Icon className="text-lunardeli-red shrink-0" size={20} />
+    <span className="truncate">{title}</span>
     {badge}
   </h2>
 );
@@ -477,7 +477,7 @@ export const DiarioDeObra: React.FC = () => {
      Main Render
      ═══════════════════════════════════════════════════════════════ */
   return (
-    <div className="min-h-screen bg-lunardeli-gray font-sans pb-20 md:pb-20 relative">
+    <div className="min-h-screen bg-lunardeli-gray font-sans pb-40 md:pb-20 relative">
       {/* Toast — Responsive */}
       {toast && (
         <div className="fixed top-4 left-4 right-4 md:left-auto md:right-6 md:top-6 md:max-w-sm z-[60] px-4 py-3 bg-white border-l-4 border-lunardeli-red shadow-lg rounded-lg text-sm font-semibold animate-bounce">
@@ -500,7 +500,7 @@ export const DiarioDeObra: React.FC = () => {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 md:px-8 py-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-3 md:px-8 py-5 md:py-8 space-y-4 md:space-y-6">
 
         {/* 1. Informações */}
         <SectionContainer>
