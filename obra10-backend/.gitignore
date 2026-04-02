@@ -1,0 +1,37 @@
+node_modules
+dist
+
+# Environment variables (secrets)
+.env
+.env.*
+
+# Generated Prisma client
+/generated/prisma
+
+# Build artifacts
+*.tsbuildinfo
+
+# Uploads (user-generated content)
+uploads/
+
+# Analysis/walkthrough files (may contain credential logs)
+walkthrough.md
+*.walkthrough.md
+
+# Prisma — exclui arquivos .sql avulsos (debug temporário), mantém pastas de migrations versionadas
+prisma/migrations/*.sql
+prisma/apply_*.ts
+
+# Temporary test scripts and debug files
+fix_*.js
+check_*.js
+check_*.ts
+test_*.js
+test_*.ts
+test.jpg
+seed_modulos.js
+verify.cjs
+verify.ts
+debug-*.json
+out_*.txt
+Obra10_Postman.http

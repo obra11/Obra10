@@ -1,0 +1,68 @@
+# ============================================
+# Obra 10 — Monorepo .gitignore
+# ============================================
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment variables (secrets)
+.env
+.env.*
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS generated files
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+
+# Editor / IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Prisma generated client
+obra10-backend/generated/
+
+# Uploads (user-generated content)
+obra10-backend/uploads/
+
+# SQLite databases (if any)
+*.db
+*.sqlite
+
+# Antigravity / AI agent working files
+.gemini/
+
+# Temporary tunnel/test scripts (root level)
+pinggy.cjs
+serveo.cjs
+tunnel.cjs
+tunnel_out.txt
+test-login.js
+secops_tester.js
+
+# Root-level package (only localtunnel dep, not project code)
+/package.json
+/package-lock.json
+
+# AI agent generated intermediary files
+*.metadata.json
+*.resolved
+*.resolved.*

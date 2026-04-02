@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==============================
+// ENUMS DE DOMÍNIO
+// ==============================
+enum StatusObra {
+  ATIVA
+  FINALIZADA
+  PARALISADA
+}
+
+enum StatusRDO {
+  RASCUNHO
+  ENVIADO
+  APROVADO
+  DEVOLVIDO
+}
+
+enum TipoClima {
+  BOM
+  NUBLADO
+  CHUVA_LEVE
+  CHUVA_FORTE
+}
+
+enum CondicaoTerreno {
+  SECO
+  UMIDO
+  LAMA
+  INTRANSITAVEL
+}
+
+enum TipoAnexo {
+  FOTO
+  VIDEO
+  DOCUMENTO
+}
+
+enum OrigemAnexo {
+  RDO
+  RDO_ATIVIDADE
+  FVS
+  LOTE_CONCRETO
+  PROJETO
+}
+
+enum AcaoAuditoria {
+  CREATE
+  UPDATE
+  SOFT_DELETE
+  APPROVE
+  RESTORE
+}
+
+// ==============================
+// CORE & AUTENTICAÇÃO
+// ==============================
+model Empresa {
+  id           String      @id @default(uuid())
+  cnpj         String      @unique
+  razaoSocial  String      @map("razao_social")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  deletedAt    DateTime?   @map("deleted_at")
+
+  obras        Obra[]
+  usuarios     Usuario[]
+  auditLogs    AuditLog[]
+
+  @@map("empresas")
+}
+
+model Obra {
+  id           String      @id @default(uuid())
+  empresaId    String      @map("empresa_id")
+  nome         String
+  endereco     String?
+  status       StatusObra  @default(ATIVA)
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  deletedAt    DateTime?   @map("deleted_at")
+
+  empresa      Empresa     @relation(fields: [empresaId], references: [id])
+  userObraRole UserObraRole[]
+  rdos         Rdo[]
+  anexos       Anexo[]
+  auditLogs    AuditLog[]
+
+  @@index([empresaId])
+  @@map("obras")
+}
+
+model Usuario {
+  id           String      @id @default(uuid())
+  empresaId    String      @map("empresa_id")
+  nome         String
+  email        String
+  senhaHash    String      @map("senha_hash")
+  telefone     String?
+  ativo        Boolean     @default(true)
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  deletedAt    DateTime?   @map("deleted_at")
+
+  empresa      Empresa     @relation(fields: [empresaId], references: [id])
+  userObraRole UserObraRole[]
+  rdosCriados  Rdo[]       @relation("RdoCriador")
+  rdosAprovos  Rdo[]       @relation("RdoAprovador")
+  atividades   RdoAtividade[]
+  efetivos     RdoEfetivo[]
+  ocorrencias  RdoOcorrencia[]
+  anexosUpados Anexo[]
+  auditLogs    AuditLog[]
+
+  @@unique([empresaId, email]) // Correção Crítica Multi-Tenant
+  @@index([empresaId])
+  @@map("usuarios")
+}
+
+model Perfil {
+  id           Int         @id @default(autoincrement()) 
+  nomeInterno  String      @unique @map("nome_interno")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  userObraRole UserObraRole[]
+
+  @@map("perfis")
+}
+
+model UserObraRole {
+  id           String      @id @default(uuid())
+  usuarioId    String      @map("usuario_id")
+  obraId       String      @map("obra_id")
+  perfilId     Int         @map("perfil_id")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  usuario      Usuario     @relation(fields: [usuarioId], references: [id])
+  obra         Obra        @relation(fields: [obraId], references: [id])
+  perfil       Perfil      @relation(fields: [perfilId], references: [id])
+
+  @@unique([usuarioId, obraId]) 
+  @@index([obraId])
+  @@map("user_obra_roles")
+}
+
+// ==============================
+// MÓDULO RDO E FILHAS
+// ==============================
+model Rdo {
+  id              String      @id @default(uuid())
+  obraId          String      @map("obra_id")
+  criadorId       String      @map("criador_id")
+  aprovadorId     String?     @map("aprovador_id")
+  dataReferencia  DateTime    @db.Date @map("data_referencia")
+  climaManha      TipoClima?  @map("clima_manha")
+  climaTarde      TipoClima?  @map("clima_tarde")
+  condicaoTerreno CondicaoTerreno? @map("condicao_terreno")
+  status          StatusRDO   @default(RASCUNHO)
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  deletedAt       DateTime?   @map("deleted_at")
+
+  obra            Obra        @relation(fields: [obraId], references: [id])
+  criador         Usuario     @relation("RdoCriador", fields: [criadorId], references: [id])
+  aprovador       Usuario?    @relation("RdoAprovador", fields: [aprovadorId], references: [id])
+  atividades      RdoAtividade[]
+  efetivos        RdoEfetivo[]
+  ocorrencias     RdoOcorrencia[]
+
+  @@unique([obraId, dataReferencia, deletedAt]) 
+  @@index([obraId, status])
+  @@index([dataReferencia])
+  @@map("rdos")
+}
+
+model RdoAtividade {
+  id           String      @id @default(uuid())
+  rdoId        String      @map("rdo_id")
+  criadorId    String      @map("criador_id")
+  descricao    String
+  frenteServico String?    @map("frente_servico")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at") // Correção
+  deletedAt    DateTime?   @map("deleted_at") // Correção
+
+  rdo          Rdo         @relation(fields: [rdoId], references: [id])
+  criador      Usuario     @relation(fields: [criadorId], references: [id])
+
+  @@index([rdoId])
+  @@map("rdo_atividades")
+}
+
+model RdoEfetivo {
+  id                  String   @id @default(uuid())
+  rdoId               String   @map("rdo_id")
+  criadorId           String   @map("criador_id")
+  empresaTerceira     String   @map("empresa_terceira")
+  funcaoCargo         String   @map("funcao_cargo")
+  quantidade          Int      @default(1)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at") // Correção
+  deletedAt           DateTime? @map("deleted_at") // Correção
+
+  rdo                 Rdo      @relation(fields: [rdoId], references: [id])
+  criador             Usuario  @relation(fields: [criadorId], references: [id])
+
+  @@index([rdoId])
+  @@map("rdo_efetivos")
+}
+
+model RdoOcorrencia {
+  id                String   @id @default(uuid())
+  rdoId             String   @map("rdo_id")
+  criadorId         String   @map("criador_id")
+  tipoOcorrencia    String   @map("tipo_ocorrencia")
+  descricao         String
+  horasPerdidas     Decimal? @map("horas_perdidas")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at") // Correção
+  deletedAt         DateTime? @map("deleted_at") // Correção
+
+  rdo               Rdo      @relation(fields: [rdoId], references: [id])
+  criador           Usuario  @relation(fields: [criadorId], references: [id])
+
+  @@index([rdoId])
+  @@map("rdo_ocorrencias")
+}
+
+// ==============================
+// ANEXOS E AUDITORIA
+// ==============================
+model Anexo {
+  id              String      @id @default(uuid())
+  obraId          String      @map("obra_id")
+  criadorId       String      @map("criador_id")
+  origem          OrigemAnexo @map("origem_anexo") // Correção
+  attachableId    String      @map("attachable_id")
+  tipoArquivo     TipoAnexo   @map("tipo_arquivo")
+  nomeOriginal    String?     @map("nome_original") // Correção
+  mimeType        String      @map("mime_type")
+  tamanhoBytes    Int         @map("tamanho_bytes")
+  urlS3           String      @map("url_s3")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at") // Correção
+  deletedAt       DateTime?   @map("deleted_at")
+
+  obra            Obra        @relation(fields: [obraId], references: [id])
+  criador         Usuario     @relation(fields: [criadorId], references: [id])
+
+  @@index([origem, attachableId]) 
+  @@index([obraId])
+  @@map("anexos")
+}
+
+model AuditLog {
+  id              String         @id @default(uuid())
+  empresaId       String         @map("empresa_id")
+  obraId          String?        @map("obra_id") // Correção Crítica
+  usuarioId       String         @map("usuario_id")
+  tabelaAfetada   String         @map("tabela_afetada")
+  registroId      String         @map("registro_id")
+  acao            AcaoAuditoria
+  cargaAntiga     Json?          @map("carga_antiga")
+  cargaNova       Json?          @map("carga_nova")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  empresa         Empresa        @relation(fields: [empresaId], references: [id])
+  obra            Obra?          @relation(fields: [obraId], references: [id])
+  usuario         Usuario        @relation(fields: [usuarioId], references: [id])
+
+  @@index([empresaId, createdAt])
+  @@index([registroId])
+  @@map("audit_logs")
+}

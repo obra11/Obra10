@@ -1,0 +1,465 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Empresa {
+  id                  String         @id @default(uuid())
+  cnpj                String?        @unique
+  razaoSocial         String?        @map("razao_social")
+  logoUrl             String?        @map("logo_url")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+  deletedAt           DateTime?      @map("deleted_at")
+  ativo               Boolean        @default(true)
+  limiteUsuarios      Int            @default(5) @map("limite_usuarios")
+  plano               Plano          @default(BASICO)
+  tipoPessoa          TipoPessoa     @default(JURIDICA) @map("tipo_pessoa")
+  cpfCnpj             String?        @unique @map("cpf_cnpj")
+  nomeFantasia        String?        @map("nome_fantasia")
+  nomeCompleto        String?        @map("nome_completo")
+  email               String?        @unique
+  telefone            String?
+  cep                 String?
+  logradouro          String?
+  numero              String?
+  complemento         String?
+  bairro              String?
+  cidade              String?
+  estado              String?
+  emailVerificado     Boolean        @default(false) @map("email_verificado")
+  tokenVerificacao    String?        @unique @map("token_verificacao")
+  tokenVerificacaoExp DateTime?      @map("token_verificacao_exp")
+  suspensa            Boolean        @default(false)
+  diasInadimplente    Int            @default(0) @map("dias_inadimplente")
+  mesGratuito         Boolean        @default(true) @map("mes_gratuito")
+  idAsaas             String?        @unique @map("id_asaas")
+  auditLogs           AuditLog[]
+  cartaoSalvo         CartaoSalvo?
+  cobrancas           Cobranca[]
+  obras               Obra[]
+  tenantModulos       TenantModulo[]
+  usuarios            Usuario[]
+
+  @@map("empresas")
+}
+
+model Obra {
+  id           String         @id @default(uuid())
+  empresaId    String         @map("empresa_id")
+  nome         String
+  endereco     String?
+  imageUrl     String?        @map("image_url")
+  status       String         @default("ATIVA")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  deletedAt    DateTime?      @map("deleted_at")
+  alertas      AlertaObra[]
+  anexos       Anexo[]
+  auditLogs    AuditLog[]
+  empresa      Empresa        @relation(fields: [empresaId], references: [id])
+  rdos         Rdo[]
+  relatoriosIA RelatorioIA[]
+  userObraRole UserObraRole[]
+
+  @@index([empresaId])
+  @@map("obras")
+}
+
+model Usuario {
+  id             String          @id @default(uuid())
+  empresaId      String          @map("empresa_id")
+  nome           String
+  email          String
+  senhaHash      String          @map("senha_hash")
+  telefone       String?
+  ativo          Boolean         @default(true)
+  resetToken     String?         @map("reset_token")
+  resetTokenExp  DateTime?       @map("reset_token_exp")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  deletedAt      DateTime?       @map("deleted_at")
+  jwtVersion     Int             @default(0) @map("jwt_version")
+  perfilGlobal   PerfilGlobal    @default(USER) @map("perfil_global")
+  fotoUrl        String?         @map("foto_url")
+  anexosUpados   Anexo[]
+  auditLogs      AuditLog[]
+  atividades     RdoAtividade[]
+  efetivos       RdoEfetivo[]
+  ocorrencias    RdoOcorrencia[]
+  rdosAprovos    Rdo[]           @relation("RdoAprovador")
+  rdosCriados    Rdo[]           @relation("RdoCriador")
+  tarefasRdo     TarefaRdo[]
+  userObraRole   UserObraRole[]
+  usuarioModulos UsuarioModulo[]
+  empresa        Empresa         @relation(fields: [empresaId], references: [id])
+
+  @@unique([empresaId, email])
+  @@index([empresaId])
+  @@map("usuarios")
+}
+
+model Perfil {
+  id           Int            @id @default(autoincrement())
+  nomeInterno  String         @unique @map("nome_interno")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  userObraRole UserObraRole[]
+
+  @@map("perfis")
+}
+
+model UserObraRole {
+  id         String   @id @default(uuid())
+  usuarioId  String   @map("usuario_id")
+  obraId     String   @map("obra_id")
+  perfilId   Int      @map("perfil_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  permissoes Json?
+  obra       Obra     @relation(fields: [obraId], references: [id])
+  perfil     Perfil   @relation(fields: [perfilId], references: [id])
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id])
+
+  @@unique([usuarioId, obraId])
+  @@index([obraId])
+  @@map("user_obra_roles")
+}
+
+model Rdo {
+  id              String          @id @default(uuid())
+  obraId          String          @map("obra_id")
+  criadorId       String          @map("criador_id")
+  aprovadorId     String?         @map("aprovador_id")
+  dataReferencia  DateTime        @map("data_referencia")
+  status          RdoStatus       @default(RASCUNHO)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  deletedAt       DateTime?       @map("deleted_at")
+  aprovadorNome   String?         @map("aprovador_nome")
+  rejeitadoMotivo String?         @map("rejeitado_motivo")
+  submissaoAt     DateTime?       @map("submissao_at")
+  aprovacaoAt     DateTime?       @map("aprovacao_at")
+  dadosExtras     Json?           @map("dados_extras")
+  atividades      RdoAtividade[]
+  efetivos        RdoEfetivo[]
+  ocorrencias     RdoOcorrencia[]
+  aprovador       Usuario?        @relation("RdoAprovador", fields: [aprovadorId], references: [id])
+  criador         Usuario         @relation("RdoCriador", fields: [criadorId], references: [id])
+  obra            Obra            @relation(fields: [obraId], references: [id])
+  tarefas         TarefaRdo[]
+
+  @@unique([obraId, dataReferencia, deletedAt])
+  @@index([obraId, status])
+  @@index([dataReferencia])
+  @@map("rdos")
+}
+
+model RdoAtividade {
+  id            String    @id @default(uuid())
+  rdoId         String    @map("rdo_id")
+  criadorId     String    @map("criador_id")
+  descricao     String
+  frenteServico String?   @map("frente_servico")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+  criador       Usuario   @relation(fields: [criadorId], references: [id])
+  rdo           Rdo       @relation(fields: [rdoId], references: [id])
+
+  @@index([rdoId])
+  @@map("rdo_atividades")
+}
+
+model RdoEfetivo {
+  id              String    @id @default(uuid())
+  rdoId           String    @map("rdo_id")
+  criadorId       String    @map("criador_id")
+  empresaTerceira String    @map("empresa_terceira")
+  funcaoCargo     String    @map("funcao_cargo")
+  quantidade      Int       @default(1)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+  criador         Usuario   @relation(fields: [criadorId], references: [id])
+  rdo             Rdo       @relation(fields: [rdoId], references: [id])
+
+  @@index([rdoId])
+  @@map("rdo_efetivos")
+}
+
+model RdoOcorrencia {
+  id             String    @id @default(uuid())
+  rdoId          String    @map("rdo_id")
+  criadorId      String    @map("criador_id")
+  tipoOcorrencia String    @map("tipo_ocorrencia")
+  descricao      String
+  horasPerdidas  Decimal?  @map("horas_perdidas")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+  criador        Usuario   @relation(fields: [criadorId], references: [id])
+  rdo            Rdo       @relation(fields: [rdoId], references: [id])
+
+  @@index([rdoId])
+  @@map("rdo_ocorrencias")
+}
+
+model TarefaRdo {
+  id                String               @id @default(uuid())
+  rdoId             String               @map("rdo_id")
+  criadoPorId       String               @map("criado_por_id")
+  descricao         String
+  frenteServico     String?              @map("frente_servico")
+  statusExecucao    StatusExecucaoTarefa @default(EXECUTADO) @map("status_execucao")
+  motivoNaoExecucao MotivoNaoExecucao?   @map("motivo_nao_execucao")
+  motivoTexto       String?              @map("motivo_texto")
+  horasExecutadas   Decimal?             @map("horas_executadas") @db.Decimal(5, 2)
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+  criadoPor         Usuario              @relation(fields: [criadoPorId], references: [id])
+  rdo               Rdo                  @relation(fields: [rdoId], references: [id])
+
+  @@index([rdoId])
+  @@map("tarefas_rdo")
+}
+
+model AlertaObra {
+  id             String   @id @default(uuid())
+  obraId         String   @map("obra_id")
+  tipo           String
+  mensagem       String
+  idempotencyKey String   @unique @map("idempotency_key")
+  lido           Boolean  @default(false)
+  expiresAt      DateTime @map("expires_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  obra           Obra     @relation(fields: [obraId], references: [id])
+
+  @@index([obraId, lido])
+  @@map("alertas_obra")
+}
+
+model RelatorioIA {
+  id         String   @id @default(uuid())
+  obraId     String   @map("obra_id")
+  dataInicio DateTime @map("data_inicio")
+  dataFim    DateTime @map("data_fim")
+  conteudo   Json
+  modelo     String   @default("claude-sonnet-4-20250514")
+  createdAt  DateTime @default(now()) @map("created_at")
+  obra       Obra     @relation(fields: [obraId], references: [id])
+
+  @@index([obraId, createdAt])
+  @@map("relatorios_ia")
+}
+
+model Anexo {
+  id           String    @id @default(uuid())
+  obraId       String    @map("obra_id")
+  criadorId    String    @map("criador_id")
+  origem       String    @map("origem_anexo")
+  attachableId String    @map("attachable_id")
+  tipoArquivo  String    @map("tipo_arquivo")
+  nomeOriginal String?   @map("nome_original")
+  mimeType     String    @map("mime_type")
+  tamanhoBytes Int       @map("tamanho_bytes")
+  urlS3        String    @map("url_s3")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+  criador      Usuario   @relation(fields: [criadorId], references: [id])
+  obra         Obra      @relation(fields: [obraId], references: [id])
+
+  @@index([origem, attachableId])
+  @@index([obraId])
+  @@map("anexos")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  empresaId     String   @map("empresa_id")
+  obraId        String?  @map("obra_id")
+  usuarioId     String   @map("usuario_id")
+  tabelaAfetada String   @map("tabela_afetada")
+  registroId    String   @map("registro_id")
+  acao          String
+  cargaAntiga   String?
+  cargaNova     String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  empresa       Empresa  @relation(fields: [empresaId], references: [id])
+  obra          Obra?    @relation(fields: [obraId], references: [id])
+  usuario       Usuario  @relation(fields: [usuarioId], references: [id])
+
+  @@index([empresaId, createdAt])
+  @@index([registroId])
+  @@map("audit_logs")
+}
+
+model Modulo {
+  id             String          @id @default(uuid())
+  slug           String          @unique
+  nome           String
+  descricao      String?
+  ativo          Boolean         @default(true)
+  createdAt      DateTime        @default(now()) @map("created_at")
+  preco          Decimal         @default(0) @db.Decimal(10, 2)
+  sigla          String?
+  grupo          String          @default("GERAL")
+  versao         String          @default("1.0.0")
+  dependencias   String[]        @default([])
+  ordemExibicao  Int             @default(99) @map("ordem_exibicao")
+  submodulos     SubModulo[]
+  tenantModulos  TenantModulo[]
+  usuarioModulos UsuarioModulo[]
+
+  @@map("modulos")
+}
+
+model SubModulo {
+  id        String   @id @default(uuid())
+  moduloId  String   @map("modulo_id")
+  slug      String
+  nome      String
+  descricao String?
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  modulo    Modulo   @relation(fields: [moduloId], references: [id])
+
+  @@unique([moduloId, slug])
+  @@map("submodulos")
+}
+
+model IntegracaoModulo {
+  id            String  @id @default(uuid())
+  moduloOrigem  String  @map("modulo_origem")
+  moduloDestino String  @map("modulo_destino")
+  evento        String
+  descricao     String?
+  ativo         Boolean @default(true)
+
+  @@map("integracoes_modulos")
+}
+
+model TenantModulo {
+  id              String    @id @default(uuid())
+  empresaId       String    @map("empresa_id")
+  moduloId        String    @map("modulo_id")
+  ativo           Boolean   @default(true)
+  dataContratacao DateTime  @default(now()) @map("data_contratacao")
+  expiresAt       DateTime? @map("expires_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  empresa         Empresa   @relation(fields: [empresaId], references: [id])
+  modulo          Modulo    @relation(fields: [moduloId], references: [id])
+
+  @@unique([empresaId, moduloId])
+  @@index([empresaId])
+  @@map("tenant_modulos")
+}
+
+model UsuarioModulo {
+  id        String   @id @default(uuid())
+  usuarioId String   @map("usuario_id")
+  moduloId  String   @map("modulo_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  modulo    Modulo   @relation(fields: [moduloId], references: [id])
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+
+  @@unique([usuarioId, moduloId])
+  @@index([usuarioId])
+  @@map("usuario_modulos")
+}
+
+model Cobranca {
+  id             String    @id @default(uuid())
+  empresaId      String    @map("empresa_id")
+  valor          Decimal   @db.Decimal(10, 2)
+  status         String    @default("PENDENTE")
+  formaPagamento String    @map("forma_pagamento")
+  mesReferencia  DateTime  @map("mes_referencia")
+  dataVencimento DateTime  @map("data_vencimento")
+  dataPagamento  DateTime? @map("data_pagamento")
+  linkPagamento  String?   @map("link_pagamento")
+  qrCode         String?   @map("qr_code")
+  qrCodeBase64   String?   @map("qr_code_base64")
+  idAsaas        String?   @unique @map("id_asaas")
+  idempotencyKey String    @unique @map("idempotency_key")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  empresa        Empresa   @relation(fields: [empresaId], references: [id])
+
+  @@index([empresaId, status])
+  @@index([mesReferencia])
+  @@map("cobrancas")
+}
+
+model CartaoSalvo {
+  id             String   @id @default(uuid())
+  empresaId      String   @unique @map("empresa_id")
+  tokenAsaas     String   @map("token_asaas")
+  ultimosDigitos String   @map("ultimos_digitos")
+  bandeira       String
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  empresa        Empresa  @relation(fields: [empresaId], references: [id])
+
+  @@map("cartoes_salvos")
+}
+
+model WebhookEvent {
+  id         String   @id @default(uuid())
+  idAsaas    String   @unique @map("id_asaas")
+  payload    Json
+  processado Boolean  @default(false)
+  tentativas Int      @default(0)
+  erro       String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("webhook_events")
+}
+
+enum Plano {
+  BASICO
+  PRO
+  ENTERPRISE
+}
+
+enum PerfilGlobal {
+  SUPER_ADMIN
+  GESTOR
+  USER
+}
+
+enum TipoPessoa {
+  FISICA
+  JURIDICA
+}
+
+enum RdoStatus {
+  RASCUNHO
+  EM_PREENCHIMENTO
+  SUBMETIDO
+  APROVADO
+  REJEITADO
+}
+
+enum StatusExecucaoTarefa {
+  EXECUTADO
+  PARCIAL
+  NAO_EXECUTADO
+}
+
+enum MotivoNaoExecucao {
+  FALTA_MATERIAL
+  FALTA_MAO_DE_OBRA
+  CHUVA
+  EQUIPAMENTO_INDISPONIVEL
+  AGUARDANDO_APROVACAO
+  PROJETO_NAO_LIBERADO
+  RETRABALHO
+  INTERFERENCIA_TERCEIROS
+  OUTROS
+}
