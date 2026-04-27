@@ -15,8 +15,19 @@ export interface Empresa {
   razaoSocial: string;
   nomeFantasia?: string;
   cnpj: string;
+  cpfCnpj?: string;
   logoUrl?: string;
   modulos?: { slug: string; nome: string; sigla: string; grupo: string; }[];
+  cupons?: any[];
+  telefone?: string;
+  email?: string;
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
 }
 
 export interface Obra {

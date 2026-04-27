@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
-  Package, Loader2, CheckCircle, CreditCard, QrCode, ChevronRight, ChevronDown
+  Package, Loader2, CheckCircle, CreditCard, QrCode, ChevronRight, ChevronDown, Tag, X
 } from 'lucide-react';
 
 interface SubModulo { slug: string; nome: string; descricao?: string; }
@@ -15,6 +15,15 @@ interface Modulo {
   descricao?: string;
   preco: number;
   submodulos: SubModulo[];
+}
+
+interface CupomValidado {
+  valido: boolean;
+  tipo: string;
+  valor: number | null;
+  mesesGratuitos: number | null;
+  duracaoMeses: number | null;
+  descricao: string;
 }
 
 const GRUPO_ORDER = ['Operacional', 'Qualidade', 'Gestão', 'Pessoas', 'GERAL'];
@@ -37,9 +46,14 @@ export const Contratacao: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  // Coupon state
+  const [codigoCupom, setCodigoCupom] = useState('');
+  const [cupomValidado, setCupomValidado] = useState<CupomValidado | null>(null);
+  const [cupomErro, setCupomErro] = useState('');
+  const [validandoCupom, setValidandoCupom] = useState(false);
+
   useEffect(() => {
     api.get('/modulos').then(r => {
-      // Filter out legacy IA module and CONCRETO (now a submodule)
       const filtered = (r.data as Modulo[]).filter(m => m.slug !== 'IA' && m.slug !== 'CONCRETO');
       setModulos(filtered);
       setLoading(false);
@@ -52,12 +66,28 @@ export const Contratacao: React.FC = () => {
 
   const toggleExpand = (slug: string) => setExpanded(p => ({ ...p, [slug]: !p[slug] }));
 
-  const total = modulos
+  // Base total (before coupon)
+  const totalBase = modulos
     .filter(m => selecionados.includes(m.slug))
-    .reduce((s, m) => {
-      if (m.slug === 'RDO') return s; // first month free
-      return s + Number(m.preco);
-    }, 0);
+    .reduce((s, m) => s + Number(m.preco), 0);
+
+  // Total after coupon
+  const calcularTotalComDesconto = () => {
+    if (!cupomValidado) return totalBase;
+    switch (cupomValidado.tipo) {
+      case 'GRATUIDADE':
+        return 0;
+      case 'DESCONTO_FIXO':
+        return Math.max(totalBase - (cupomValidado.valor || 0), 0);
+      case 'DESCONTO_PERCENTUAL':
+        return Math.max(totalBase - totalBase * ((cupomValidado.valor || 0) / 100), 0);
+      default:
+        return totalBase;
+    }
+  };
+
+  const total = calcularTotalComDesconto();
+  const temDesconto = cupomValidado && total < totalBase;
 
   // Group modules by category
   const grupos = GRUPO_ORDER.reduce<Record<string, Modulo[]>>((acc, g) => {
@@ -66,6 +96,27 @@ export const Contratacao: React.FC = () => {
     return acc;
   }, {});
 
+  const handleValidarCupom = async () => {
+    if (!codigoCupom.trim()) return;
+    setValidandoCupom(true);
+    setCupomErro('');
+    setCupomValidado(null);
+    try {
+      const res = await api.post('/cobrancas/validar-cupom', { codigo: codigoCupom.trim() });
+      setCupomValidado(res.data);
+    } catch (err: any) {
+      setCupomErro(err?.response?.data?.message || 'Cupom inválido.');
+    } finally {
+      setValidandoCupom(false);
+    }
+  };
+
+  const handleRemoverCupom = () => {
+    setCupomValidado(null);
+    setCodigoCupom('');
+    setCupomErro('');
+  };
+
   const handleContratar = async () => {
     if (selecionados.length === 0) { setError('Selecione ao menos um módulo.'); return; }
     setSubmitting(true); setError('');
@@ -73,7 +124,15 @@ export const Contratacao: React.FC = () => {
       const res = await api.post('/cobrancas/contratar', {
         modulosSelecionados: selecionados,
         formaPagamento,
+        cupom: cupomValidado ? codigoCupom.trim() : undefined,
       });
+
+      // If coupon zeroed the value, modules are already active
+      if (res.data.status === 'PAGO' && res.data.valor === 0) {
+        navigate('/dashboard');
+        return;
+      }
+
       if (formaPagamento === 'PIX') {
         navigate(`/aguardando-pagamento/${res.data.cobrancaId}`, {
           state: { qrCode: res.data.qrCode, qrCodeBase64: res.data.qrCodeBase64, linkPagamento: res.data.linkPagamento, valor: res.data.valor },
@@ -94,7 +153,7 @@ export const Contratacao: React.FC = () => {
         <div className="text-center mb-8">
           <Package size={48} className="mx-auto mb-4 text-red-600" />
           <h1 className="text-3xl font-bold text-gray-900">Escolha seus módulos</h1>
-          <p className="text-gray-500 mt-2">Pague apenas pelo que usar. RDO grátis no 1º mês!</p>
+          <p className="text-gray-500 mt-2">Pague apenas pelo que usar.</p>
         </div>
 
         {error && <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-xl border-l-4 border-red-500">{error}</div>}
@@ -109,7 +168,6 @@ export const Contratacao: React.FC = () => {
               <div className="space-y-2">
                 {mods.map(m => {
                   const isSelected = selecionados.includes(m.slug);
-                  const isFree = m.slug === 'RDO';
                   const hasSubmodulos = m.submodulos?.length > 0;
                   const isExpanded = expanded[m.slug];
 
@@ -136,10 +194,9 @@ export const Contratacao: React.FC = () => {
                         <div className="flex items-center gap-3 shrink-0 ml-4">
                           <div className="text-right">
                             <p className="font-bold text-gray-900">
-                              {isFree ? <span className="text-green-600">GRÁTIS</span> : `R$ ${Number(m.preco).toFixed(2)}`}
+                              R$ {Number(m.preco).toFixed(2)}
                               <span className="text-xs text-gray-400 font-normal">/mês</span>
                             </p>
-                            {isFree && <p className="text-xs text-gray-400">R$ 49,90/mês após</p>}
                           </div>
                           {hasSubmodulos && (
                             <button
@@ -175,6 +232,58 @@ export const Contratacao: React.FC = () => {
           ))}
         </div>
 
+        {/* Coupon Code */}
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+          <p className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <Tag size={16} className="text-gray-400" />
+            Código de desconto
+          </p>
+
+          {cupomValidado ? (
+            <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+              <div>
+                <p className="font-bold text-green-700 text-sm flex items-center gap-1.5">
+                  <CheckCircle size={14} />
+                  {codigoCupom.toUpperCase()}
+                </p>
+                <p className="text-xs text-green-600 mt-0.5">{cupomValidado.descricao}</p>
+              </div>
+              <button
+                onClick={handleRemoverCupom}
+                className="p-1.5 text-green-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Remover cupom"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={codigoCupom}
+                onChange={e => { setCodigoCupom(e.target.value.toUpperCase()); setCupomErro(''); }}
+                placeholder="Ex: BETA50"
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-mono uppercase tracking-wider focus:outline-none focus:border-red-400 focus:ring-1 focus:ring-red-200 transition-all"
+                onKeyDown={e => e.key === 'Enter' && handleValidarCupom()}
+              />
+              <button
+                onClick={handleValidarCupom}
+                disabled={validandoCupom || !codigoCupom.trim()}
+                className="px-5 py-2.5 bg-gray-900 text-white text-sm font-semibold rounded-xl hover:bg-gray-800 disabled:opacity-40 transition-all flex items-center gap-1.5"
+              >
+                {validandoCupom ? <Loader2 size={14} className="animate-spin" /> : <Tag size={14} />}
+                Aplicar
+              </button>
+            </div>
+          )}
+
+          {cupomErro && (
+            <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
+              <X size={12} /> {cupomErro}
+            </p>
+          )}
+        </div>
+
         {/* Payment method */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
           <p className="font-semibold text-gray-700 mb-3">Forma de Pagamento</p>
@@ -197,8 +306,23 @@ export const Contratacao: React.FC = () => {
         <div className="bg-white rounded-xl border-2 border-red-100 p-5">
           <div className="flex justify-between items-center mb-4">
             <span className="text-gray-600 font-medium">Total mensal</span>
-            <span className="text-2xl font-bold text-gray-900">R$ {total.toFixed(2)}</span>
+            <div className="text-right">
+              {temDesconto && (
+                <span className="text-sm text-gray-400 line-through mr-2">
+                  R$ {totalBase.toFixed(2)}
+                </span>
+              )}
+              <span className={`text-2xl font-bold ${temDesconto ? 'text-green-600' : 'text-gray-900'}`}>
+                {total === 0 ? 'GRÁTIS' : `R$ ${total.toFixed(2)}`}
+              </span>
+            </div>
           </div>
+          {temDesconto && cupomValidado && (
+            <div className="mb-4 flex items-center gap-1.5 text-xs text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+              <Tag size={12} />
+              <span className="font-semibold">{cupomValidado.descricao}</span>
+            </div>
+          )}
           <button onClick={handleContratar} disabled={submitting || selecionados.length === 0}
             className="w-full py-4 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
             {submitting ? <><Loader2 size={18} className="animate-spin" />Processando...</> : <>{formaPagamento === 'PIX' ? <QrCode size={18} /> : <CreditCard size={18} />}Contratar Módulos<ChevronRight size={18} /></>}

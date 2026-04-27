@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
-import { Building2, User, Mail, Lock, Phone, MapPin, ArrowRight, ArrowLeft, Loader2, CheckCircle } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Loader2, CheckCircle } from 'lucide-react';
 
 type TipoPessoa = 'FISICA' | 'JURIDICA';
 type Step = 1 | 2 | 3 | 4;

@@ -130,7 +130,7 @@ export const RdoDashboard: React.FC = () => {
                     <Pie
                       data={stats.motivosNaoExecucao.map(m => ({ name: MOTIVO_LABELS[m.motivo] ?? m.motivo, value: m.total }))}
                       cx="50%" cy="50%" outerRadius={90} dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                       labelLine={false} fontSize={10}
                     >
                       {stats.motivosNaoExecucao.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}

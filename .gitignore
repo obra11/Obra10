@@ -66,3 +66,29 @@ secops_tester.js
 *.metadata.json
 *.resolved
 *.resolved.*
+
+# Playwright test artifacts
+obra10-frontend/playwright-report/
+obra10-frontend/test-results/
+obra10-frontend/tests/.auth/
+
+# Debug output files
+obra10-backend/out*.txt
+obra10-backend/out*.json
+obra10-backend/cpf_err.txt
+obra10-backend/users_out.txt
+obra10-backend/ts_errors.txt
+obra10-backend/tsc_errors.txt
+obra10-backend/tsc_out.txt
+obra10-backend/error.log
+
+# One-off debug/migration scripts (keep in local only)
+obra10-backend/check*.js
+obra10-backend/fix-*.cjs
+obra10-backend/list_*.js
+obra10-backend/migrate_*.js
+obra10-backend/reset_*.js
+obra10-backend/scripts/check*.ts
+obra10-backend/scripts/dbcheck*.js
+obra10-backend/scripts/reset_*.js
+obra10-frontend/convert.js

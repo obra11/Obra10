@@ -69,7 +69,7 @@ async function main() {
   // ===================== EMPRESA DEMO =====================
   const empresa = await prisma.empresa.upsert({
     where: { cnpj: '11.222.333/0001-44' },
-    update: { emailVerificado: true, mesGratuito: false },
+    update: { emailVerificado: true },
     create: {
       cnpj: '11.222.333/0001-44',
       razaoSocial: 'Acme Construtora MVP',
@@ -342,6 +342,23 @@ async function main() {
   });
   console.log(`   ✅ Restauração: Logotipo da Lunardeli Engenharia reintegrado.\n`);
 
+
+  // ===================== CUPOM BETA50 =====================
+  console.log('\n🎟️  Criando cupom BETA50...');
+  await (prisma as any).cupomDesconto.upsert({
+    where: { codigo: 'BETA50' },
+    update: {},
+    create: {
+      codigo: 'BETA50',
+      tipo: 'DESCONTO_PERCENTUAL',
+      valor: 50,
+      duracaoMeses: null,     // sem expiração por meses
+      usosMaximos: null,      // sem limite de usos
+      expiraEm: null,         // sem data de expiração
+      ativo: true,
+    },
+  });
+  console.log('   ✅ Cupom BETA50: 50% de desconto, sem limite de usos, sem expiração.');
 
   console.log('\n✅ Seed finalizado com sucesso!');
   console.log(`\n📊 Resumo:`);

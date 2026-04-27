@@ -55,7 +55,7 @@ export const RdoForm: React.FC = () => {
   // Estado do RDO
   const [rdoId, setRdoId] = useState<string | null>(null);
   const [rdoStatus, setRdoStatus] = useState<RdoStatus>('RASCUNHO');
-  const [rejeitadoMotivo, setRejeitadoMotivo] = useState<string | null>(null);
+  const [rejeitadoMotivo, _setRejeitadoMotivo] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');

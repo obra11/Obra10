@@ -24,7 +24,7 @@ export class CryptoService {
       this.key = null;
       this.logger.warn(
         'ENCRYPTION_KEY não configurada ou inválida (precisa de 64 caracteres hex). ' +
-        'Campos sensíveis serão armazenados SEM criptografia.',
+          'Campos sensíveis serão armazenados SEM criptografia.',
       );
     }
   }
@@ -40,7 +40,10 @@ export class CryptoService {
 
     const iv = crypto.randomBytes(IV_LENGTH);
     const cipher = crypto.createCipheriv(ALGORITHM, this.key, iv);
-    const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+    const encrypted = Buffer.concat([
+      cipher.update(plaintext, 'utf8'),
+      cipher.final(),
+    ]);
     const authTag = cipher.getAuthTag();
 
     // Pack: iv (16) + authTag (16) + ciphertext
@@ -65,7 +68,10 @@ export class CryptoService {
 
       const decipher = crypto.createDecipheriv(ALGORITHM, this.key, iv);
       decipher.setAuthTag(authTag);
-      const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+      const decrypted = Buffer.concat([
+        decipher.update(encrypted),
+        decipher.final(),
+      ]);
       return decrypted.toString('utf8');
     } catch {
       // If decryption fails, it's likely plaintext (legacy data)

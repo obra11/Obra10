@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 
 // Conditional mock for Resend when API key not set
 let ResendClass: any;
-try { ResendClass = require('resend').Resend; } catch { ResendClass = null; }
+try {
+  ResendClass = require('resend').Resend;
+} catch {
+  ResendClass = null;
+}
 
 @Injectable()
 export class EmailService {
@@ -25,15 +29,24 @@ export class EmailService {
   private async send(to: string, subject: string, html: string) {
     if (this.mockMode) {
       this.logger.log(`[MOCK EMAIL] To: ${to} | Subject: ${subject}`);
-      this.logger.log(`[MOCK EMAIL] Preview: ${html.replace(/<[^>]+>/g, '').slice(0, 200)}`);
+      this.logger.log(
+        `[MOCK EMAIL] Preview: ${html.replace(/<[^>]+>/g, '').slice(0, 200)}`,
+      );
       return { id: 'mock-email-id' };
     }
     return this.resend.emails.send({ from: this.from, to, subject, html });
   }
 
-  async enviarVerificacaoEmail(email: string, token: string, nomeEmpresa: string) {
+  async enviarVerificacaoEmail(
+    email: string,
+    token: string,
+    nomeEmpresa: string,
+  ) {
     const link = `${this.appUrl}/verificar-email?token=${token}`;
-    await this.send(email, '✅ Verifique seu e-mail — OBRA 10', `
+    await this.send(
+      email,
+      '✅ Verifique seu e-mail — OBRA 10',
+      `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#dc2626">Bem-vindo ao OBRA 10!</h2>
         <p>Olá, <strong>${nomeEmpresa}</strong>!</p>
@@ -44,11 +57,15 @@ export class EmailService {
         <p style="color:#6b7280;font-size:12px">Este link expira em 24 horas. Se você não criou uma conta, ignore este e-mail.</p>
         <p style="color:#6b7280;font-size:12px">Ou copie: ${link}</p>
       </div>
-    `);
+    `,
+    );
   }
 
   async enviarBoasVindas(email: string, nomeEmpresa: string) {
-    await this.send(email, '🎉 Conta ativa — OBRA 10', `
+    await this.send(
+      email,
+      '🎉 Conta ativa — OBRA 10',
+      `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#dc2626">Conta verificada com sucesso!</h2>
         <p>Olá, <strong>${nomeEmpresa}</strong>!</p>
@@ -57,11 +74,21 @@ export class EmailService {
           Escolher Módulos
         </a>
       </div>
-    `);
+    `,
+    );
   }
 
-  async enviarLinkPix(email: string, nomeEmpresa: string, valor: number, linkPagamento: string, qrCode?: string) {
-    await this.send(email, '💳 Seu PIX para ativar os módulos — OBRA 10', `
+  async enviarLinkPix(
+    email: string,
+    nomeEmpresa: string,
+    valor: number,
+    linkPagamento: string,
+    qrCode?: string,
+  ) {
+    await this.send(
+      email,
+      '💳 Seu PIX para ativar os módulos — OBRA 10',
+      `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#dc2626">Pagamento via PIX</h2>
         <p>Olá, <strong>${nomeEmpresa}</strong>!</p>
@@ -73,11 +100,19 @@ export class EmailService {
         </a>
         <p style="color:#6b7280;font-size:12px">Após o pagamento, seus módulos serão ativados automaticamente em até 2 minutos.</p>
       </div>
-    `);
+    `,
+    );
   }
 
-  async enviarConfirmacaoPagamento(email: string, nomeEmpresa: string, valor: number) {
-    await this.send(email, '✅ Pagamento confirmado — OBRA 10', `
+  async enviarConfirmacaoPagamento(
+    email: string,
+    nomeEmpresa: string,
+    valor: number,
+  ) {
+    await this.send(
+      email,
+      '✅ Pagamento confirmado — OBRA 10',
+      `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#16a34a">Pagamento confirmado!</h2>
         <p>Olá, <strong>${nomeEmpresa}</strong>!</p>
@@ -86,11 +121,19 @@ export class EmailService {
           Acessar OBRA 10
         </a>
       </div>
-    `);
+    `,
+    );
   }
 
-  async enviarAvisoSuspensao(email: string, nomeEmpresa: string, diasVencido: number) {
-    await this.send(email, '⚠️ Conta suspensa por inadimplência — OBRA 10', `
+  async enviarAvisoSuspensao(
+    email: string,
+    nomeEmpresa: string,
+    diasVencido: number,
+  ) {
+    await this.send(
+      email,
+      '⚠️ Conta suspensa por inadimplência — OBRA 10',
+      `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#f59e0b">Conta suspensa</h2>
         <p>Olá, <strong>${nomeEmpresa}</strong>!</p>
@@ -100,25 +143,38 @@ export class EmailService {
           Regularizar Pagamento
         </a>
       </div>
-    `);
+    `,
+    );
   }
 
   async enviarExtrataMensal(
     email: string,
     nomeEmpresa: string,
-    cobrancas: Array<{ mesReferencia: Date; valor: number; status: string; formaPagamento: string }>,
+    cobrancas: Array<{
+      mesReferencia: Date;
+      valor: number;
+      status: string;
+      formaPagamento: string;
+    }>,
   ) {
-    const rows = cobrancas.map(c => `
+    const rows = cobrancas
+      .map(
+        (c) => `
       <tr>
         <td style="padding:8px;border-bottom:1px solid #e5e7eb">${c.mesReferencia.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</td>
         <td style="padding:8px;border-bottom:1px solid #e5e7eb">R$ ${c.valor.toFixed(2)}</td>
         <td style="padding:8px;border-bottom:1px solid #e5e7eb">${c.formaPagamento}</td>
         <td style="padding:8px;border-bottom:1px solid #e5e7eb;color:${c.status === 'PAGO' ? '#16a34a' : c.status === 'VENCIDO' ? '#dc2626' : '#f59e0b'}">${c.status}</td>
       </tr>
-    `).join('');
+    `,
+      )
+      .join('');
 
     const total = cobrancas.reduce((s, c) => s + c.valor, 0);
-    await this.send(email, `📊 Extrato mensal — OBRA 10`, `
+    await this.send(
+      email,
+      `📊 Extrato mensal — OBRA 10`,
+      `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#dc2626">Extrato Mensal — ${nomeEmpresa}</h2>
         <table style="width:100%;border-collapse:collapse">
@@ -135,12 +191,21 @@ export class EmailService {
           </tr></tfoot>
         </table>
       </div>
-    `);
+    `,
+    );
   }
 
   /** Notifica o criador do RDO que seu RDO foi rejeitado com o motivo. */
-  async sendRejeicaoRdo(email: string, nomeUsuario: string, dataReferencia: string, motivo: string) {
-    await this.send(email, '❌ RDO Rejeitado — OBRA 10', `
+  async sendRejeicaoRdo(
+    email: string,
+    nomeUsuario: string,
+    dataReferencia: string,
+    motivo: string,
+  ) {
+    await this.send(
+      email,
+      '❌ RDO Rejeitado — OBRA 10',
+      `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#dc2626">RDO Rejeitado</h2>
         <p>Olá, <strong>${nomeUsuario}</strong>!</p>
@@ -154,12 +219,21 @@ export class EmailService {
           Acessar OBRA 10
         </a>
       </div>
-    `);
+    `,
+    );
   }
 
   /** E-mail genérico para notificações de cron (alertas, lembretes). */
-  async sendGenerico(email: string, nomeUsuario: string, assunto: string, corpoHtml: string) {
-    await this.send(email, assunto, `
+  async sendGenerico(
+    email: string,
+    nomeUsuario: string,
+    assunto: string,
+    corpoHtml: string,
+  ) {
+    await this.send(
+      email,
+      assunto,
+      `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#dc2626">OBRA 10</h2>
         <p>Olá, <strong>${nomeUsuario}</strong>!</p>
@@ -167,7 +241,8 @@ export class EmailService {
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0" />
         <p style="color:#9ca3af;font-size:12px">Esta é uma notificação automática do OBRA 10. Não responda este e-mail.</p>
       </div>
-    `);
+    `,
+    );
   }
 
   /** Notifica o aprovador que existe um RDO aguardando revisão. */
@@ -181,7 +256,10 @@ export class EmailService {
     rdoId: string,
   ) {
     const link = `${this.appUrl}/obras/${obraId}/rdos/${rdoId}`;
-    await this.send(emailAprovador, `📋 RDO aguardando sua aprovação — ${nomeObra}`, `
+    await this.send(
+      emailAprovador,
+      `📋 RDO aguardando sua aprovação — ${nomeObra}`,
+      `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#dc2626">RDO Pendente de Aprovação</h2>
         <p>Olá, <strong>${nomeAprovador}</strong>!</p>
@@ -191,6 +269,7 @@ export class EmailService {
         </a>
         <p style="color:#6b7280;font-size:12px">Caso não consiga clicar no botão, copie o link: ${link}</p>
       </div>
-    `);
+    `,
+    );
   }
 }

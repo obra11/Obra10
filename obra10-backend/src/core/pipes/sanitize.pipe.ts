@@ -32,19 +32,21 @@ export class SanitizePipe implements PipeTransform {
   }
 
   private sanitizeString(input: string): string {
-    return input
-      // Remove script tags and content
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-      // Remove dangerous tags (iframe, object, embed, form)
-      .replace(/<\s*\/?\s*(iframe|object|embed|form|link|meta)\b[^>]*>/gi, '')
-      // Remove on* event handlers in any remaining tags
-      .replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, '')
-      .replace(/\bon\w+\s*=\s*[^\s>]+/gi, '')
-      // Remove javascript: and data: URI schemes
-      .replace(/javascript\s*:/gi, '')
-      .replace(/data\s*:\s*text\/html/gi, '')
-      // Remove style expressions (IE-specific XSS)
-      .replace(/expression\s*\(/gi, '')
-      .trim();
+    return (
+      input
+        // Remove script tags and content
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+        // Remove dangerous tags (iframe, object, embed, form)
+        .replace(/<\s*\/?\s*(iframe|object|embed|form|link|meta)\b[^>]*>/gi, '')
+        // Remove on* event handlers in any remaining tags
+        .replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, '')
+        .replace(/\bon\w+\s*=\s*[^\s>]+/gi, '')
+        // Remove javascript: and data: URI schemes
+        .replace(/javascript\s*:/gi, '')
+        .replace(/data\s*:\s*text\/html/gi, '')
+        // Remove style expressions (IE-specific XSS)
+        .replace(/expression\s*\(/gi, '')
+        .trim()
+    );
   }
 }

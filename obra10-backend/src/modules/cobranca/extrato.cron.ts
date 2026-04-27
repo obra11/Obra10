@@ -31,7 +31,12 @@ export class ExtratoCron {
             empresaId: empresa.id,
             mesReferencia: { gte: inicio, lt: fim },
           },
-          select: { mesReferencia: true, valor: true, status: true, formaPagamento: true },
+          select: {
+            mesReferencia: true,
+            valor: true,
+            status: true,
+            formaPagamento: true,
+          },
         });
 
         if (cobrancas.length === 0) continue;
@@ -39,7 +44,7 @@ export class ExtratoCron {
         await this.email.enviarExtrataMensal(
           empresa.email!,
           empresa.razaoSocial || empresa.nomeCompleto || 'Empresa',
-          cobrancas.map(c => ({
+          cobrancas.map((c) => ({
             mesReferencia: c.mesReferencia,
             valor: Number(c.valor),
             status: c.status,
@@ -48,7 +53,9 @@ export class ExtratoCron {
         );
         this.logger.log(`📧 Extrato enviado: ${empresa.email}`);
       } catch (err: any) {
-        this.logger.error(`Erro ao enviar extrato ${empresa.id}: ${err.message}`);
+        this.logger.error(
+          `Erro ao enviar extrato ${empresa.id}: ${err.message}`,
+        );
       }
     }
   }

@@ -1,7 +1,17 @@
-import { IsDateString, IsObject, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
+import {
+  IsDateString,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MinLength,
+} from 'class-validator';
 
 export class CreateRdoDto {
-  @IsDateString({}, { message: 'dataReferencia deve ser uma data válida (ISO 8601).' })
+  @IsDateString(
+    {},
+    { message: 'dataReferencia deve ser uma data válida (ISO 8601).' },
+  )
   @IsOptional()
   dataReferencia?: string;
 

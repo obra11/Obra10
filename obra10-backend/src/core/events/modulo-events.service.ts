@@ -61,8 +61,10 @@ export class ModuloEventsService {
     }
   }
 
-  emitAsync(event: ModuloEventName, payload: Record<string, any>): Promise<any[]> {
+  emitAsync(
+    event: ModuloEventName,
+    payload: Record<string, any>,
+  ): Promise<any[]> {
     return this.eventEmitter.emitAsync(event, payload);
   }
 }
-

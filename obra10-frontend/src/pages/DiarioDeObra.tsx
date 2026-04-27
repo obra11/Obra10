@@ -6,6 +6,7 @@ import {
   CheckSquare, FileSpreadsheet, Paperclip, MessageSquare, ShieldCheck,
   Plus, Trash2, Video, FileText, Image as ImageIcon, Save, Send, RotateCcw
 } from 'lucide-react';
+import { RdoShareBar } from '../components/RdoShareBar';
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -834,11 +835,24 @@ export const DiarioDeObra: React.FC = () => {
                  )}
 
                  {status === 'aprovado' && (
-                   <div className="p-4 bg-green-100 border border-green-300 rounded-lg text-green-800">
-                     <p className="font-bold flex items-center gap-2"><ShieldCheck size={18}/> RDO Aprovado</p>
-                     <p className="text-sm mt-1 opacity-80">{dataAprovacao}</p>
-                   </div>
-                 )}
+                  <div className="space-y-3">
+                    <div className="p-4 bg-green-100 border border-green-300 rounded-lg text-green-800">
+                      <p className="font-bold flex items-center gap-2"><ShieldCheck size={18}/> RDO Aprovado</p>
+                      <p className="text-sm mt-1 opacity-80">{dataAprovacao}</p>
+                    </div>
+                    {/* Barra de exportação / compartilhamento */}
+                    {rdoIdAtual && obraId && (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-xs font-bold uppercase tracking-wide text-gray-400">Exportar ou Compartilhar</p>
+                        <RdoShareBar
+                          rdoId={rdoIdAtual}
+                          obraId={obraId}
+                          rdoLabel={`${rdoNumberStr.replace(/[^a-zA-Z0-9]/g, '_')}_${nomeObra.replace(/[^a-zA-Z0-9]/g, '_')}`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                  {status === 'rejeitado' && (
                    <div className="p-4 bg-red-100 border border-red-300 rounded-lg text-red-800 space-y-3">

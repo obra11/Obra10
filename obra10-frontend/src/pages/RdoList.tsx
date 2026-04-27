@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { rdoService } from '../services/rdo.service';
 import { format } from 'date-fns';
-import { Plus, Search, FileText, CheckCircle, Clock, XCircle, AlertCircle, BarChart2, X, Loader2 } from 'lucide-react';
+import { Plus, Search, FileText, CheckCircle, Clock, XCircle, AlertCircle, BarChart2, X, Loader2, Users, Cloud, Calendar, CheckSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { RdoShareBar } from '../components/RdoShareBar';
 
 type RdoStatus = 'RASCUNHO' | 'EM_PREENCHIMENTO' | 'SUBMETIDO' | 'APROVADO' | 'REJEITADO';
 
@@ -83,7 +84,7 @@ export const RdoList: React.FC = () => {
       {/* Modal Relatório IA */}
       {showIAModal && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-0 md:p-4">
-          <div className="bg-white rounded-t-2xl md:rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+          <div className="bg-white rounded-t-2xl md:rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
             <div className="p-4 md:p-5 border-b border-gray-100 flex items-center justify-between shrink-0">
               <div>
                 <h3 className="font-bold text-gray-900 flex items-center gap-2">
@@ -114,24 +115,93 @@ export const RdoList: React.FC = () => {
               {iaError && <p className="text-sm text-red-600 bg-red-50 p-3 rounded-xl">{iaError}</p>}
 
               {iaResultado && (
-                <div className="space-y-3 max-h-72 overflow-y-auto">
-                  {iaResultado.cached && <p className="text-xs text-gray-400 text-center">📦 Resultado em cache (últimas 24h)</p>}
-                  <div className="p-3 bg-gray-50 rounded-xl text-sm">
-                    <p className="font-semibold mb-1">Resumo Executivo</p>
-                    <p className="text-gray-700">{iaResultado.resumoExecutivo}</p>
+                <div className="space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
+                  {iaResultado.cached && <p className="text-xs text-gray-400 text-center -mt-2">📦 Resultado em cache (últimas 24h)</p>}
+                  
+                  {/* Cards Híbridos */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-center gap-4">
+                      <div className="p-3 bg-blue-100 text-blue-600 rounded-lg shrink-0"><Calendar size={20} /></div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wide truncate">Dias Analisados</p>
+                        <p className="text-2xl font-bold text-gray-900">{iaResultado.totalDias || 0}</p>
+                      </div>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl flex items-center gap-4">
+                      <div className="p-3 bg-amber-100 text-amber-600 rounded-lg shrink-0"><Users size={20} /></div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wide truncate">Média Efetivo/Dia</p>
+                        <p className="text-2xl font-bold text-gray-900">{iaResultado.mediaEfetivoDiario || 0}</p>
+                      </div>
+                    </div>
+                    <div className="bg-cyan-50 border border-cyan-100 p-4 rounded-xl flex items-center gap-4">
+                      <div className="p-3 bg-cyan-100 text-cyan-600 rounded-lg shrink-0"><Cloud size={20} /></div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wide truncate">Clima Predominante</p>
+                        <p className="text-sm font-bold text-gray-900 leading-tight line-clamp-2">{iaResultado.climaPredominante || '-'}</p>
+                      </div>
+                    </div>
                   </div>
-                  {iaResultado.gargalos?.length > 0 && (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm">
-                      <p className="font-semibold mb-1 text-amber-800">🚧 Gargalos</p>
-                      <ul className="space-y-0.5">{iaResultado.gargalos.map((g: string, i: number) => <li key={i} className="text-amber-700">• {g}</li>)}</ul>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Serviços */}
+                    <div className="border border-gray-200 rounded-xl overflow-hidden flex flex-col bg-white">
+                      <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                        <p className="font-bold text-gray-900 flex items-center gap-2 text-sm">
+                          <CheckSquare size={16} className="text-green-600" /> Principais Serviços Executados
+                        </p>
+                      </div>
+                      <div className="p-4 flex-1 h-[280px] overflow-y-auto">
+                        {!iaResultado.servicosExecutados || iaResultado.servicosExecutados.length === 0 ? (
+                           <p className="text-gray-400 text-sm text-center py-4">Nenhum serviço registrado</p>
+                        ) : (
+                          <ul className="space-y-2.5">
+                            {iaResultado.servicosExecutados.map((s: string, i: number) => (
+                              <li key={i} className="text-sm text-gray-700 flex items-start gap-2 leading-snug">
+                                <span className="text-green-500 mt-[3px] shrink-0"><CheckCircle size={14} /></span> {s}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  {iaResultado.recomendacoes?.length > 0 && (
-                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm">
-                      <p className="font-semibold mb-1 text-blue-800">💡 Recomendações</p>
-                      <ul className="space-y-0.5">{iaResultado.recomendacoes.map((r: string, i: number) => <li key={i} className="text-blue-700">• {r}</li>)}</ul>
+
+                    {/* Insights IA */}
+                    <div className="border border-red-100/60 rounded-xl overflow-hidden flex flex-col bg-white shadow-sm">
+                      <div className="bg-red-50 px-4 py-3 border-b border-red-100 flex justify-between items-center">
+                        <p className="font-bold text-red-900 flex items-center gap-2 text-sm">
+                          <BarChart2 size={16} className="text-red-600" /> Insights Avançados
+                        </p>
+                        <span className="text-[9px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold tracking-widest">IA</span>
+                      </div>
+                      <div className="p-4 flex-1 space-y-4 h-[280px] overflow-y-auto">
+                        <div>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-1.5">Resumo Executivo</p>
+                          <p className="text-sm text-gray-700 leading-relaxed font-medium">{iaResultado.resumoExecutivo}</p>
+                        </div>
+                        {iaResultado.gargalos?.length > 0 && (
+                          <div className="bg-orange-50/50 border border-orange-100 p-3 rounded-lg">
+                            <p className="text-xs text-orange-800 uppercase tracking-wide font-bold mb-2 flex items-center gap-1.5">
+                              <AlertCircle size={14} /> Gargalos ou Lembretes
+                            </p>
+                            <ul className="space-y-1.5">
+                              {iaResultado.gargalos.map((g: string, i: number) => <li key={i} className="text-sm text-orange-900 leading-tight flex items-start gap-1.5"><span className="text-orange-400 pt-0.5 mt-px text-[10px]">▪</span> {g}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                        {iaResultado.recomendacoes?.length > 0 && (
+                          <div className="bg-blue-50/50 border border-blue-100 p-3 rounded-lg">
+                            <p className="text-xs text-blue-800 uppercase tracking-wide font-bold mb-2 flex items-center gap-1.5">
+                              <CheckCircle size={14} /> Recomendações
+                            </p>
+                            <ul className="space-y-1.5">
+                              {iaResultado.recomendacoes.map((r: string, i: number) => <li key={i} className="text-sm text-blue-900 leading-tight flex items-start gap-1.5"><span className="text-blue-400 pt-0.5 mt-px"><CheckCircle size={12} /></span> {r}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
 
@@ -154,7 +224,6 @@ export const RdoList: React.FC = () => {
           </div>
         </div>
 
-        {/* ═══ Desktop Table ═══ */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -177,17 +246,22 @@ export const RdoList: React.FC = () => {
               ) : rdosFiltrados.map(rdo => {
                 const st = getStatus(rdo.status);
                 return (
-                  <tr key={rdo.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => navigate(`/obras/${obraAtiva?.id}/rdos/${rdo.id}`)}>
-                    <td className="p-4 font-medium text-lunardeli-dark">{format(new Date(rdo.dataReferencia), 'dd/MM/yyyy')}</td>
-                    <td className="p-4 text-gray-600 text-sm">{rdo.dadosExtras?.climaManha ?? '-'} / {rdo.dadosExtras?.climaTarde ?? '-'}</td>
-                    <td className="p-4 text-gray-600 text-sm">{rdo.dadosExtras?.condicaoTerreno ?? '-'}</td>
-                    <td className="p-4">
+                  <tr key={rdo.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="p-4 font-medium text-lunardeli-dark cursor-pointer" onClick={() => navigate(`/obras/${obraAtiva?.id}/rdos/${rdo.id}`)}>{format(new Date(rdo.dataReferencia), 'dd/MM/yyyy')}</td>
+                    <td className="p-4 text-gray-600 text-sm cursor-pointer" onClick={() => navigate(`/obras/${obraAtiva?.id}/rdos/${rdo.id}`)}>{rdo.dadosExtras?.climaManha ?? '-'} / {rdo.dadosExtras?.climaTarde ?? '-'}</td>
+                    <td className="p-4 text-gray-600 text-sm cursor-pointer" onClick={() => navigate(`/obras/${obraAtiva?.id}/rdos/${rdo.id}`)}>{rdo.dadosExtras?.condicaoTerreno ?? '-'}</td>
+                    <td className="p-4" onClick={() => navigate(`/obras/${obraAtiva?.id}/rdos/${rdo.id}`)}>  
                       <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${st.color}`}>
                         {st.icon} {st.label}
                       </span>
                     </td>
-                    <td className="p-4 text-right">
-                      <span className="text-lunardeli-red font-medium text-sm">Visualizar →</span>
+                    <td className="p-4">
+                      <div className="flex items-center justify-end gap-1">
+                        <RdoShareBar rdoId={rdo.id} obraId={obraAtiva?.id || ''} rdoLabel={`RDO_${format(new Date(rdo.dataReferencia), 'yyyy-MM-dd')}`} compact />
+                        <button onClick={() => navigate(`/obras/${obraAtiva?.id}/rdos/${rdo.id}`)} className="px-3 py-1.5 text-xs font-bold text-lunardeli-red hover:bg-red-50 rounded-lg transition-colors">
+                          Abrir →
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -196,57 +270,56 @@ export const RdoList: React.FC = () => {
           </table>
         </div>
 
-        {/* ═══ Mobile Cards ═══ */}
-        <div className="md:hidden">
-          {loading ? (
-            <div className="p-8 text-center text-gray-400 text-sm">Carregando diários...</div>
-          ) : rdosFiltrados.length === 0 ? (
-            <div className="p-10 text-center">
-              <FileText className="mx-auto text-gray-300 mb-3" size={36} />
-              <p className="text-gray-500 font-medium text-sm">{busca ? 'Nenhum resultado' : 'Comece criando o primeiro RDO'}</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {rdosFiltrados.map(rdo => {
-                const st = getStatus(rdo.status);
-                return (
-                  <button
-                    key={rdo.id}
-                    onClick={() => navigate(`/obras/${obraAtiva?.id}/rdos/${rdo.id}`)}
-                    className="w-full text-left px-4 py-3.5 flex items-center gap-3 active:bg-gray-50 transition-colors"
-                  >
-                    {/* Date circle */}
-                    <div className="w-12 h-12 rounded-xl bg-gray-100 flex flex-col items-center justify-center shrink-0">
-                      <span className="text-lg font-black text-lunardeli-dark leading-none">
-                        {format(new Date(rdo.dataReferencia), 'dd')}
-                      </span>
-                      <span className="text-[9px] font-bold uppercase text-gray-400 leading-tight">
-                        {format(new Date(rdo.dataReferencia), 'MMM')}
-                      </span>
-                    </div>
+            <div className="md:hidden">
+              {loading ? (
+                <div className="p-8 text-center text-gray-400 text-sm">Carregando diários...</div>
+              ) : rdosFiltrados.length === 0 ? (
+                <div className="p-10 text-center">
+                  <FileText className="mx-auto text-gray-300 mb-3" size={36} />
+                  <p className="text-gray-500 font-medium text-sm">{busca ? 'Nenhum resultado' : 'Comece criando o primeiro RDO'}</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {rdosFiltrados.map(rdo => {
+                    const st = getStatus(rdo.status);
+                    return (
+                      <div key={rdo.id} className="px-4 py-3.5 flex items-center gap-3">
+                        {/* Date circle */}
+                        <button
+                          onClick={() => navigate(`/obras/${obraAtiva?.id}/rdos/${rdo.id}`)}
+                          className="w-12 h-12 rounded-xl bg-gray-100 flex flex-col items-center justify-center shrink-0 active:bg-gray-200"
+                        >
+                          <span className="text-lg font-black text-lunardeli-dark leading-none">
+                            {format(new Date(rdo.dataReferencia), 'dd')}
+                          </span>
+                          <span className="text-[9px] font-bold uppercase text-gray-400 leading-tight">
+                            {format(new Date(rdo.dataReferencia), 'MMM')}
+                          </span>
+                        </button>
 
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${st.color}`}>
-                          {st.icon} {st.label}
-                        </span>
+                        {/* Info */}
+                        <button
+                          onClick={() => navigate(`/obras/${obraAtiva?.id}/rdos/${rdo.id}`)}
+                          className="flex-1 min-w-0 text-left"
+                        >
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${st.color}`}>
+                              {st.icon} {st.label}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 truncate">
+                            {rdo.dadosExtras?.climaManha ? `${rdo.dadosExtras.climaManha}` : '—'} · {rdo.dadosExtras?.condicaoTerreno ?? '—'}
+                          </p>
+                        </button>
+
+                        {/* Share actions */}
+                        <RdoShareBar rdoId={rdo.id} obraId={obraAtiva?.id || ''} rdoLabel={`RDO_${format(new Date(rdo.dataReferencia), 'yyyy-MM-dd')}`} compact />
                       </div>
-                      <p className="text-xs text-gray-500 truncate">
-                        {rdo.dadosExtras?.climaManha ? `${rdo.dadosExtras.climaManha}` : '—'} · {rdo.dadosExtras?.condicaoTerreno ?? '—'}
-                      </p>
-                    </div>
-
-                    {/* Chevron */}
-                    <svg className="w-5 h-5 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
-        </div>
       </div>
     </div>
   );

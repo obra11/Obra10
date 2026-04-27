@@ -35,14 +35,15 @@ model Empresa {
   tokenVerificacaoExp DateTime?      @map("token_verificacao_exp")
   suspensa            Boolean        @default(false)
   diasInadimplente    Int            @default(0) @map("dias_inadimplente")
-  mesGratuito         Boolean        @default(true) @map("mes_gratuito")
   idAsaas             String?        @unique @map("id_asaas")
   auditLogs           AuditLog[]
   cartaoSalvo         CartaoSalvo?
   cobrancas           Cobranca[]
+  cupons              EmpresaCupom[]
   obras               Obra[]
   tenantModulos       TenantModulo[]
   usuarios            Usuario[]
+  features            EmpresaFeature[]
 
   @@map("empresas")
 }
@@ -87,6 +88,7 @@ model Usuario {
   fotoUrl        String?         @map("foto_url")
   loginAttempts  Int             @default(0) @map("login_attempts")
   lockedUntil    DateTime?       @map("locked_until")
+  ultimoLogin    DateTime?       @map("ultimo_login")
   aceitouTermos  Boolean         @default(false) @map("aceitou_termos")
   dataAceite     DateTime?       @map("data_aceite")
   anexosUpados   Anexo[]
@@ -392,6 +394,7 @@ model Cobranca {
   idempotencyKey String    @unique @map("idempotency_key")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
+  notificadoEm   DateTime? @map("notificado_em")
   empresa        Empresa   @relation(fields: [empresaId], references: [id])
 
   @@index([empresaId, status])
@@ -431,6 +434,47 @@ enum Plano {
   ENTERPRISE
 }
 
+enum TipoCupom {
+  GRATUIDADE
+  DESCONTO_FIXO
+  DESCONTO_PERCENTUAL
+}
+
+model CupomDesconto {
+  id             String         @id @default(uuid())
+  codigo         String         @unique
+  tipo           TipoCupom
+  valor          Decimal?       @db.Decimal(10, 2)
+  mesesGratuitos Int?           @map("meses_gratuitos")
+  duracaoMeses   Int?           @map("duracao_meses")
+  ativo          Boolean        @default(true)
+  usosMaximos    Int?           @map("usos_maximos")
+  usosAtuais     Int            @default(0) @map("usos_atuais")
+  expiraEm       DateTime?      @map("expira_em")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  empresas       EmpresaCupom[]
+
+  @@map("cupons_desconto")
+}
+
+model EmpresaCupom {
+  id          String        @id @default(uuid())
+  empresaId   String        @map("empresa_id")
+  cupomId     String        @map("cupom_id")
+  ativo       Boolean       @default(true)
+  mesesUsados Int           @default(0) @map("meses_usados")
+  aplicadoEm  DateTime      @default(now()) @map("aplicado_em")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  empresa     Empresa       @relation(fields: [empresaId], references: [id])
+  cupom       CupomDesconto @relation(fields: [cupomId], references: [id])
+
+  @@unique([empresaId, cupomId])
+  @@index([empresaId])
+  @@map("empresas_cupons")
+}
+
 enum PerfilGlobal {
   SUPER_ADMIN
   GESTOR
@@ -466,4 +510,39 @@ enum MotivoNaoExecucao {
   RETRABALHO
   INTERFERENCIA_TERCEIROS
   OUTROS
+}
+
+enum TipoFeatureFlag {
+  MODULO
+  FUNCIONALIDADE
+  EXPERIMENTAL
+}
+
+model FeatureFlag {
+  id          String           @id @default(uuid())
+  codigo      String           @unique
+  nome        String
+  descricao   String?
+  ativo       Boolean          @default(false)
+  tipo        TipoFeatureFlag  @default(MODULO)
+  versao      String           @default("1.0")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  empresas    EmpresaFeature[]
+
+  @@map("feature_flags")
+}
+
+model EmpresaFeature {
+  id          String       @id @default(uuid())
+  empresaId   String       @map("empresa_id")
+  featureId   String       @map("feature_id")
+  ativo       Boolean      @default(true)
+  ativadoEm   DateTime     @default(now()) @map("ativado_em")
+
+  empresa     Empresa      @relation(fields: [empresaId], references: [id])
+  feature     FeatureFlag  @relation(fields: [featureId], references: [id])
+
+  @@unique([empresaId, featureId])
+  @@map("empresas_features")
 }

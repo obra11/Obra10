@@ -19,7 +19,9 @@ export class TokenExpiryCron {
       data: { tokenVerificacao: null, tokenVerificacaoExp: null },
     });
     if (result.count > 0) {
-      this.logger.log(`🧹 ${result.count} token(s) de verificação expirado(s) limpos.`);
+      this.logger.log(
+        `🧹 ${result.count} token(s) de verificação expirado(s) limpos.`,
+      );
     }
   }
 }

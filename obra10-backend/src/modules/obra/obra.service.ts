@@ -8,24 +8,24 @@ export class ObraService {
   async listarObrasDoUsuario(usuarioId: string) {
     // Busca as obras ATIVAS nas quais o usuário tem um perfil
     const obras = await this.prisma.obra.findMany({
-      where: { 
-          deletedAt: null, 
-          status: { not: 'INATIVA' },
-          userObraRole: {
-            some: { usuarioId }
-          }
+      where: {
+        deletedAt: null,
+        status: { not: 'INATIVA' },
+        userObraRole: {
+          some: { usuarioId },
+        },
       },
       orderBy: { createdAt: 'asc' },
       include: {
         userObraRole: {
           where: { usuarioId },
-          include: { perfil: true }
-        }
-      }
+          include: { perfil: true },
+        },
+      },
     });
 
     // Retorna no formato legado que o AuthContext mapeia perfeitamente:
-    return obras.map(obra => {
+    return obras.map((obra) => {
       const role = obra.userObraRole[0];
       return {
         id: role.id,
@@ -40,22 +40,34 @@ export class ObraService {
           endereco: obra.endereco,
           status: obra.status,
           imageUrl: obra.imageUrl,
-          createdAt: obra.createdAt
-        }
+          createdAt: obra.createdAt,
+        },
       };
     });
   }
 
-  async criarObra(empresaId: string, usuarioId: string, data: { nome: string; endereco?: string }) {
+  async criarObra(
+    empresaId: string,
+    usuarioId: string,
+    data: { nome: string; endereco?: string },
+  ) {
     // 1. Garante que o perfil ENGENHEIRO existe (FORA da transação para não abortar em caso de erro de constraint)
-    let perfil = await this.prisma.perfil.findUnique({ where: { nomeInterno: 'ENGENHEIRO' } });
+    let perfil = await this.prisma.perfil.findUnique({
+      where: { nomeInterno: 'ENGENHEIRO' },
+    });
     if (!perfil) {
       try {
-        perfil = await this.prisma.perfil.create({ data: { nomeInterno: 'ENGENHEIRO' } });
+        perfil = await this.prisma.perfil.create({
+          data: { nomeInterno: 'ENGENHEIRO' },
+        });
       } catch (e: any) {
         // Se der erro de constraint única no ID (sequence desincronizada pelo seed manual), corrige a sequence e tenta de novo
-        await this.prisma.$executeRawUnsafe(`SELECT setval('perfis_id_seq', COALESCE((SELECT MAX(id)+1 FROM perfis), 1), false);`);
-        perfil = await this.prisma.perfil.create({ data: { nomeInterno: 'ENGENHEIRO' } });
+        await this.prisma.$executeRawUnsafe(
+          `SELECT setval('perfis_id_seq', COALESCE((SELECT MAX(id)+1 FROM perfis), 1), false);`,
+        );
+        perfil = await this.prisma.perfil.create({
+          data: { nomeInterno: 'ENGENHEIRO' },
+        });
       }
     }
 
@@ -86,7 +98,8 @@ export class ObraService {
     // Soft delete
     if (!id) throw new Error('ID não fornecido');
     const obra = await this.prisma.obra.findFirst({ where: { id, empresaId } });
-    if (!obra) throw new Error('Obra não encontrada ou não pertence a esta empresa.');
+    if (!obra)
+      throw new Error('Obra não encontrada ou não pertence a esta empresa.');
 
     return this.prisma.obra.update({
       where: { id },
@@ -94,10 +107,15 @@ export class ObraService {
     });
   }
 
-  async editarObra(id: string, empresaId: string, data: { nome?: string; endereco?: string; status?: string }) {
+  async editarObra(
+    id: string,
+    empresaId: string,
+    data: { nome?: string; endereco?: string; status?: string },
+  ) {
     if (!id) throw new Error('ID não fornecido');
     const obra = await this.prisma.obra.findFirst({ where: { id, empresaId } });
-    if (!obra) throw new Error('Obra não encontrada ou não pertence a esta empresa.');
+    if (!obra)
+      throw new Error('Obra não encontrada ou não pertence a esta empresa.');
 
     return this.prisma.obra.update({
       where: { id },
@@ -111,43 +129,59 @@ export class ObraService {
 
   // ==================== COLABORADORES DA OBRA (EFETIVO) ====================
   async listarColaboradores(obraId: string, empresaId: string) {
-    const obra = await this.prisma.obra.findFirst({ where: { id: obraId, empresaId } });
+    const obra = await this.prisma.obra.findFirst({
+      where: { id: obraId, empresaId },
+    });
     if (!obra) throw new Error('Obra não encontrada'); // or NotFoundException
-    
+
     const roles = await this.prisma.userObraRole.findMany({
       where: { obraId },
       include: {
-        usuario: { 
-          select: { 
-            id: true, 
-            nome: true, 
-            email: true, 
-            perfilGlobal: true
-          } 
+        usuario: {
+          select: {
+            id: true,
+            nome: true,
+            email: true,
+            perfilGlobal: true,
+          },
         },
-        perfil: true
-      }
+        perfil: true,
+      },
     });
 
     return roles;
   }
 
-  async adicionarColaborador(obraId: string, empresaId: string, data: { usuarioId: string, perfilId?: number, permissoes: any }) {
-    const obra = await this.prisma.obra.findFirst({ where: { id: obraId, empresaId } });
+  async adicionarColaborador(
+    obraId: string,
+    empresaId: string,
+    data: { usuarioId: string; perfilId?: number; permissoes?: any },
+  ) {
+    const obra = await this.prisma.obra.findFirst({
+      where: { id: obraId, empresaId },
+    });
     if (!obra) throw new Error('Obra não encontrada');
 
     let finalPerfilId = data.perfilId;
     if (!finalPerfilId) {
-       let perfilPadrao = await this.prisma.perfil.findFirst({ where: { nomeInterno: 'COLABORADOR' } });
-       if (!perfilPadrao) {
-         try {
-           perfilPadrao = await this.prisma.perfil.create({ data: { nomeInterno: 'COLABORADOR' } });
-         } catch (e) {
-           await this.prisma.$executeRawUnsafe(`SELECT setval('perfis_id_seq', COALESCE((SELECT MAX(id)+1 FROM perfis), 1), false);`);
-           perfilPadrao = await this.prisma.perfil.create({ data: { nomeInterno: 'COLABORADOR' } });
-         }
-       }
-       finalPerfilId = perfilPadrao.id;
+      let perfilPadrao = await this.prisma.perfil.findFirst({
+        where: { nomeInterno: 'COLABORADOR' },
+      });
+      if (!perfilPadrao) {
+        try {
+          perfilPadrao = await this.prisma.perfil.create({
+            data: { nomeInterno: 'COLABORADOR' },
+          });
+        } catch (e) {
+          await this.prisma.$executeRawUnsafe(
+            `SELECT setval('perfis_id_seq', COALESCE((SELECT MAX(id)+1 FROM perfis), 1), false);`,
+          );
+          perfilPadrao = await this.prisma.perfil.create({
+            data: { nomeInterno: 'COLABORADOR' },
+          });
+        }
+      }
+      finalPerfilId = perfilPadrao.id;
     }
 
     return this.prisma.userObraRole.upsert({
@@ -157,31 +191,40 @@ export class ObraService {
         obraId,
         usuarioId: data.usuarioId,
         perfilId: finalPerfilId,
-        permissoes: data.permissoes || {}
-      }
+        permissoes: data.permissoes || {},
+      },
     });
   }
 
-  async editarColaborador(obraId: string, empresaId: string, usuarioId: string, data: { perfilId?: number, permissoes?: any }) {
+  async editarColaborador(
+    obraId: string,
+    empresaId: string,
+    usuarioId: string,
+    data: { perfilId?: number; permissoes?: any },
+  ) {
     const role = await this.prisma.userObraRole.findFirst({
-      where: { obraId, usuarioId, obra: { empresaId } }
+      where: { obraId, usuarioId, obra: { empresaId } },
     });
-    if(!role) throw new Error('Vínculo não encontrado');
+    if (!role) throw new Error('Vínculo não encontrado');
 
     return this.prisma.userObraRole.update({
       where: { id: role.id },
       data: {
-         ...(data.perfilId && { perfilId: data.perfilId }),
-         ...(data.permissoes !== undefined && { permissoes: data.permissoes })
-      }
+        ...(data.perfilId && { perfilId: data.perfilId }),
+        ...(data.permissoes !== undefined && { permissoes: data.permissoes }),
+      },
     });
   }
 
-  async removerColaborador(obraId: string, empresaId: string, usuarioId: string) {
+  async removerColaborador(
+    obraId: string,
+    empresaId: string,
+    usuarioId: string,
+  ) {
     const role = await this.prisma.userObraRole.findFirst({
-      where: { obraId, usuarioId, obra: { empresaId } }
+      where: { obraId, usuarioId, obra: { empresaId } },
     });
-    if(!role) throw new Error('Vínculo não encontrado');
+    if (!role) throw new Error('Vínculo não encontrado');
 
     return this.prisma.userObraRole.delete({ where: { id: role.id } });
   }

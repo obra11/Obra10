@@ -1,4 +1,10 @@
-import { SetMetadata, applyDecorators, UseGuards, createParamDecorator, ExecutionContext } from '@nestjs/common';
+import {
+  SetMetadata,
+  applyDecorators,
+  UseGuards,
+  createParamDecorator,
+  ExecutionContext,
+} from '@nestjs/common';
 import { CanActivate, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
@@ -35,10 +41,10 @@ export class SubModuloGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const metadata = this.reflector.get<{ moduloPai: string; submoduloSlug: string }>(
-      SUBMODULO_KEY,
-      context.getHandler(),
-    );
+    const metadata = this.reflector.get<{
+      moduloPai: string;
+      submoduloSlug: string;
+    }>(SUBMODULO_KEY, context.getHandler());
 
     // If no @SubModulo decorator, allow request
     if (!metadata) return true;

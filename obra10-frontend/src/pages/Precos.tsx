@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
-import { Package, CheckCircle, Loader2, ChevronRight, Zap } from 'lucide-react';
+import { Loader2, ChevronRight, Zap } from 'lucide-react';
 
 interface Modulo { slug: string; nome: string; descricao: string; preco: string; }
 
@@ -37,7 +37,7 @@ export const Precos: React.FC = () => {
       ) : (
         <div className="max-w-5xl mx-auto px-4 pb-16">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-            {modulos.map((m, i) => {
+            {modulos.map((m) => {
               const isFree = m.slug === 'RDO';
               return (
                 <div key={m.slug} className="relative bg-gray-800/60 border border-gray-700 rounded-2xl p-6 hover:border-red-500/50 transition-all group">

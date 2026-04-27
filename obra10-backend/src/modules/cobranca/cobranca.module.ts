@@ -7,10 +7,17 @@ import { TokenExpiryCron } from './token-expiry.cron';
 import { AsaasService } from './asaas.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { EmailModule } from '../email/email.module';
+import { CupomModule } from '../cupom/cupom.module';
 
 @Module({
-  imports: [PrismaModule, EmailModule],
-  providers: [CobrancaService, AsaasService, CobrancaCron, ExtratoCron, TokenExpiryCron],
+  imports: [PrismaModule, EmailModule, CupomModule],
+  providers: [
+    CobrancaService,
+    AsaasService,
+    CobrancaCron,
+    ExtratoCron,
+    TokenExpiryCron,
+  ],
   controllers: [CobrancaController],
   exports: [CobrancaService, AsaasService],
 })

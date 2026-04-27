@@ -1,7 +1,15 @@
-import { IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsIn,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 
 export class RegisterTenantDto {
-  @IsIn(['FISICA', 'JURIDICA'], { message: "tipoPessoa deve ser 'FISICA' ou 'JURIDICA'." })
+  @IsIn(['FISICA', 'JURIDICA'], {
+    message: "tipoPessoa deve ser 'FISICA' ou 'JURIDICA'.",
+  })
   tipoPessoa: 'FISICA' | 'JURIDICA';
 
   @IsString({ message: 'CPF/CNPJ é obrigatório.' })

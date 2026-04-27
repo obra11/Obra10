@@ -2,7 +2,9 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>OBRA 10 — Gestão de Obras</title>
     <meta name="description" content="Sistema de gestão de obras com RDO, FVS, concretagem e análise com IA." />
@@ -13,7 +15,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Obra 10" />
-    <link rel="apple-touch-icon" href="/icon-192.svg" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png">
     
     <!-- Preconnect fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -27,8 +29,33 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
+      window.addEventListener('error', function(event) {
+        document.body.innerHTML += '<div style="color:red; font-size: 20px; z-index:9999; position:absolute; top:0; left:0; background:white; padding:20px; word-wrap: break-word;">' + (event.error?.stack || event.message) + '</div>';
+        
+        // Auto-fix PWA Cache issues on ANY error in localhost
+        if (window.location.hostname === 'localhost') {
+           navigator.serviceWorker.getRegistrations().then(regs => {
+              regs.forEach(r => r.unregister());
+              caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).then(() => {
+                sessionStorage.setItem('sw_cleared', '1');
+                window.location.reload();
+              });
+           });
+        }
+      });
+      window.addEventListener('unhandledrejection', function(event) {
+        document.body.innerHTML += '<div style="color:red; font-size: 20px; z-index:9999; position:absolute; top:0; left:0; background:white; padding:20px; word-wrap: break-word;">' + (event.reason?.stack || event.reason) + '</div>';
+      });
+      
+      // Auto clears once if needed
+      if(sessionStorage.getItem('sw_cleared') === '1') {
+         sessionStorage.removeItem('sw_cleared');
+         console.warn('SW cleared. Retrying load...');
+      }
+    </script>
+    <script>
       // Register Service Worker for PWA
-      if ('serviceWorker' in navigator) {
+      if ('serviceWorker' in navigator && window.location.hostname !== 'localhost') {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').catch(() => {});
         });

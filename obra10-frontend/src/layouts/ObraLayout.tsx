@@ -28,6 +28,9 @@ export const ObraLayout: React.FC = () => {
   const location = useLocation();
   const [uploadingUserPhoto, setUploadingUserPhoto] = useState(false);
 
+  // Hide bottom nav when the user is inside DiarioDeObra (it has its own floating action bar)
+  const isInsideDiario = /\/rdos\/(novo|[a-f0-9-]+)$/i.test(location.pathname);
+
   const handleLogout = () => {
     logout();
     navigate('/login');
@@ -219,38 +222,41 @@ export const ObraLayout: React.FC = () => {
 
         {/* Dynamic Nested Content — add bottom padding on mobile for bottom nav */}
         <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)] md:pb-0">
-          <div className="md:pb-0 pb-20">
+          <div className={`md:pb-0 ${isInsideDiario ? 'pb-0' : 'pb-20'}`}>
             <Outlet />
           </div>
         </div>
       </main>
 
       {/* ═══ Bottom Navigation Bar — Mobile Only ═══ */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        <div className="flex items-center justify-around h-16 px-1">
-          {menuItems.slice(0, 5).map(item => {
-            const isActive = location.pathname.startsWith(item.path);
-            return (
-              <button
-                key={item.name}
-                onClick={() => navigate(item.path)}
-                className={`flex flex-col items-center justify-center flex-1 h-full min-w-0 relative transition-colors ${
-                  isActive ? 'text-lunardeli-red' : 'text-gray-400'
-                }`}
-              >
-                {/* Active indicator bar */}
-                {isActive && (
-                  <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-lunardeli-red rounded-b-full" />
-                )}
-                <item.icon size={22} strokeWidth={isActive ? 2.5 : 1.8} className="shrink-0" />
-                <span className={`text-[10px] mt-0.5 leading-tight truncate max-w-full px-1 ${isActive ? 'font-bold' : 'font-medium'}`}>
-                  {item.name}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+      {/* Hidden when inside DiarioDeObra since it has its own floating action bar */}
+      {!isInsideDiario && (
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+          <div className="flex items-center justify-around h-16 px-1">
+            {menuItems.slice(0, 5).map(item => {
+              const isActive = location.pathname.startsWith(item.path);
+              return (
+                <button
+                  key={item.name}
+                  onClick={() => navigate(item.path)}
+                  className={`flex flex-col items-center justify-center flex-1 h-full min-w-0 relative transition-colors ${
+                    isActive ? 'text-lunardeli-red' : 'text-gray-400'
+                  }`}
+                >
+                  {/* Active indicator bar */}
+                  {isActive && (
+                    <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-lunardeli-red rounded-b-full" />
+                  )}
+                  <item.icon size={22} strokeWidth={isActive ? 2.5 : 1.8} className="shrink-0" />
+                  <span className={`text-[10px] mt-0.5 leading-tight truncate max-w-full px-1 ${isActive ? 'font-bold' : 'font-medium'}`}>
+                    {item.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </div>
   );
 };

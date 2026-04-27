@@ -33,7 +33,7 @@ const FUNCOES_SUGERIDAS: Profissional[] = [
 export const ProfissionalSelector: React.FC<Props> = ({ obraId, selecionados, onAdd, onRemove }) => {
   const [busca, setBusca] = useState('');
   const [recentes, setRecentes] = useState<Profissional[]>([]);
-  const [mostrarBusca, setMostrarBusca] = useState(false);
+  const [, setMostrarBusca] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

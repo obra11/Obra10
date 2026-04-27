@@ -6,6 +6,6 @@ import { CronService } from './cron.service';
 @Module({
   imports: [PrismaModule],
   controllers: [UploadController],
-  providers: [CronService]
+  providers: [CronService],
 })
 export class UploadModule {}

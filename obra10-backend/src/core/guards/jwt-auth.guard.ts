@@ -1,4 +1,9 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Request } from 'express';
@@ -15,12 +20,14 @@ export class JwtAuthGuard implements CanActivate {
     const token = this.extractTokenFromHeader(request);
 
     if (!token) {
-      throw new UnauthorizedException('Nenhum token JWT fornecido no header Authorization.');
+      throw new UnauthorizedException(
+        'Nenhum token JWT fornecido no header Authorization.',
+      );
     }
 
     try {
       const payload = await this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_SECRET || 'obra10-mvp-secret-key-12345'
+        secret: process.env.JWT_SECRET || 'obra10-mvp-secret-key-12345',
       });
 
       // Verificar jwtVersion — se o usuário trocou de senha, o token é invalidado
@@ -33,7 +40,9 @@ export class JwtAuthGuard implements CanActivate {
           throw new UnauthorizedException('Conta desativada.');
         }
         if (user.jwtVersion !== payload.jwtVersion) {
-          throw new UnauthorizedException('Sessão invalidada. Faça login novamente.');
+          throw new UnauthorizedException(
+            'Sessão invalidada. Faça login novamente.',
+          );
         }
       }
 
@@ -53,4 +62,3 @@ export class JwtAuthGuard implements CanActivate {
     return type === 'Bearer' ? token : undefined;
   }
 }
-

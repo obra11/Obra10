@@ -1,7 +1,7 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useAuth, type Obra } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Trash2, Edit2, Users } from 'lucide-react';
+import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Trash2, Edit2, Users, AlertTriangle, DollarSign, ExternalLink } from 'lucide-react';
 import api from '../services/api';
 
 export const CompanyDashboard: React.FC = () => {
@@ -22,8 +22,29 @@ export const CompanyDashboard: React.FC = () => {
   const [loadingEdit, setLoadingEdit] = useState(false);
 
   const [showEditEmpresaModal, setShowEditEmpresaModal] = useState(false);
-  const [empresaEdit, setEmpresaEdit] = useState({ nomeFantasia: empresa?.nomeFantasia || empresa?.razaoSocial || '' });
+  const [empresaEdit, setEmpresaEdit] = useState({ 
+    nomeFantasia: empresa?.nomeFantasia || empresa?.razaoSocial || '',
+    telefone: empresa?.telefone || '',
+    email: empresa?.email || '',
+    cep: empresa?.cep || '',
+    logradouro: empresa?.logradouro || '',
+    numero: empresa?.numero || '',
+    complemento: empresa?.complemento || '',
+    bairro: empresa?.bairro || '',
+    cidade: empresa?.cidade || '',
+    estado: empresa?.estado || ''
+  });
   const [loadingEditEmpresa, setLoadingEditEmpresa] = useState(false);
+
+  // Cobranças pendentes (banner de aviso)
+  const [cobrancasPendentes, setCobrancasPendentes] = useState<any[]>([]);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    api.get('/minha-empresa/cobrancas-pendentes')
+      .then(res => setCobrancasPendentes(res.data))
+      .catch(() => {}); // silenciar erro se não houver cobranças
+  }, []);
 
   const handleCriarObra = async () => {
     if (!novaObra.nome.trim()) return;
@@ -51,7 +72,7 @@ export const CompanyDashboard: React.FC = () => {
     if (!empresaEdit.nomeFantasia.trim()) return;
     setLoadingEditEmpresa(true);
     try {
-      await api.patch('/tenants/minha-empresa', { nomeFantasia: empresaEdit.nomeFantasia });
+      await api.patch('/tenants/minha-empresa', empresaEdit);
       window.location.reload();
     } catch(e: any) {
       alert('Erro ao editar empresa: ' + (e?.response?.data?.message || e.message));
@@ -182,18 +203,40 @@ export const CompanyDashboard: React.FC = () => {
               <div className="flex items-center gap-2">
                 <h1 className="text-base md:text-xl font-bold text-lunardeli-dark truncate max-w-[140px] md:max-w-[200px]">{empresa?.nomeFantasia || empresa?.razaoSocial}</h1>
                 {user?.perfilGlobal === 'GESTOR' && (
-                  <button onClick={() => { setEmpresaEdit({ nomeFantasia: empresa?.nomeFantasia || empresa?.razaoSocial || '' }); setShowEditEmpresaModal(true); }} className="text-gray-400 hover:text-lunardeli-red transition-colors shrink-0" title="Editar Empresa">
+                  <button onClick={() => { 
+                    setEmpresaEdit({ 
+                      nomeFantasia: empresa?.nomeFantasia || empresa?.razaoSocial || '',
+                      telefone: empresa?.telefone || '',
+                      email: empresa?.email || '',
+                      cep: empresa?.cep || '',
+                      logradouro: empresa?.logradouro || '',
+                      numero: empresa?.numero || '',
+                      complemento: empresa?.complemento || '',
+                      bairro: empresa?.bairro || '',
+                      cidade: empresa?.cidade || '',
+                      estado: empresa?.estado || ''
+                    }); 
+                    setShowEditEmpresaModal(true); 
+                  }} className="text-gray-400 hover:text-lunardeli-red transition-colors shrink-0" title="Editar Empresa">
                     <Edit2 size={16} />
                   </button>
                 )}
               </div>
+              {/* Active Cupom Badge */}
+              {empresa?.cupons && empresa.cupons.find((c: any) => c.ativo)?.cupom && (
+                <div className="mt-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-green-700 bg-green-100 border border-green-200 rounded px-1.5 py-0.5" title="Cupom de Desconto Ativo">
+                    Cupom: {empresa.cupons.find((c: any) => c.ativo).cupom.codigo}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           
-          <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-2 sm:space-x-6">
             
             {/* User Profile Area */}
-            <div className="flex items-center gap-3 mr-2 sm:mr-4 border-r pr-2 sm:pr-4 border-gray-200">
+            <div className="flex items-center gap-3 mr-1 sm:mr-4 border-r pr-1 sm:pr-4 border-gray-200">
               <div className="text-right hidden sm:block">
                  <p className="text-sm font-bold text-gray-800 leading-tight">{user?.nome}</p>
                  <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">{user?.perfilGlobal}</p>
@@ -223,20 +266,64 @@ export const CompanyDashboard: React.FC = () => {
             </div>
             {user?.perfilGlobal === 'GESTOR' && (
               <>
-                <button onClick={() => navigate('/gestor/usuarios')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors">
-                  <Users size={18} className="mr-2" /> Equipe
+                <button onClick={() => navigate('/gestor/usuarios')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Equipe">
+                  <Users size={18} className="sm:mr-2" /> <span className="hidden sm:inline">Equipe</span>
                 </button>
-                <button onClick={() => navigate('/assinatura')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors">
-                  <Building2 size={18} className="mr-2" /> Meu Plano
+                <button onClick={() => navigate('/assinatura')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Meu Plano">
+                  <Building2 size={18} className="sm:mr-2" /> <span className="hidden sm:inline">Meu Plano</span>
                 </button>
               </>
             )}
-            <button onClick={handleLogout} className="flex items-center text-gray-500 hover:text-lunardeli-red font-medium transition-colors">
-              <LogOut size={18} className="mr-2" /> Sair
+            <button onClick={handleLogout} className="flex items-center text-gray-500 hover:text-lunardeli-red font-medium transition-colors" title="Sair">
+              <LogOut size={18} className="sm:mr-2" /> <span className="hidden sm:inline">Sair</span>
             </button>
           </div>
         </div>
       </header>
+
+      {/* Banner de Cobranças Pendentes */}
+      {cobrancasPendentes.length > 0 && !bannerDismissed && (
+        <div className="bg-gradient-to-r from-yellow-50 to-red-50 border-b border-yellow-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <div className="bg-yellow-100 p-2 rounded-full">
+                  <AlertTriangle className="text-yellow-600" size={20} />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-900">
+                    <DollarSign size={14} className="inline text-red-600 -mt-0.5" /> Você possui {cobrancasPendentes.length} cobrança(s) pendente(s)
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    Valor total: R$ {cobrancasPendentes.reduce((acc: number, c: any) => acc + Number(c.valor), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    {cobrancasPendentes.some((c: any) => c.notificadoEm) && (
+                      <span className="text-red-600 font-semibold ml-2">• O administrador solicitou a regularização</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {cobrancasPendentes[0]?.linkPagamento && (
+                  <a 
+                    href={cobrancasPendentes[0].linkPagamento} 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors"
+                  >
+                    <ExternalLink size={14} /> Pagar Agora
+                  </a>
+                )}
+                <button 
+                  onClick={() => setBannerDismissed(true)}
+                  className="text-gray-400 hover:text-gray-600 text-xs px-2 py-1"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -398,15 +485,58 @@ export const CompanyDashboard: React.FC = () => {
 
       {/* Modal Editar Empresa */}
       {showEditEmpresaModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-            <h3 className="text-xl font-bold mb-4">Configurações da Empresa</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Nome da Empresa</label>
-                <input value={empresaEdit.nomeFantasia} onChange={e => setEmpresaEdit({...empresaEdit, nomeFantasia: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none" />
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 my-8">
+            <h3 className="text-xl font-bold mb-4 border-b pb-2">Configurações da Empresa</h3>
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Razão Social (Somente Leitura)</label>
+                  <input value={empresa?.razaoSocial || ''} disabled className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Documento Principal (Somente Leitura)</label>
+                  <input value={empresa?.cpfCnpj || empresa?.cnpj || ''} disabled className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Nome Fantasia *</label>
+                  <input value={empresaEdit.nomeFantasia} onChange={e => setEmpresaEdit({...empresaEdit, nomeFantasia: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Telefone</label>
+                  <input value={empresaEdit.telefone} onChange={e => setEmpresaEdit({...empresaEdit, telefone: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                </div>
               </div>
-              <div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4">
+                <div className="md:col-span-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">CEP</label>
+                  <input value={empresaEdit.cep} onChange={e => setEmpresaEdit({...empresaEdit, cep: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Logradouro</label>
+                  <input value={empresaEdit.logradouro} onChange={e => setEmpresaEdit({...empresaEdit, logradouro: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                </div>
+                <div className="md:col-span-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Número</label>
+                  <input value={empresaEdit.numero} onChange={e => setEmpresaEdit({...empresaEdit, numero: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Bairro</label>
+                  <input value={empresaEdit.bairro} onChange={e => setEmpresaEdit({...empresaEdit, bairro: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Cidade</label>
+                  <input value={empresaEdit.cidade} onChange={e => setEmpresaEdit({...empresaEdit, cidade: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                </div>
+                <div className="md:col-span-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">UF</label>
+                  <input value={empresaEdit.estado} maxLength={2} onChange={e => setEmpresaEdit({...empresaEdit, estado: e.target.value.toUpperCase()})} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Logo da Empresa</label>
                 <div className="flex items-center gap-4">
                   <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 border border-gray-300 px-4 py-2 rounded-lg flex items-center gap-2 text-gray-700 font-medium transition-colors">
@@ -414,14 +544,15 @@ export const CompanyDashboard: React.FC = () => {
                     {uploadingLogo ? 'Enviando...' : 'Atualizar Logo'}
                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleLogoUpload} />
                   </label>
-                  <span className="text-xs text-gray-500">Selecione uma imagem para a logo (JPG, PNG).</span>
+                  <span className="text-xs text-gray-500">JPG, PNG. Max 2MB.</span>
                 </div>
               </div>
             </div>
-            <div className="flex gap-3 justify-end mt-6">
+            
+            <div className="flex gap-3 justify-end mt-6 border-t pt-4">
               <button onClick={() => setShowEditEmpresaModal(false)} className="px-4 py-2 text-gray-600 font-semibold hover:bg-gray-100 rounded-lg">Cancelar</button>
-              <button onClick={handleEditarEmpresa} disabled={loadingEditEmpresa} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 flex items-center gap-2">
-                {loadingEditEmpresa ? <Loader2 size={16} className="animate-spin" /> : null} Salvar
+              <button onClick={handleEditarEmpresa} disabled={loadingEditEmpresa} className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                {loadingEditEmpresa ? <Loader2 size={16} className="animate-spin" /> : null} Salvar Cadastro
               </button>
             </div>
           </div>

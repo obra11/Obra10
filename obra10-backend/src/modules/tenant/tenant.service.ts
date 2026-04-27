@@ -1,5 +1,8 @@
 import {
-  Injectable, BadRequestException, ConflictException, NotFoundException,
+  Injectable,
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
@@ -29,9 +32,14 @@ function validarCNPJ(cnpj: string): boolean {
   const d = cnpj.replace(/\D/g, '');
   if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false;
   const calc = (n: string, weights: number[]) =>
-    11 - (n.split('').slice(0, weights.length).reduce((s, c, i) => s + +c * weights[i], 0) % 11);
-  const w1 = [5,4,3,2,9,8,7,6,5,4,3,2];
-  const w2 = [6,5,4,3,2,9,8,7,6,5,4,3,2];
+    11 -
+    (n
+      .split('')
+      .slice(0, weights.length)
+      .reduce((s, c, i) => s + +c * weights[i], 0) %
+      11);
+  const w1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const w2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
   const d1 = calc(d, w1) >= 10 ? 0 : calc(d, w1);
   const d2 = calc(d, w2) >= 10 ? 0 : calc(d, w2);
   return +d[12] === d1 && +d[13] === d2;
@@ -40,14 +48,23 @@ function validarCNPJ(cnpj: string): boolean {
 async function buscarCEP(cep: string): Promise<any> {
   try {
     const clean = cep.replace(/\D/g, '');
-    const { data } = await axios.get(`https://viacep.com.br/ws/${clean}/json/`, { timeout: 5000 });
+    const { data } = await axios.get(
+      `https://viacep.com.br/ws/${clean}/json/`,
+      { timeout: 5000 },
+    );
     if (data.erro) return null;
     return data;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 // Plans → user limits
-const PLAN_LIMITS: Record<string, number> = { BASICO: 5, PRO: 20, ENTERPRISE: 100 };
+const PLAN_LIMITS: Record<string, number> = {
+  BASICO: 5,
+  PRO: 20,
+  ENTERPRISE: 100,
+};
 
 @Injectable()
 export class TenantService {
@@ -77,16 +94,27 @@ export class TenantService {
 
     // Validate document
     if (dto.tipoPessoa === 'FISICA') {
-      if (!validarCPF(cpfCnpjLimpo)) throw new BadRequestException('CPF inválido.');
+      if (!validarCPF(cpfCnpjLimpo))
+        throw new BadRequestException('CPF inválido.');
     } else {
-      if (!validarCNPJ(cpfCnpjLimpo)) throw new BadRequestException('CNPJ inválido.');
+      if (!validarCNPJ(cpfCnpjLimpo))
+        throw new BadRequestException('CNPJ inválido.');
     }
 
     // Check uniqueness
     const existe = await this.prisma.empresa.findFirst({
-      where: { OR: [{ cpfCnpj: cpfCnpjLimpo }, { cnpj: cpfCnpjLimpo }, { email: dto.email }] },
+      where: {
+        OR: [
+          { cpfCnpj: cpfCnpjLimpo },
+          { cnpj: cpfCnpjLimpo },
+          { email: dto.email },
+        ],
+      },
     });
-    if (existe) throw new ConflictException('CPF/CNPJ ou e-mail já cadastrado no sistema.');
+    if (existe)
+      throw new ConflictException(
+        'CPF/CNPJ ou e-mail já cadastrado no sistema.',
+      );
 
     // Fetch address from CEP
     let endereco: any = {};
@@ -113,7 +141,10 @@ export class TenantService {
         data: {
           tipoPessoa: dto.tipoPessoa,
           cpfCnpj: this.cryptoService.encrypt(cpfCnpjLimpo),
-          cnpj: dto.tipoPessoa === 'JURIDICA' ? this.cryptoService.encrypt(cpfCnpjLimpo) : undefined,
+          cnpj:
+            dto.tipoPessoa === 'JURIDICA'
+              ? this.cryptoService.encrypt(cpfCnpjLimpo)
+              : undefined,
           razaoSocial: dto.razaoSocial,
           nomeFantasia: dto.nomeFantasia,
           nomeCompleto: dto.nomeCompleto,
@@ -125,7 +156,6 @@ export class TenantService {
           emailVerificado: true, // Auto-verified for dev testing
           tokenVerificacao: null,
           tokenVerificacaoExp: null,
-          mesGratuito: true,
           plano: 'BASICO',
           limiteUsuarios: 5,
         },
@@ -149,7 +179,7 @@ export class TenantService {
           data: { empresaId: empresa.id, moduloId: moduloRdo.id, ativo: true }, // auto-activated
         });
         await tx.usuarioModulo.create({
-          data: { usuarioId: gestor.id, moduloId: moduloRdo.id }
+          data: { usuarioId: gestor.id, moduloId: moduloRdo.id },
         });
       }
 
@@ -165,12 +195,21 @@ export class TenantService {
         email: dto.email,
         telefone: dto.telefone,
       });
-      await this.prisma.empresa.update({ where: { id: result.empresa.id }, data: { idAsaas } });
-    } catch { /* Non-fatal */ }
+      await this.prisma.empresa.update({
+        where: { id: result.empresa.id },
+        data: { idAsaas },
+      });
+    } catch {
+      /* Non-fatal */
+    }
 
     // Send verification email
     const nomeExibicao = dto.razaoSocial || dto.nomeCompleto || dto.nome;
-    await this.email.enviarVerificacaoEmail(dto.email, tokenVerificacao, nomeExibicao);
+    await this.email.enviarVerificacaoEmail(
+      dto.email,
+      tokenVerificacao,
+      nomeExibicao,
+    );
 
     return {
       mensagem: 'Cadastro realizado! Verifique seu e-mail para ativar a conta.',
@@ -180,19 +219,30 @@ export class TenantService {
 
   // ===================== VERIFICAR E-MAIL =====================
   async verificarEmail(token: string) {
-    const empresa = await this.prisma.empresa.findUnique({ where: { tokenVerificacao: token } });
-    if (!empresa) throw new NotFoundException('Token de verificação inválido ou já utilizado.');
+    const empresa = await this.prisma.empresa.findUnique({
+      where: { tokenVerificacao: token },
+    });
+    if (!empresa)
+      throw new NotFoundException(
+        'Token de verificação inválido ou já utilizado.',
+      );
 
     const exp = empresa.tokenVerificacaoExp;
     if (exp && exp < new Date()) {
-      throw new BadRequestException('Token expirado. Solicite um novo e-mail de verificação.');
+      throw new BadRequestException(
+        'Token expirado. Solicite um novo e-mail de verificação.',
+      );
     }
 
     // Activate email + activate RDO module
     await this.prisma.$transaction([
       this.prisma.empresa.update({
         where: { id: empresa.id },
-        data: { emailVerificado: true, tokenVerificacao: null, tokenVerificacaoExp: null },
+        data: {
+          emailVerificado: true,
+          tokenVerificacao: null,
+          tokenVerificacaoExp: null,
+        },
       }),
       this.prisma.tenantModulo.updateMany({
         where: { empresaId: empresa.id },
@@ -204,10 +254,14 @@ export class TenantService {
     const gestor = await this.prisma.usuario.findFirst({
       where: { empresaId: empresa.id, perfilGlobal: 'GESTOR', deletedAt: null },
     });
-    const moduloRdo = await this.prisma.modulo.findUnique({ where: { slug: 'RDO' } });
+    const moduloRdo = await this.prisma.modulo.findUnique({
+      where: { slug: 'RDO' },
+    });
     if (gestor && moduloRdo) {
       await this.prisma.usuarioModulo.upsert({
-        where: { usuarioId_moduloId: { usuarioId: gestor.id, moduloId: moduloRdo.id } },
+        where: {
+          usuarioId_moduloId: { usuarioId: gestor.id, moduloId: moduloRdo.id },
+        },
         update: {},
         create: { usuarioId: gestor.id, moduloId: moduloRdo.id },
       });
@@ -217,14 +271,18 @@ export class TenantService {
     const nome = empresa.razaoSocial || empresa.nomeCompleto || 'Empresa';
     if (empresa.email) await this.email.enviarBoasVindas(empresa.email, nome);
 
-    return { mensagem: 'E-mail verificado com sucesso!', redirect: '/contratacao' };
+    return {
+      mensagem: 'E-mail verificado com sucesso!',
+      redirect: '/contratacao',
+    };
   }
 
   // ===================== REENVIAR VERIFICAÇÃO =====================
   async reenviarVerificacao(email: string) {
     const empresa = await this.prisma.empresa.findFirst({ where: { email } });
     if (!empresa) throw new NotFoundException('E-mail não encontrado.');
-    if (empresa.emailVerificado) throw new BadRequestException('Este e-mail já foi verificado.');
+    if (empresa.emailVerificado)
+      throw new BadRequestException('Este e-mail já foi verificado.');
 
     const tokenVerificacao = crypto.randomBytes(32).toString('hex');
     const tokenExp = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -243,28 +301,54 @@ export class TenantService {
     return this.prisma.empresa.findMany({
       where: { deletedAt: null },
       select: {
-        id: true, cnpj: true, cpfCnpj: true, razaoSocial: true, nomeCompleto: true,
-        tipoPessoa: true, plano: true, ativo: true, suspensa: true,
-        diasInadimplente: true, emailVerificado: true,
-        limiteUsuarios: true, createdAt: true,
-        tenantModulos: { include: { modulo: { select: { slug: true, nome: true } } } },
+        id: true,
+        cnpj: true,
+        cpfCnpj: true,
+        razaoSocial: true,
+        nomeCompleto: true,
+        tipoPessoa: true,
+        plano: true,
+        ativo: true,
+        suspensa: true,
+        diasInadimplente: true,
+        emailVerificado: true,
+        limiteUsuarios: true,
+        createdAt: true,
+        tenantModulos: {
+          include: { modulo: { select: { slug: true, nome: true } } },
+        },
         _count: { select: { usuarios: { where: { deletedAt: null } } } },
       },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async setModulos(empresaId: string, modulos: { slug: string; ativo: boolean; expiresAt?: string }[]) {
-    const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId } });
+  async setModulos(
+    empresaId: string,
+    modulos: { slug: string; ativo: boolean; expiresAt?: string }[],
+  ) {
+    const empresa = await this.prisma.empresa.findUnique({
+      where: { id: empresaId },
+    });
     if (!empresa) throw new BadRequestException('Empresa não encontrada.');
     const results: any[] = [];
     for (const m of modulos) {
-      const modulo = await this.prisma.modulo.findUnique({ where: { slug: m.slug } });
+      const modulo = await this.prisma.modulo.findUnique({
+        where: { slug: m.slug },
+      });
       if (!modulo) continue;
       const record = await this.prisma.tenantModulo.upsert({
         where: { empresaId_moduloId: { empresaId, moduloId: modulo.id } },
-        update: { ativo: m.ativo, expiresAt: m.expiresAt ? new Date(m.expiresAt) : null },
-        create: { empresaId, moduloId: modulo.id, ativo: m.ativo, expiresAt: m.expiresAt ? new Date(m.expiresAt) : null },
+        update: {
+          ativo: m.ativo,
+          expiresAt: m.expiresAt ? new Date(m.expiresAt) : null,
+        },
+        create: {
+          empresaId,
+          moduloId: modulo.id,
+          ativo: m.ativo,
+          expiresAt: m.expiresAt ? new Date(m.expiresAt) : null,
+        },
       });
       results.push({ slug: m.slug, ...record });
     }
@@ -272,7 +356,9 @@ export class TenantService {
   }
 
   async updateTenant(empresaId: string, updates: Record<string, any>) {
-    const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId } });
+    const empresa = await this.prisma.empresa.findUnique({
+      where: { id: empresaId },
+    });
     if (!empresa) throw new BadRequestException('Empresa não encontrada.');
     if (updates.plano && PLAN_LIMITS[updates.plano]) {
       updates.limiteUsuarios = PLAN_LIMITS[updates.plano];
@@ -280,7 +366,14 @@ export class TenantService {
     return this.prisma.empresa.update({
       where: { id: empresaId },
       data: updates,
-      select: { id: true, razaoSocial: true, plano: true, limiteUsuarios: true, ativo: true, suspensa: true },
+      select: {
+        id: true,
+        razaoSocial: true,
+        plano: true,
+        limiteUsuarios: true,
+        ativo: true,
+        suspensa: true,
+      },
     });
   }
 
@@ -290,16 +383,16 @@ export class TenantService {
       where: { id: empresaId },
       include: {
         tenantModulos: {
-          include: { modulo: true }
+          include: { modulo: true },
         },
         cobrancas: {
           orderBy: { createdAt: 'desc' },
-          take: 12
+          take: 12,
         },
         _count: {
-          select: { usuarios: { where: { deletedAt: null } } }
-        }
-      }
+          select: { usuarios: { where: { deletedAt: null } } },
+        },
+      },
     });
 
     if (!empresa) throw new NotFoundException('Empresa não encontrada.');
@@ -311,15 +404,14 @@ export class TenantService {
       ativo: empresa.ativo,
       suspensa: empresa.suspensa,
       diasInadimplente: empresa.diasInadimplente,
-      mesGratuito: empresa.mesGratuito,
       createdAt: empresa.createdAt,
-      modulos: empresa.tenantModulos.map(tm => ({
+      modulos: empresa.tenantModulos.map((tm) => ({
         nome: tm.modulo.nome,
         slug: tm.modulo.slug,
         ativo: tm.ativo,
-        expiresAt: tm.expiresAt
+        expiresAt: tm.expiresAt,
       })),
-      historicoCobrancas: empresa.cobrancas
+      historicoCobrancas: empresa.cobrancas,
     };
   }
 
@@ -329,14 +421,35 @@ export class TenantService {
       throw new BadRequestException('Plano inválido.');
     }
 
-    const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId } });
+    const empresa = await this.prisma.empresa.findUnique({
+      where: { id: empresaId },
+    });
     if (!empresa) throw new NotFoundException('Empresa não encontrada.');
 
     return this.prisma.empresa.update({
       where: { id: empresaId },
       data: {
         plano: novoPlano as any,
-        limiteUsuarios: PLAN_LIMITS[novoPlano]
+        limiteUsuarios: PLAN_LIMITS[novoPlano],
+      },
+    });
+  }
+
+  async getCobrancasPendentes(empresaId: string) {
+    return this.prisma.cobranca.findMany({
+      where: {
+        empresaId,
+        status: { in: ['PENDENTE', 'VENCIDO', 'OVERDUE'] }
+      },
+      orderBy: { dataVencimento: 'asc' },
+      select: {
+        id: true,
+        valor: true,
+        status: true,
+        dataVencimento: true,
+        mesReferencia: true,
+        linkPagamento: true,
+        notificadoEm: true,
       }
     });
   }

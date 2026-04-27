@@ -1,4 +1,10 @@
-import { Controller, Get, Param, NotFoundException, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  NotFoundException,
+  UseGuards,
+} from '@nestjs/common';
 import { ModulosService } from './modulos.service';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 
@@ -35,9 +41,13 @@ export class ModulosController {
   @UseGuards(JwtAuthGuard)
   @Get(':slug/submodulos')
   async findSubmodulos(@Param('slug') slug: string) {
-    const submodulos = await this.modulosService.findSubmodulos(slug.toUpperCase());
+    const submodulos = await this.modulosService.findSubmodulos(
+      slug.toUpperCase(),
+    );
     if (submodulos === null) {
-      throw new NotFoundException(`Módulo "${slug}" não encontrado no catálogo.`);
+      throw new NotFoundException(
+        `Módulo "${slug}" não encontrado no catálogo.`,
+      );
     }
     return submodulos;
   }

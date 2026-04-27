@@ -16,7 +16,9 @@ export class CsrfMiddleware implements NestMiddleware {
     const headerToken = req.headers['x-xsrf-token'];
 
     if (!cookieToken || !headerToken || cookieToken !== headerToken) {
-      throw new ForbiddenException('Falha de verificação CSRF (Cross-Site Request Forgery)');
+      throw new ForbiddenException(
+        'Falha de verificação CSRF (Cross-Site Request Forgery)',
+      );
     }
 
     next();
@@ -30,7 +32,7 @@ export class CsrfMiddleware implements NestMiddleware {
         httpOnly: false,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        path: '/'
+        path: '/',
       });
     }
   }

@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/auth.service';
-import { HardHat, Lock, Mail, Loader2 } from 'lucide-react';
+import { HardHat, Lock, Mail, Loader2, Eye, EyeOff } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   // empresaId é auto-detectado pelo backend via e-mail
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -21,12 +22,10 @@ export const Login: React.FC = () => {
     try {
       // MVP: Chama o backend real para login
       const data = await authService.login(email, senha);
-      if (data.access_token) {
-        login(data);
-        navigate('/dashboard');
+      login(data);
+      if (data.usuario?.perfilGlobal === 'SUPER_ADMIN') {
+        navigate('/admin/dashboard');
       } else {
-        // Fallback: backend usa cookie HttpOnly, considerar logado
-        login(data);
         navigate('/dashboard');
       }
     } catch (err: any) {
@@ -102,13 +101,20 @@ export const Login: React.FC = () => {
                   <Lock className="h-5 w-5 text-gray-400" />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={senha}
                   onChange={(e) => setSenha(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red transition-colors bg-gray-50 focus:bg-white outline-none"
+                  className="block w-full pl-10 pr-10 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red transition-colors bg-gray-50 focus:bg-white outline-none"
                   placeholder="••••••••"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
               </div>
             </div>
 

@@ -1,6 +1,9 @@
 import {
-  Injectable, BadRequestException, NotFoundException,
-  ForbiddenException, ConflictException,
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
@@ -25,7 +28,7 @@ export class UsuariosService {
           include: { modulo: { select: { slug: true, nome: true } } },
         },
         userObraRole: {
-          include: { obra: { select: { id: true, nome: true, status: true } } }
+          include: { obra: { select: { id: true, nome: true, status: true } } },
         },
       },
       orderBy: { createdAt: 'asc' },
@@ -41,7 +44,9 @@ export class UsuariosService {
     // Validate limiteUsuarios
     const empresa = await this.prisma.empresa.findUnique({
       where: { id: empresaId },
-      include: { _count: { select: { usuarios: { where: { deletedAt: null } } } } },
+      include: {
+        _count: { select: { usuarios: { where: { deletedAt: null } } } },
+      },
     });
     if (!empresa) throw new NotFoundException('Empresa não encontrada.');
 
@@ -55,14 +60,17 @@ export class UsuariosService {
     const existenteAtivo = await this.prisma.usuario.findFirst({
       where: { empresaId, email, deletedAt: null },
     });
-    if (existenteAtivo) throw new ConflictException(`E-mail "${email}" já está em uso nesta empresa.`);
+    if (existenteAtivo)
+      throw new ConflictException(
+        `E-mail "${email}" já está em uso nesta empresa.`,
+      );
 
     const usuarioDeletado = await this.prisma.usuario.findFirst({
       where: { empresaId, email, deletedAt: { not: null } },
     });
 
     const senhaHash = await bcrypt.hash(senha, 12);
-    
+
     // Auto-assign active tenant modules
     const tenantModulosAtivos = await this.prisma.tenantModulo.findMany({
       where: {
@@ -70,7 +78,7 @@ export class UsuariosService {
         ativo: true,
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
-      select: { moduloId: true }
+      select: { moduloId: true },
     });
 
     if (usuarioDeletado) {
@@ -86,10 +94,17 @@ export class UsuariosService {
           deletedAt: null,
           usuarioModulos: {
             deleteMany: {},
-            create: tenantModulosAtivos.map(m => ({ moduloId: m.moduloId }))
-          }
+            create: tenantModulosAtivos.map((m) => ({ moduloId: m.moduloId })),
+          },
         },
-        select: { id: true, nome: true, email: true, perfilGlobal: true, createdAt: true, fotoUrl: true },
+        select: {
+          id: true,
+          nome: true,
+          email: true,
+          perfilGlobal: true,
+          createdAt: true,
+          fotoUrl: true,
+        },
       });
     }
 
@@ -103,10 +118,17 @@ export class UsuariosService {
         perfilGlobal: perfilGlobal ?? 'USER',
         ativo: true,
         usuarioModulos: {
-          create: tenantModulosAtivos.map(m => ({ moduloId: m.moduloId }))
-        }
+          create: tenantModulosAtivos.map((m) => ({ moduloId: m.moduloId })),
+        },
       },
-      select: { id: true, nome: true, email: true, perfilGlobal: true, createdAt: true, fotoUrl: true },
+      select: {
+        id: true,
+        nome: true,
+        email: true,
+        perfilGlobal: true,
+        createdAt: true,
+        fotoUrl: true,
+      },
     });
   }
 
@@ -121,7 +143,10 @@ export class UsuariosService {
       const existente = await this.prisma.usuario.findFirst({
         where: { empresaId, email, deletedAt: null, id: { not: id } },
       });
-      if (existente) throw new ConflictException(`E-mail "${email}" já está em uso nesta empresa.`);
+      if (existente)
+        throw new ConflictException(
+          `E-mail "${email}" já está em uso nesta empresa.`,
+        );
     }
 
     // Se o perfil mudar de GESTOR para USER e a empresa só tiver 1 gestor, isso pode causar problema, mas vamos simplificar por agora.
@@ -133,16 +158,28 @@ export class UsuariosService {
         ...(perfilGlobal && { perfilGlobal }),
         ...(telefone !== undefined && { telefone }),
       },
-      select: { id: true, nome: true, email: true, perfilGlobal: true, createdAt: true, fotoUrl: true },
+      select: {
+        id: true,
+        nome: true,
+        email: true,
+        perfilGlobal: true,
+        createdAt: true,
+        fotoUrl: true,
+      },
     });
   }
 
-  async setModulos(empresaId: string, usuarioId: string, moduloSlugs: string[]) {
+  async setModulos(
+    empresaId: string,
+    usuarioId: string,
+    moduloSlugs: string[],
+  ) {
     // Confirm user belongs to this tenant
     const usuario = await this.prisma.usuario.findFirst({
       where: { id: usuarioId, empresaId, deletedAt: null },
     });
-    if (!usuario) throw new NotFoundException('Usuário não encontrado nesta empresa.');
+    if (!usuario)
+      throw new NotFoundException('Usuário não encontrado nesta empresa.');
 
     // Get modules contracted by the tenant
     const tenantModulosAtivos = await this.prisma.tenantModulo.findMany({
@@ -155,7 +192,9 @@ export class UsuariosService {
     });
 
     const slugsPermitidos = tenantModulosAtivos.map((tm) => tm.modulo.slug);
-    const slugsInvalidos = moduloSlugs.filter((s) => !slugsPermitidos.includes(s));
+    const slugsInvalidos = moduloSlugs.filter(
+      (s) => !slugsPermitidos.includes(s),
+    );
     if (slugsInvalidos.length > 0) {
       throw new ForbiddenException(
         `Os módulos [${slugsInvalidos.join(', ')}] não estão contratados pelo seu plano.`,
@@ -168,8 +207,10 @@ export class UsuariosService {
       .map((tm) => tm.moduloId);
 
     // Fetch user's current obra roles to strip revoked modules
-    const roles = await this.prisma.userObraRole.findMany({ where: { usuarioId } });
-    const roleUpdates = roles.map(role => {
+    const roles = await this.prisma.userObraRole.findMany({
+      where: { usuarioId },
+    });
+    const roleUpdates = roles.map((role) => {
       const permissoesObj = (role.permissoes as any) || {};
       const newPermissoesObj: Record<string, string> = {};
       for (const key of Object.keys(permissoesObj)) {
@@ -179,7 +220,7 @@ export class UsuariosService {
       }
       return this.prisma.userObraRole.update({
         where: { id: role.id },
-        data: { permissoes: newPermissoesObj }
+        data: { permissoes: newPermissoesObj },
       });
     });
 
@@ -188,7 +229,7 @@ export class UsuariosService {
       ...modulosIds.map((moduloId) =>
         this.prisma.usuarioModulo.create({ data: { usuarioId, moduloId } }),
       ),
-      ...roleUpdates
+      ...roleUpdates,
     ]);
 
     return { usuarioId, modulosAtivos: moduloSlugs };

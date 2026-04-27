@@ -1,4 +1,9 @@
-import { Module, NestModule, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
+import {
+  Module,
+  NestModule,
+  MiddlewareConsumer,
+  RequestMethod,
+} from '@nestjs/common';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { APP_GUARD } from '@nestjs/core';
@@ -20,16 +25,22 @@ import { ModulosModule } from './modules/modulos/modulos.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CryptoModule } from './core/services/crypto.module';
+import { CupomModule } from './modules/cupom/cupom.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { FeatureModule } from './modules/feature/feature.module';
+import { ApiVersionMiddleware } from './core/middlewares/api-version.middleware';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
     CryptoModule,
-    ThrottlerModule.forRoot([{
-      ttl: 60000,
-      limit: 100, // max 100 requests per IP per minute
-    }]),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 100, // max 100 requests per IP per minute
+      },
+    ]),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
@@ -47,13 +58,16 @@ import { CryptoModule } from './core/services/crypto.module';
     CobrancaModule,
     EmailModule,
     ModulosModule,
+    CupomModule,
+    AdminModule,
+    FeatureModule,
   ],
   controllers: [AppController],
   providers: [
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
-    }
+    },
   ],
 })
 export class AppModule implements NestModule {
@@ -66,8 +80,13 @@ export class AppModule implements NestModule {
         { path: 'auth/redefinir-senha', method: RequestMethod.POST },
         { path: 'tenants/register', method: RequestMethod.POST },
         { path: 'tenants/reenviar-verificacao', method: RequestMethod.POST },
-        { path: 'cobrancas/webhook/asaas', method: RequestMethod.POST }
+        { path: 'cobrancas/webhook/asaas', method: RequestMethod.POST },
       )
+      .forRoutes('*');
+
+    // API Version middleware — passivo, prepara infraestrutura
+    consumer
+      .apply(ApiVersionMiddleware)
       .forRoutes('*');
   }
 }

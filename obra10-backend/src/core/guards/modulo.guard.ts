@@ -1,6 +1,9 @@
 import {
-  Injectable, CanActivate, ExecutionContext,
-  ForbiddenException, SetMetadata,
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -34,8 +37,15 @@ export class ModuloGuard implements CanActivate {
       select: { suspensa: true },
     });
     if (empresa?.suspensa) {
-      await this.logAcessoNegado(userId, empresaId, moduloSlug, 'CONTA_SUSPENSA');
-      throw new ForbiddenException('Conta suspensa por inadimplência. Regularize seu pagamento em Financeiro.');
+      await this.logAcessoNegado(
+        userId,
+        empresaId,
+        moduloSlug,
+        'CONTA_SUSPENSA',
+      );
+      throw new ForbiddenException(
+        'Conta suspensa por inadimplência. Regularize seu pagamento em Financeiro.',
+      );
     }
 
     // 1. Verifica se o TENANT contratou o módulo e se está ativo e não expirado
@@ -44,17 +54,21 @@ export class ModuloGuard implements CanActivate {
         empresaId,
         modulo: { slug: moduloSlug },
         ativo: true,
-        OR: [
-          { expiresAt: null },
-          { expiresAt: { gt: new Date() } },
-        ],
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
     });
 
     if (!tenantModulo) {
       // Registra tentativa de acesso negado no AuditLog
-      await this.logAcessoNegado(userId, empresaId, moduloSlug, 'TENANT_NAO_CONTRATOU');
-      throw new ForbiddenException(`Seu plano não inclui o módulo "${moduloSlug}". Entre em contato com o administrador.`);
+      await this.logAcessoNegado(
+        userId,
+        empresaId,
+        moduloSlug,
+        'TENANT_NAO_CONTRATOU',
+      );
+      throw new ForbiddenException(
+        `Seu plano não inclui o módulo "${moduloSlug}". Entre em contato com o administrador.`,
+      );
     }
 
     // 2. Verifica se o USUÁRIO tem permissão individual para o módulo
@@ -64,9 +78,12 @@ export class ModuloGuard implements CanActivate {
       select: { perfilGlobal: true },
     });
 
-    if (!usuario) throw new ForbiddenException('Usuário não encontrado ou inativo.');
+    if (!usuario)
+      throw new ForbiddenException('Usuário não encontrado ou inativo.');
 
-    const isPrivilegiado = usuario.perfilGlobal === 'SUPER_ADMIN' || usuario.perfilGlobal === 'GESTOR';
+    const isPrivilegiado =
+      usuario.perfilGlobal === 'SUPER_ADMIN' ||
+      usuario.perfilGlobal === 'GESTOR';
 
     if (!isPrivilegiado) {
       const usuarioModulo = await this.prisma.usuarioModulo.findUnique({
@@ -79,8 +96,15 @@ export class ModuloGuard implements CanActivate {
       });
 
       if (!usuarioModulo) {
-        await this.logAcessoNegado(userId, empresaId, moduloSlug, 'USUARIO_SEM_PERMISSAO');
-        throw new ForbiddenException(`Você não tem acesso ao módulo "${moduloSlug}". Solicite ao seu gestor.`);
+        await this.logAcessoNegado(
+          userId,
+          empresaId,
+          moduloSlug,
+          'USUARIO_SEM_PERMISSAO',
+        );
+        throw new ForbiddenException(
+          `Você não tem acesso ao módulo "${moduloSlug}". Solicite ao seu gestor.`,
+        );
       }
     }
 
@@ -101,7 +125,11 @@ export class ModuloGuard implements CanActivate {
           tabelaAfetada: 'modulos',
           registroId: moduloSlug,
           acao: 'ACESSO_NEGADO',
-          cargaNova: JSON.stringify({ motivo, moduloSlug, timestamp: new Date().toISOString() }),
+          cargaNova: JSON.stringify({
+            motivo,
+            moduloSlug,
+            timestamp: new Date().toISOString(),
+          }),
         },
       });
     } catch {

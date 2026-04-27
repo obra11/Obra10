@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
@@ -26,18 +31,25 @@ export class AuthService {
               where: { ativo: true },
               include: { modulo: true },
             },
+            cupons: {
+              include: { cupom: true },
+            },
           },
         },
       },
     });
 
     if (!user || user.ativo === false || user.deletedAt) {
-      throw new UnauthorizedException('Credenciais inválidas ou usuário inativo.');
+      throw new UnauthorizedException(
+        'Credenciais inválidas ou usuário inativo.',
+      );
     }
 
     // --- Bloqueio de conta por tentativas falhas ---
     if (user.lockedUntil && user.lockedUntil > new Date()) {
-      const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+      const minutesLeft = Math.ceil(
+        (user.lockedUntil.getTime() - Date.now()) / 60000,
+      );
       throw new UnauthorizedException(
         `Conta temporariamente bloqueada. Tente novamente em ${minutesLeft} minuto(s).`,
       );
@@ -49,24 +61,35 @@ export class AuthService {
       const newAttempts = user.loginAttempts + 1;
       const updateData: any = { loginAttempts: newAttempts };
       if (newAttempts >= LOCKOUT_THRESHOLD) {
-        updateData.lockedUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000);
+        updateData.lockedUntil = new Date(
+          Date.now() + LOCKOUT_MINUTES * 60 * 1000,
+        );
         this.logger.warn(
           `[LOCKOUT] Conta bloqueada por ${LOCKOUT_MINUTES}min | email=${email} | tentativas=${newAttempts}`,
         );
       }
-      await this.prisma.usuario.update({ where: { id: user.id }, data: updateData });
+      await this.prisma.usuario.update({
+        where: { id: user.id },
+        data: updateData,
+      });
       throw new UnauthorizedException('Credenciais inválidas.');
     }
 
-    // Login OK — resetar contadores
-    if (user.loginAttempts > 0 || user.lockedUntil) {
-      await this.prisma.usuario.update({
-        where: { id: user.id },
-        data: { loginAttempts: 0, lockedUntil: null },
-      });
-    }
+    // Login OK — resetar contadores e registrar último login
+    await this.prisma.usuario.update({
+      where: { id: user.id },
+      data: { 
+        loginAttempts: 0, 
+        lockedUntil: null,
+        ultimoLogin: new Date()
+      },
+    });
 
-    const obrasPermitidas = await this.buildObrasPermitidas(user.id, user.empresaId, user.perfilGlobal);
+    const obrasPermitidas = await this.buildObrasPermitidas(
+      user.id,
+      user.empresaId,
+      user.perfilGlobal,
+    );
 
     const payload = {
       sub: user.id,
@@ -94,6 +117,7 @@ export class AuthService {
           sigla: tm.modulo.sigla,
           grupo: tm.modulo.grupo,
         })),
+        cupons: user.empresa?.cupons || [],
       },
       obrasPermitidas,
     };
@@ -109,14 +133,23 @@ export class AuthService {
               where: { ativo: true },
               include: { modulo: true },
             },
+            cupons: {
+              where: { ativo: true },
+              include: { cupom: true },
+            },
           },
         },
       },
     });
 
-    if (!user) throw new UnauthorizedException('Usuário não encontrado ou inativo.');
+    if (!user)
+      throw new UnauthorizedException('Usuário não encontrado ou inativo.');
 
-    const obrasPermitidas = await this.buildObrasPermitidas(user.id, user.empresaId, user.perfilGlobal);
+    const obrasPermitidas = await this.buildObrasPermitidas(
+      user.id,
+      user.empresaId,
+      user.perfilGlobal,
+    );
 
     return {
       usuario: {
@@ -135,6 +168,7 @@ export class AuthService {
           sigla: tm.modulo.sigla,
           grupo: tm.modulo.grupo,
         })),
+        cupons: user.empresa?.cupons || [],
       },
       obrasPermitidas,
     };
@@ -142,8 +176,13 @@ export class AuthService {
 
   // ==================== SHARED: OBRAS PERMITIDAS ====================
 
-  private async buildObrasPermitidas(userId: string, empresaId: string, perfilGlobal: string) {
-    const isPrivilegiado = perfilGlobal === 'SUPER_ADMIN' || perfilGlobal === 'GESTOR';
+  private async buildObrasPermitidas(
+    userId: string,
+    empresaId: string,
+    perfilGlobal: string,
+  ) {
+    const isPrivilegiado =
+      perfilGlobal === 'SUPER_ADMIN' || perfilGlobal === 'GESTOR';
     const obrasBrutas = isPrivilegiado
       ? await this.prisma.obra.findMany({
           where: { empresaId, deletedAt: null },
@@ -168,7 +207,9 @@ export class AuthService {
         endereco: obra.endereco,
         status: obra.status,
         imageUrl: obra.imageUrl,
-        minhasPermissoes: isPrivilegiado ? ['SUPER'] : Object.keys(permissoesObj),
+        minhasPermissoes: isPrivilegiado
+          ? ['SUPER']
+          : Object.keys(permissoesObj),
       };
     });
   }
@@ -176,8 +217,14 @@ export class AuthService {
   // ==================== RECUPERAÇÃO DE SENHA ====================
 
   async esqueciSenha(email: string) {
-    const user = await this.prisma.usuario.findFirst({ where: { email, ativo: true } });
-    if (!user) return { success: true, message: 'Se o e-mail existir, um link foi enviado.' };
+    const user = await this.prisma.usuario.findFirst({
+      where: { email, ativo: true },
+    });
+    if (!user)
+      return {
+        success: true,
+        message: 'Se o e-mail existir, um link foi enviado.',
+      };
 
     const token = crypto.randomBytes(32).toString('hex');
     const expires = new Date();
@@ -188,8 +235,13 @@ export class AuthService {
       data: { resetToken: token, resetTokenExp: expires },
     });
 
-    this.logger.warn(`[RESET SENHA] Solicitação de reset emitida para userId=${user.id}`);
-    return { success: true, message: 'Se o e-mail existir, um link de recuperação foi enviado.' };
+    this.logger.warn(
+      `[RESET SENHA] Solicitação de reset emitida para userId=${user.id}`,
+    );
+    return {
+      success: true,
+      message: 'Se o e-mail existir, um link de recuperação foi enviado.',
+    };
   }
 
   async redefinirSenha(token: string, novaSenha: string) {
@@ -215,7 +267,9 @@ export class AuthService {
       },
     });
 
-    this.logger.warn(`[RESET SENHA] Senha redefinida + sessões invalidadas para userId=${user.id}`);
+    this.logger.warn(
+      `[RESET SENHA] Senha redefinida + sessões invalidadas para userId=${user.id}`,
+    );
     return { success: true, message: 'Senha redefinida com segurança!' };
   }
 
@@ -225,10 +279,20 @@ export class AuthService {
     const user = await this.prisma.usuario.findUnique({
       where: { id: userId },
       select: {
-        id: true, nome: true, email: true, telefone: true,
-        perfilGlobal: true, fotoUrl: true, ativo: true,
-        createdAt: true, updatedAt: true, aceitouTermos: true, dataAceite: true,
-        empresa: { select: { id: true, razaoSocial: true, nomeFantasia: true } },
+        id: true,
+        nome: true,
+        email: true,
+        telefone: true,
+        perfilGlobal: true,
+        fotoUrl: true,
+        ativo: true,
+        createdAt: true,
+        updatedAt: true,
+        aceitouTermos: true,
+        dataAceite: true,
+        empresa: {
+          select: { id: true, razaoSocial: true, nomeFantasia: true },
+        },
         userObraRole: {
           select: {
             obra: { select: { id: true, nome: true } },
@@ -242,7 +306,9 @@ export class AuthService {
   }
 
   async anonimizarConta(userId: string) {
-    const user = await this.prisma.usuario.findUnique({ where: { id: userId } });
+    const user = await this.prisma.usuario.findUnique({
+      where: { id: userId },
+    });
     if (!user) throw new BadRequestException('Usuário não encontrado.');
 
     const anonId = crypto.randomUUID().slice(0, 8);

@@ -39,7 +39,10 @@ export class TenantExpiryCron {
             tabelaAfetada: 'tenant_modulos',
             registroId: tm.id,
             acao: 'SOFT_DELETE',
-            cargaAntiga: JSON.stringify({ ativo: true, expiresAt: tm.expiresAt }),
+            cargaAntiga: JSON.stringify({
+              ativo: true,
+              expiresAt: tm.expiresAt,
+            }),
             cargaNova: JSON.stringify({
               ativo: false,
               motivo: 'MODULE_EXPIRED',
@@ -56,6 +59,8 @@ export class TenantExpiryCron {
       );
     }
 
-    this.logger.log(`✅ ${expiredModules.length} expired module(s) deactivated.`);
+    this.logger.log(
+      `✅ ${expiredModules.length} expired module(s) deactivated.`,
+    );
   }
 }

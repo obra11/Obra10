@@ -74,10 +74,7 @@ export class ModulosService {
     const integracoes = await (this.prisma as any).integracaoModulo.findMany({
       where: {
         ativo: true,
-        OR: [
-          { moduloOrigem: moduloSlug },
-          { moduloDestino: moduloSlug },
-        ],
+        OR: [{ moduloOrigem: moduloSlug }, { moduloDestino: moduloSlug }],
       },
     });
 

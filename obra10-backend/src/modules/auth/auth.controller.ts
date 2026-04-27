@@ -1,4 +1,14 @@
-import { Controller, Post, Body, Get, Delete, Req, Res, UseGuards, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Delete,
+  Req,
+  Res,
+  UseGuards,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -15,7 +25,10 @@ export class AuthController {
 
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     // Auto-lookup empresaId if not provided
     let empresaId = dto.empresaId;
     if (!empresaId) {
@@ -27,7 +40,11 @@ export class AuthController {
       empresaId = usuario.empresaId;
     }
 
-    const result = await this.authService.login(dto.email, dto.senha, empresaId);
+    const result = await this.authService.login(
+      dto.email,
+      dto.senha,
+      empresaId,
+    );
 
     res.cookie('obra10_token', result.access_token, {
       httpOnly: true,
@@ -75,10 +92,16 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Delete('minha-conta')
-  async anonimizarConta(@Req() req: any, @Res({ passthrough: true }) res: Response) {
+  async anonimizarConta(
+    @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     await this.authService.anonimizarConta(req.user.sub);
     res.clearCookie('obra10_token');
-    return { success: true, message: 'Conta anonimizada com sucesso. Seus dados pessoais foram removidos.' };
+    return {
+      success: true,
+      message:
+        'Conta anonimizada com sucesso. Seus dados pessoais foram removidos.',
+    };
   }
 }
-

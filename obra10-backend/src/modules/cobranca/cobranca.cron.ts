@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CobrancaService } from './cobranca.service';
 import { AsaasService } from './asaas.service';
 import { EmailService } from '../email/email.service';
+import { CupomService } from '../cupom/cupom.service';
 
 @Injectable()
 export class CobrancaCron {
@@ -14,6 +15,7 @@ export class CobrancaCron {
     private readonly cobrancaService: CobrancaService,
     private readonly asaas: AsaasService,
     private readonly email: EmailService,
+    private readonly cupomService: CupomService,
   ) {}
 
   // Day 1 at 08:00 — generate monthly charges
@@ -37,7 +39,9 @@ export class CobrancaCron {
         const idempotencyKey = `${empresa.id}-${anoMes}`;
 
         // Idempotency: skip if already charged this month
-        const existente = await this.prisma.cobranca.findUnique({ where: { idempotencyKey } });
+        const existente = await this.prisma.cobranca.findUnique({
+          where: { idempotencyKey },
+        });
         if (existente) {
           await this.prisma.auditLog.create({
             data: {
@@ -46,25 +50,62 @@ export class CobrancaCron {
               tabelaAfetada: 'cobrancas',
               registroId: existente.id,
               acao: 'COBRANCA_DUPLICADA_IGNORADA',
-              cargaNova: JSON.stringify({ idempotencyKey, motivo: 'Cobrança já existe para este mês' }),
+              cargaNova: JSON.stringify({
+                idempotencyKey,
+                motivo: 'Cobrança já existe para este mês',
+              }),
             },
           });
-          this.logger.log(`⏭ ${empresa.razaoSocial || empresa.nomeCompleto} — cobrança já existe para ${anoMes}`);
+          this.logger.log(
+            `⏭ ${empresa.razaoSocial || empresa.nomeCompleto} — cobrança já existe para ${anoMes}`,
+          );
           continue;
         }
 
-        // Calculate total (apply mesGratuito for RDO)
-        const valor = empresa.tenantModulos.reduce((sum, tm) => {
-          if (empresa.mesGratuito && tm.modulo.slug === 'RDO') return sum;
+        // Calculate base total from active modules
+        const valorBase = empresa.tenantModulos.reduce((sum, tm) => {
           return sum + Number(tm.modulo.preco);
         }, 0);
 
-        if (valor <= 0) {
-          this.logger.log(`⚪ ${empresa.razaoSocial || empresa.id} — valor zero, cobrança ignorada`);
+        // Apply coupon discount if active
+        const desconto = await this.cupomService.calcularDesconto(
+          empresa.id,
+          valorBase,
+        );
+        const valor = desconto.valorFinal;
+
+        const vencimento = new Date(now.getFullYear(), now.getMonth() + 1, 5);
+
+        // If coupon grants full gratuity, skip Asaas entirely
+        if (desconto.pularAsaas) {
+          // Create a R$0 paid record for bookkeeping
+          await this.prisma.cobranca.create({
+            data: {
+              empresaId: empresa.id,
+              valor: 0,
+              status: 'PAGO',
+              formaPagamento: 'CUPOM',
+              mesReferencia: mesRef,
+              dataVencimento: vencimento,
+              dataPagamento: new Date(),
+              idempotencyKey,
+            },
+          });
+          // Increment month usage and auto-expire if needed
+          await this.cupomService.incrementarMesEExpirar(empresa.id);
+          this.logger.log(
+            `🎟️ ${empresa.razaoSocial || empresa.id} — mês grátis via cupom ${desconto.cupomAplicado}`,
+          );
           continue;
         }
 
-        const vencimento = new Date(now.getFullYear(), now.getMonth() + 1, 5);
+        if (valor <= 0) {
+          this.logger.log(
+            `⚪ ${empresa.razaoSocial || empresa.id} — valor zero, cobrança ignorada`,
+          );
+          continue;
+        }
+
         let idAsaasCliente = empresa.idAsaas;
         if (!idAsaasCliente) {
           idAsaasCliente = await this.asaas.criarClienteAsaas({
@@ -73,7 +114,10 @@ export class CobrancaCron {
             nomeCompleto: empresa.nomeCompleto || undefined,
             email: empresa.email || '',
           });
-          await this.prisma.empresa.update({ where: { id: empresa.id }, data: { idAsaas: idAsaasCliente } });
+          await this.prisma.empresa.update({
+            where: { id: empresa.id },
+            data: { idAsaas: idAsaasCliente },
+          });
         }
 
         if (empresa.cartaoSalvo) {
@@ -97,7 +141,11 @@ export class CobrancaCron {
             },
           });
           if (result.status === 'CONFIRMED' && empresa.email) {
-            await this.email.enviarConfirmacaoPagamento(empresa.email, empresa.razaoSocial || empresa.nomeCompleto || 'Empresa', valor);
+            await this.email.enviarConfirmacaoPagamento(
+              empresa.email,
+              empresa.razaoSocial || empresa.nomeCompleto || 'Empresa',
+              valor,
+            );
           }
         } else {
           // Generate PIX + send email
@@ -122,16 +170,24 @@ export class CobrancaCron {
             },
           });
           if (empresa.email) {
-            await this.email.enviarLinkPix(empresa.email, empresa.razaoSocial || empresa.nomeCompleto || 'Empresa', valor, pix.linkPagamento, pix.qrCodeBase64);
+            await this.email.enviarLinkPix(
+              empresa.email,
+              empresa.razaoSocial || empresa.nomeCompleto || 'Empresa',
+              valor,
+              pix.linkPagamento,
+              pix.qrCodeBase64,
+            );
           }
         }
 
-        // Remove mesGratuito flag after first billing
-        if (empresa.mesGratuito) {
-          await this.prisma.empresa.update({ where: { id: empresa.id }, data: { mesGratuito: false } });
+        // Increment coupon usage for non-free months too (for duracaoMeses tracking)
+        if (desconto.cupomAplicado) {
+          await this.cupomService.incrementarMesEExpirar(empresa.id);
         }
 
-        this.logger.log(`✅ Cobrança gerada: ${empresa.razaoSocial || empresa.id} — R$ ${valor}`);
+        this.logger.log(
+          `✅ Cobrança gerada: ${empresa.razaoSocial || empresa.id} — R$ ${valor}`,
+        );
       } catch (err: any) {
         this.logger.error(`❌ Erro ao cobrar ${empresa.id}: ${err.message}`);
       }
@@ -166,7 +222,9 @@ export class CobrancaCron {
           novoDias,
         );
       }
-      this.logger.warn(`🔴 Empresa ${c.empresaId} suspensa por inadimplência (${novoDias} dias)`);
+      this.logger.warn(
+        `🔴 Empresa ${c.empresaId} suspensa por inadimplência (${novoDias} dias)`,
+      );
     }
   }
 
@@ -179,7 +237,10 @@ export class CobrancaCron {
     for (const ev of failed) {
       try {
         const payload = ev.payload as any;
-        if (payload?.event === 'PAYMENT_RECEIVED' || payload?.event === 'PAYMENT_CONFIRMED') {
+        if (
+          payload?.event === 'PAYMENT_RECEIVED' ||
+          payload?.event === 'PAYMENT_CONFIRMED'
+        ) {
           await this.cobrancaService.confirmarPagamento(payload?.payment?.id);
         }
         await this.prisma.webhookEvent.update({

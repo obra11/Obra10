@@ -38,7 +38,9 @@ export class AlertaCron {
     for (const obra of obrasAtivas) {
       // Idempotência: chave única por obra + tipo + data
       const idempotencyKey = `${obra.id}-AFERICAO-${dataStr}`;
-      const jaExiste = await this.prisma.alertaObra.findUnique({ where: { idempotencyKey } });
+      const jaExiste = await this.prisma.alertaObra.findUnique({
+        where: { idempotencyKey },
+      });
       if (jaExiste) continue;
 
       // Cria alerta (STUB até módulo de Equipamentos existir)
@@ -46,7 +48,8 @@ export class AlertaCron {
         data: {
           obraId: obra.id,
           tipo: 'AFERICAO_VENCENDO',
-          mensagem: 'Verifique equipamentos com aferição vencendo nos próximos 7 dias.',
+          mensagem:
+            'Verifique equipamentos com aferição vencendo nos próximos 7 dias.',
           idempotencyKey,
           lido: false,
           expiresAt: limite,
@@ -63,7 +66,10 @@ export class AlertaCron {
             `Há equipamentos na obra <strong>${obra.nome}</strong> com aferição vencendo em até 7 dias. Acesse o OBRA 10 para verificar.`,
           );
         } catch (e) {
-          console.error(`[AlertaCron] Falha ao enviar e-mail para ${role.usuario.email}:`, e);
+          console.error(
+            `[AlertaCron] Falha ao enviar e-mail para ${role.usuario.email}:`,
+            e,
+          );
         }
       }
     }

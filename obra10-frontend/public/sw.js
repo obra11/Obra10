@@ -1,9 +1,11 @@
-const CACHE_NAME = 'obra10-v1.2';
+const CACHE_NAME = 'obra10-v1.5.2';
 const STATIC_ASSETS = [
   '/',
+  '/favicon-16.png',
+  '/favicon-32.png',
   '/favicon.svg',
-  '/icon-192.svg',
-  '/icon-512.svg',
+  '/icon-192.png',
+  '/icon-512.png',
   '/manifest.json',
 ];
 
@@ -11,16 +13,23 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
-  self.skipWaiting();
+  self.skipWaiting(); // Não esperar tabs fecharem
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    ).then(() => {
+      // Notificar todos os clients que uma nova versão foi ativada
+      self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: 'SW_UPDATED', version: CACHE_NAME });
+        });
+      });
+      return self.clients.claim(); // Tomar controle de todas as tabs
+    })
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {

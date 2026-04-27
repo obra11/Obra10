@@ -1,12 +1,24 @@
 import {
-  Controller, Post, Get, Body, Param, Req, Res, UseGuards, Query,
-  Headers, ForbiddenException, BadRequestException, Logger,
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  Req,
+  Res,
+  UseGuards,
+  Query,
+  Headers,
+  ForbiddenException,
+  BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CobrancaService } from './cobranca.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { Response } from 'express';
+import { ContratarModulosDto } from './dto/cobranca.dto';
 
 // Loaded at runtime — MUST be set in .env. Empty = reject all webhook calls.
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN?.trim() || '';
@@ -19,7 +31,6 @@ export class CobrancaController {
     private readonly cobrancaService: CobrancaService,
     private readonly prisma: PrismaService,
   ) {}
-
 
   // GET /modulos moved to ModulosController (src/modules/modulos/modulos.controller.ts)
   // It now returns the full catalog with grupo, sigla, versao, submodulos, etc.
@@ -34,7 +45,7 @@ export class CobrancaController {
       where: { empresaId, ativo: true },
       include: { modulo: { select: { slug: true, nome: true, preco: true } } },
     });
-    return tenantModulos.map(tm => ({
+    return tenantModulos.map((tm) => ({
       slug: tm.modulo.slug,
       nome: tm.modulo.nome,
       preco: tm.modulo.preco,
@@ -44,10 +55,10 @@ export class CobrancaController {
   // POST /cobrancas/contratar — protected
   @UseGuards(JwtAuthGuard)
   @Post('cobrancas/contratar')
-  async contratar(@Body() body: any, @Req() req: any) {
+  async contratar(@Body() dto: ContratarModulosDto, @Req() req: any) {
     const empresaId = req.user?.empresaId;
     if (!empresaId) throw new ForbiddenException('Tenant não identificado.');
-    return this.cobrancaService.contratarModulos({ ...body, empresaId });
+    return this.cobrancaService.contratarModulos({ ...dto, empresaId });
   }
 
   // GET /cobrancas/minha-empresa — paginated
@@ -80,12 +91,18 @@ export class CobrancaController {
   ) {
     // Guard 1: env not configured → block all
     if (!ASAAS_WEBHOOK_TOKEN) {
-      this.logger.error('ASAAS_WEBHOOK_TOKEN não configurado no .env — webhook bloqueado.');
-      throw new ForbiddenException('Webhook não configurado. Defina ASAAS_WEBHOOK_TOKEN no .env');
+      this.logger.error(
+        'ASAAS_WEBHOOK_TOKEN não configurado no .env — webhook bloqueado.',
+      );
+      throw new ForbiddenException(
+        'Webhook não configurado. Defina ASAAS_WEBHOOK_TOKEN no .env',
+      );
     }
     // Guard 2: token mismatch
     if (!token || token.trim() !== ASAAS_WEBHOOK_TOKEN) {
-      this.logger.warn(`Webhook Asaas rejeitado: token inválido (recebido: ${token?.slice(0, 8)}***)`);
+      this.logger.warn(
+        `Webhook Asaas rejeitado: token inválido (recebido: ${token?.slice(0, 8)}***)`,
+      );
       throw new ForbiddenException('Token de webhook inválido.');
     }
 
@@ -106,9 +123,13 @@ export class CobrancaController {
 
     // Process
     try {
-      if (body.event === 'PAYMENT_RECEIVED' || body.event === 'PAYMENT_CONFIRMED') {
+      if (
+        body.event === 'PAYMENT_RECEIVED' ||
+        body.event === 'PAYMENT_CONFIRMED'
+      ) {
         const idAsaasPayment = body.payment?.id;
-        if (idAsaasPayment) await this.cobrancaService.confirmarPagamento(idAsaasPayment);
+        if (idAsaasPayment)
+          await this.cobrancaService.confirmarPagamento(idAsaasPayment);
       }
 
       if (event) {
