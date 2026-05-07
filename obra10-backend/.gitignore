@@ -12,7 +12,7 @@ dist
 *.tsbuildinfo
 
 # Uploads (user-generated content)
-uploads/
+# uploads/
 
 # Analysis/walkthrough files (may contain credential logs)
 walkthrough.md
