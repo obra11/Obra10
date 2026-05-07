@@ -21,4 +21,25 @@ export class AppController {
       };
     }
   }
+
+  @Get('debug-fs')
+  debugFs() {
+    const fs = require('fs');
+    const path = require('path');
+    const cwd = process.cwd();
+    const uploadsPath = path.join(cwd, 'uploads');
+    let uploadsFiles = [];
+    try {
+      uploadsFiles = fs.readdirSync(uploadsPath);
+    } catch (e) {
+      uploadsFiles = [e.message];
+    }
+    return {
+      cwd,
+      cwdFiles: fs.readdirSync(cwd),
+      uploadsPath,
+      uploadsFiles,
+      dirname: __dirname,
+    };
+  }
 }
