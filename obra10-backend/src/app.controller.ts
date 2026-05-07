@@ -28,7 +28,7 @@ export class AppController {
     const path = require('path');
     const cwd = process.cwd();
     const uploadsPath = path.join(cwd, 'uploads');
-    let uploadsFiles = [];
+    let uploadsFiles: string[] = [];
     try {
       uploadsFiles = fs.readdirSync(uploadsPath);
     } catch (e) {
