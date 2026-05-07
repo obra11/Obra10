@@ -28,7 +28,7 @@ export class AuthService {
         empresa: {
           include: {
             tenantModulos: {
-              where: { ativo: true },
+              where: { ativo: true, modulo: { ativo: true } },
               include: { modulo: true },
             },
             cupons: {
@@ -130,7 +130,7 @@ export class AuthService {
         empresa: {
           include: {
             tenantModulos: {
-              where: { ativo: true },
+              where: { ativo: true, modulo: { ativo: true } },
               include: { modulo: true },
             },
             cupons: {
