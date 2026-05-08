@@ -3,6 +3,7 @@ import { useAuth, type Obra } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Trash2, Edit2, Users, AlertTriangle, DollarSign, ExternalLink } from 'lucide-react';
 import api from '../services/api';
+import { getImageUrl } from '../utils/image';
 
 export const CompanyDashboard: React.FC = () => {
   const { user, empresa, obras, logout, setObraAtiva, updateEmpresaLogo, updateObraImage, updateUserPhoto } = useAuth();
@@ -181,7 +182,7 @@ export const CompanyDashboard: React.FC = () => {
     }
   };
 
-  const baseURL = import.meta.env.VITE_API_URL ?? '';
+  // const baseURL = import.meta.env.VITE_API_URL ?? '';
 
   return (
     <div className="min-h-screen bg-lunardeli-gray">
@@ -191,7 +192,7 @@ export const CompanyDashboard: React.FC = () => {
           <div className="flex items-center space-x-4">
             <div className="relative flex-shrink-0">
               {empresa?.logoUrl ? (
-                <img src={`${baseURL}${empresa.logoUrl}`} alt="Logo Empresa" className="h-12 w-auto max-w-[150px] object-contain" />
+                <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="h-12 w-auto max-w-[150px] object-contain" />
               ) : (
                 <div className="h-12 w-12 bg-gray-100 rounded border-dashed border-2 border-gray-300 flex items-center justify-center text-gray-400">
                   <Building2 size={24} />
@@ -246,7 +247,7 @@ export const CompanyDashboard: React.FC = () => {
                   <Loader2 className="animate-spin text-lunardeli-red" size={16} />
                 ) : user?.fotoUrl ? (
                   <>
-                     <img src={`${baseURL}${user.fotoUrl}`} alt="Meu Perfil" className="w-full h-full object-cover" />
+                     <img src={getImageUrl(user.fotoUrl)} alt="Meu Perfil" className="w-full h-full object-cover" />
                      <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center transition-all">
                        <span className="text-[9px] text-white font-bold uppercase tracking-wider">Foto</span>
                      </div>
@@ -351,7 +352,7 @@ export const CompanyDashboard: React.FC = () => {
                 {/* Obra Cover Image */}
                 <div className="h-48 bg-gray-100 relative group/cover">
                   {obra.imageUrl ? (
-                    <img src={`${baseURL}${obra.imageUrl}`} alt={obra.nome} className="w-full h-full object-cover" />
+                    <img src={getImageUrl(obra.imageUrl)} alt={obra.nome} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
                       <HardHat size={48} className="mb-2 opacity-20" />

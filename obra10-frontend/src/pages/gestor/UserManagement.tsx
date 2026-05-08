@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
+import { getImageUrl } from '../../utils/image';
 import { ModuloToggle } from '../../components/ModuloToggle';
 import {
   Users, Plus, Trash2, Loader2, User, Mail, Lock, X, ArrowLeft
@@ -41,7 +42,7 @@ export const UserManagement: React.FC = () => {
   const [form, setForm] = useState({ nome: '', email: '', senha: '', perfilGlobal: 'USER' });
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
-  const baseURL = import.meta.env.VITE_API_URL ?? '';
+  // const baseURL = import.meta.env.VITE_API_URL ?? '';
 
   useEffect(() => {
     fetchAll();
@@ -252,7 +253,7 @@ export const UserManagement: React.FC = () => {
                         <Loader2 className="animate-spin text-red-600" size={18} />
                       ) : u.fotoUrl ? (
                         <>
-                           <img src={`${baseURL}${u.fotoUrl}`} alt={u.nome} className="w-full h-full object-cover" />
+                           <img src={getImageUrl(u.fotoUrl)} alt={u.nome} className="w-full h-full object-cover" />
                            <div className="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center">
                              <span className="text-[10px] text-white font-bold opacity-100">Foto</span>
                            </div>

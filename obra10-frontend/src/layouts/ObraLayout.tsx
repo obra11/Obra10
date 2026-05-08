@@ -6,6 +6,7 @@ import {
   Beaker, ClipboardCheck, Home, Package, Calendar, Clock, Layers, Files, ShieldCheck, Heart, BadgeDollarSign
 } from 'lucide-react';
 import api from '../services/api';
+import { getImageUrl } from '../utils/image';
 
 const MODULE_ICONS: Record<string, any> = {
   RDO: FileText,
@@ -98,7 +99,7 @@ export const ObraLayout: React.FC = () => {
 
   const menuItems = [...baseItems, ...moduleItems, ...extraItems, ...footerItems].filter(item => item.visible);
 
-  const baseURL = import.meta.env.VITE_API_URL ?? '';
+  // const baseURL = import.meta.env.VITE_API_URL ?? '';
 
   return (
     <div className="flex min-h-screen bg-lunardeli-gray font-sans">
@@ -121,7 +122,7 @@ export const ObraLayout: React.FC = () => {
         {/* Obra Cover Thumbnail (Optional touch of design) */}
         {obraAtiva?.imageUrl && (
             <div className="h-20 w-full relative">
-               <img src={`${baseURL}${obraAtiva.imageUrl}`} className="w-full h-full object-cover opacity-30" alt="Capa" />
+               <img src={getImageUrl(obraAtiva.imageUrl)} className="w-full h-full object-cover opacity-30" alt="Capa" />
                <div className="absolute inset-0 bg-gradient-to-t from-lunardeli-dark to-transparent"></div>
             </div>
         )}
@@ -155,7 +156,7 @@ export const ObraLayout: React.FC = () => {
                   <Loader2 className="animate-spin text-white" size={16} />
                 ) : user?.fotoUrl ? (
                   <>
-                     <img src={`${baseURL}${user.fotoUrl}`} alt="Meu Perfil" className="w-full h-full object-cover" />
+                     <img src={getImageUrl(user.fotoUrl)} alt="Meu Perfil" className="w-full h-full object-cover" />
                      <div className="absolute inset-0 bg-black/60 hidden group-hover:flex items-center justify-center transition-all">
                        <span className="text-[9px] text-white font-bold uppercase tracking-wider">Foto</span>
                      </div>
@@ -208,7 +209,7 @@ export const ObraLayout: React.FC = () => {
                {uploadingUserPhoto ? (
                  <Loader2 className="animate-spin text-lunardeli-red" size={14} />
                ) : user?.fotoUrl ? (
-                 <img src={`${baseURL}${user.fotoUrl}`} alt="Meu Perfil" className="w-full h-full object-cover" />
+                 <img src={getImageUrl(user.fotoUrl)} alt="Meu Perfil" className="w-full h-full object-cover" />
                ) : (
                  <span className="text-xs font-bold text-gray-600">{user?.nome?.charAt(0).toUpperCase()}</span>
                )}
