@@ -21,6 +21,7 @@ export class AnexosService {
   constructor(private readonly prisma: PrismaService) {
     this.s3Client = new S3Client({
       region: process.env.AWS_REGION || 'sa-east-1',
+      endpoint: process.env.AWS_S3_ENDPOINT || undefined,
       credentials: {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID || 'dummy-key',
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || 'dummy-secret',
