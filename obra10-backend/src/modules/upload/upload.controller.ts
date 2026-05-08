@@ -13,9 +13,12 @@ import {
   FileTypeValidator,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { memoryStorage } from 'multer';
 import { extname } from 'path';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { ObraContextGuard } from '../../core/guards/obra-context.guard';
@@ -34,15 +37,46 @@ const ALLOWED_DOC_TYPES =
 @UseGuards(JwtAuthGuard)
 @Controller('upload')
 export class UploadController {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly s3Client: S3Client;
+  private readonly bucketName = process.env.AWS_S3_BUCKET_NAME || 'obra10-mvp';
+
+  constructor(private readonly prisma: PrismaService) {
+    this.s3Client = new S3Client({
+      region: process.env.AWS_REGION || 'sa-east-1',
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID || 'dummy',
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || 'dummy',
+      },
+    });
+  }
+
+  private async processUpload(file: Express.Multer.File, folder: string): Promise<string> {
+    const fileName = safeFilename(file.originalname);
+    
+    // AWS S3 / Cloudflare R2 Upload
+    if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_S3_PUBLIC_URL) {
+      const s3Key = `uploads/${folder}/${fileName}`;
+      await this.s3Client.send(new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: s3Key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      }));
+      const baseUrl = process.env.AWS_S3_PUBLIC_URL.replace(/\/$/, '');
+      return `${baseUrl}/${s3Key}`;
+    }
+
+    // Fallback: Local Disk
+    const dir = path.join(process.cwd(), 'uploads');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, fileName), file.buffer);
+    return `/uploads/${fileName}`;
+  }
 
   @Post('empresa/:id/logo')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads',
-        filename: (_req, file, cb) => cb(null, safeFilename(file.originalname)),
-      }),
+      storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
         if (!ALLOWED_IMAGE_TYPES.test(file.mimetype)) {
           return cb(
@@ -66,14 +100,13 @@ export class UploadController {
     )
     file: Express.Multer.File,
   ) {
-    // Permission check: only users from same empresa can change logo
     if (req.user.empresaId !== id && req.user.perfilGlobal !== 'SUPER_ADMIN') {
       throw new ForbiddenException(
         'Sem permissão para alterar o logo desta empresa.',
       );
     }
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
-    const url = `/uploads/${file.filename}`;
+    const url = await this.processUpload(file, 'logos');
     const empresa = await this.prisma.empresa.update({
       where: { id },
       data: { logoUrl: url },
@@ -84,10 +117,7 @@ export class UploadController {
   @Post('usuario/:id/foto')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads',
-        filename: (_req, file, cb) => cb(null, safeFilename(file.originalname)),
-      }),
+      storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
         if (!ALLOWED_IMAGE_TYPES.test(file.mimetype)) {
           return cb(
@@ -111,7 +141,6 @@ export class UploadController {
     )
     file: Express.Multer.File,
   ) {
-    // Permission check: only the user themselves or a GESTOR from same empresa
     const isOwner = req.user.sub === id;
     const isGestor =
       req.user.perfilGlobal === 'GESTOR' ||
@@ -122,7 +151,7 @@ export class UploadController {
       );
     }
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
-    const url = `/uploads/${file.filename}`;
+    const url = await this.processUpload(file, 'usuarios');
     const usuario = await this.prisma.usuario.update({
       where: { id },
       data: { fotoUrl: url },
@@ -133,10 +162,7 @@ export class UploadController {
   @Post('obra/:id/imagem')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads',
-        filename: (_req, file, cb) => cb(null, safeFilename(file.originalname)),
-      }),
+      storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
         if (!ALLOWED_IMAGE_TYPES.test(file.mimetype)) {
           return cb(
@@ -160,7 +186,6 @@ export class UploadController {
     )
     file: Express.Multer.File,
   ) {
-    // Permission check: obra must belong to user's empresa
     const obra = await this.prisma.obra.findUnique({
       where: { id },
       select: { empresaId: true },
@@ -169,7 +194,7 @@ export class UploadController {
       throw new ForbiddenException('Obra não pertence à sua empresa.');
     }
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
-    const url = `/uploads/${file.filename}`;
+    const url = await this.processUpload(file, 'obras');
     const updated = await this.prisma.obra.update({
       where: { id },
       data: { imageUrl: url },
@@ -181,10 +206,7 @@ export class UploadController {
   @Post('obra/:obraId/rdo/:rdoId/fotos')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads',
-        filename: (_req, file, cb) => cb(null, safeFilename(file.originalname)),
-      }),
+      storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
         if (!ALLOWED_DOC_TYPES.test(file.mimetype)) {
           return cb(
@@ -210,7 +232,7 @@ export class UploadController {
     @Req() req: any,
   ) {
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
-    const url = `/uploads/${file.filename}`;
+    const url = await this.processUpload(file, `rdos/${rdoId}`);
 
     const anexo = await this.prisma.anexo.create({
       data: {
