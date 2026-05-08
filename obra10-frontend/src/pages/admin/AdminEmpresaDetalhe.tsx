@@ -20,6 +20,12 @@ export const AdminEmpresaDetalhe: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadingForm, setLoadingForm] = useState(false);
   
+  // States for Modulos and Cupons
+  const [cuponsDisponiveis, setCuponsDisponiveis] = useState<any[]>([]);
+  const [cupomSelecionado, setCupomSelecionado] = useState('');
+  const [loadingCupom, setLoadingCupom] = useState(false);
+  const [loadingModulo, setLoadingModulo] = useState<string | null>(null);
+  
   // States for Dados Cadastrais Form
   const [formData, setFormData] = useState({
     razaoSocial: '',
@@ -89,6 +95,15 @@ export const AdminEmpresaDetalhe: React.FC = () => {
     }
   };
 
+  const fetchCupons = async () => {
+    try {
+      const res = await api.get('/admin/cupons');
+      setCuponsDisponiveis(res.data.filter((c: any) => c.ativo));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     fetchEmpresa();
   }, [id]);
@@ -96,6 +111,7 @@ export const AdminEmpresaDetalhe: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'faturamento') fetchCobrancas();
     if (activeTab === 'auditoria') fetchAuditLogs();
+    if (activeTab === 'visao_geral') fetchCupons();
   }, [activeTab]);
 
   const handleToggleBloqueio = async () => {
@@ -126,6 +142,38 @@ export const AdminEmpresaDetalhe: React.FC = () => {
       alert(Array.isArray(msg) ? msg.join('\n') : msg);
     } finally {
       setLoadingForm(false);
+    }
+  };
+
+  const handleToggleModulo = async (moduloSlug: string, ativoAtual: boolean) => {
+    setLoadingModulo(moduloSlug);
+    try {
+      if (ativoAtual) {
+        if (!window.confirm('Tem certeza que deseja desativar este módulo para esta empresa?')) return;
+        await api.delete(`/admin/empresas/${id}/modulos/${moduloSlug}`);
+      } else {
+        await api.post(`/admin/empresas/${id}/modulos`, { modulos: [moduloSlug] });
+      }
+      await fetchEmpresa();
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Erro ao alterar módulo');
+    } finally {
+      setLoadingModulo(null);
+    }
+  };
+
+  const handleVincularCupom = async () => {
+    if (!cupomSelecionado) return;
+    setLoadingCupom(true);
+    try {
+      await api.post('/admin/cupons/enviar', { empresaId: id, cupomId: cupomSelecionado });
+      setCupomSelecionado('');
+      await fetchEmpresa();
+      alert('Cupom vinculado com sucesso!');
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Erro ao vincular cupom');
+    } finally {
+      setLoadingCupom(false);
     }
   };
 
@@ -209,9 +257,18 @@ export const AdminEmpresaDetalhe: React.FC = () => {
                       <h4 className="font-semibold text-gray-900">{tm.modulo.nome}</h4>
                       <p className="text-xs text-gray-400">Ativado em {format(new Date(tm.dataContratacao), 'dd/MM/yyyy')}</p>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full font-bold ${tm.ativo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                      {tm.ativo ? 'ATIVO' : 'DESATIVADO'}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs px-2 py-1 rounded-full font-bold ${tm.ativo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {tm.ativo ? 'ATIVO' : 'DESATIVADO'}
+                      </span>
+                      <button 
+                        onClick={() => handleToggleModulo(tm.modulo.slug, tm.ativo)}
+                        disabled={loadingModulo === tm.modulo.slug}
+                        className={`text-xs font-semibold px-2 py-1 rounded border transition-colors ${tm.ativo ? 'text-red-600 border-red-200 hover:bg-red-50' : 'text-green-600 border-green-200 hover:bg-green-50'}`}
+                      >
+                        {loadingModulo === tm.modulo.slug ? <Loader2 size={12} className="animate-spin inline" /> : (tm.ativo ? 'Desativar' : 'Ativar')}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -222,7 +279,7 @@ export const AdminEmpresaDetalhe: React.FC = () => {
                 <h3 className="font-bold text-gray-900 flex items-center gap-2"><AlertTriangle strokeWidth={2.5} size={18} className="text-gray-400"/> Cupons & Vínculos</h3>
               </div>
               <div className="p-5">
-                {empresa.cupons.length === 0 ? <p className="text-gray-500 text-sm">Nenhum cupom resgatado.</p> : null}
+                {empresa.cupons.length === 0 ? <p className="text-gray-500 text-sm mb-3">Nenhum cupom resgatado.</p> : null}
                 {empresa.cupons.map((c: any) => (
                   <div key={c.id} className="p-3 border border-red-100 bg-red-50 rounded-lg mb-2">
                     <div className="flex justify-between">
@@ -232,6 +289,29 @@ export const AdminEmpresaDetalhe: React.FC = () => {
                     <p className="text-xs text-gray-600 mt-1">Meses usados: {c.mesesUsados || 0}</p>
                   </div>
                 ))}
+
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <label className="block text-xs font-semibold text-gray-600 mb-2">Vincular Novo Cupom Manualmente</label>
+                  <div className="flex gap-2">
+                    <select 
+                      value={cupomSelecionado}
+                      onChange={(e) => setCupomSelecionado(e.target.value)}
+                      className="flex-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-red-600 outline-none bg-white"
+                    >
+                      <option value="">Selecione um cupom...</option>
+                      {cuponsDisponiveis.map(c => (
+                        <option key={c.id} value={c.id}>{c.codigo} ({c.tipo})</option>
+                      ))}
+                    </select>
+                    <button 
+                      onClick={handleVincularCupom}
+                      disabled={!cupomSelecionado || loadingCupom}
+                      className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 disabled:opacity-50 flex items-center"
+                    >
+                      {loadingCupom ? <Loader2 size={16} className="animate-spin" /> : 'Vincular'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

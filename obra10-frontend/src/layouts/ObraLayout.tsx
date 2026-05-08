@@ -98,7 +98,7 @@ export const ObraLayout: React.FC = () => {
 
   const menuItems = [...baseItems, ...moduleItems, ...extraItems, ...footerItems].filter(item => item.visible);
 
-  const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const baseURL = import.meta.env.VITE_API_URL ?? '';
 
   return (
     <div className="flex min-h-screen bg-lunardeli-gray font-sans">

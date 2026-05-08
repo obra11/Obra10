@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Criação da instância base do Axios apontando para a variável
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
+  baseURL: import.meta.env.VITE_API_URL ?? '',
   timeout: 10000,
   withCredentials: true, // Obrigatório para enviar HttpOnly Cookies
   xsrfCookieName: 'XSRF-TOKEN', 

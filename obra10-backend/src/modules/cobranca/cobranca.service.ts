@@ -249,6 +249,26 @@ export class CobrancaService {
       this.logger.warn(`Cobrança não encontrada para idAsaas: ${idAsaas}`);
       return;
     }
+    await this.processarPagamentoLocal(cobranca);
+  }
+
+  // Confirmação chamada pelo frontend após sucesso no PayPal SDK
+  async confirmarPagamentoLocal(cobrancaId: string, empresaId: string) {
+    const cobranca = await this.prisma.cobranca.findUnique({
+      where: { id: cobrancaId },
+      include: {
+        empresa: { include: { tenantModulos: { include: { modulo: true } } } },
+      },
+    });
+    if (!cobranca) throw new NotFoundException('Cobrança não encontrada.');
+    if (cobranca.empresaId !== empresaId) throw new ForbiddenException('Acesso negado.');
+    if (cobranca.status === 'PAGO') return { success: true }; // Idempotent
+
+    await this.processarPagamentoLocal(cobranca);
+    return { success: true };
+  }
+
+  private async processarPagamentoLocal(cobranca: any) {
 
     await this.prisma.cobranca.update({
       where: { id: cobranca.id },

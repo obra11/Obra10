@@ -41,7 +41,7 @@ Thumbs.db
 obra10-backend/generated/
 
 # Uploads (user-generated content)
-obra10-backend/uploads/
+# obra10-backend/uploads/
 
 # SQLite databases (if any)
 *.db

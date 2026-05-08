@@ -5,6 +5,7 @@ import { CobrancaCron } from './cobranca.cron';
 import { ExtratoCron } from './extrato.cron';
 import { TokenExpiryCron } from './token-expiry.cron';
 import { AsaasService } from './asaas.service';
+import { PaypalService } from './paypal.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { EmailModule } from '../email/email.module';
 import { CupomModule } from '../cupom/cupom.module';
@@ -14,11 +15,12 @@ import { CupomModule } from '../cupom/cupom.module';
   providers: [
     CobrancaService,
     AsaasService,
+    PaypalService,
     CobrancaCron,
     ExtratoCron,
     TokenExpiryCron,
   ],
   controllers: [CobrancaController],
-  exports: [CobrancaService, AsaasService],
+  exports: [CobrancaService, AsaasService, PaypalService],
 })
 export class CobrancaModule {}

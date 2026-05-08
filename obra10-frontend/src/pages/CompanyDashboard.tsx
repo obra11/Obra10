@@ -181,7 +181,7 @@ export const CompanyDashboard: React.FC = () => {
     }
   };
 
-  const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const baseURL = import.meta.env.VITE_API_URL ?? '';
 
   return (
     <div className="min-h-screen bg-lunardeli-gray">

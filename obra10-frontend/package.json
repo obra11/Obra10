@@ -12,6 +12,7 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@paypal/react-paypal-js": "^9.2.0",
     "@types/recharts": "^1.8.29",
     "axios": "^1.13.6",
     "date-fns": "^4.1.0",

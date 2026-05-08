@@ -11,6 +11,7 @@ import {
   Headers,
   ForbiddenException,
   BadRequestException,
+  NotFoundException,
   Logger,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
@@ -19,6 +20,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { Response } from 'express';
 import { ContratarModulosDto } from './dto/cobranca.dto';
+import { PaypalService } from './paypal.service';
 
 // Loaded at runtime — MUST be set in .env. Empty = reject all webhook calls.
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN?.trim() || '';
@@ -30,6 +32,7 @@ export class CobrancaController {
   constructor(
     private readonly cobrancaService: CobrancaService,
     private readonly prisma: PrismaService,
+    private readonly paypal: PaypalService,
   ) {}
 
   // GET /modulos moved to ModulosController (src/modules/modulos/modulos.controller.ts)
@@ -81,6 +84,40 @@ export class CobrancaController {
   @Get('cobrancas/:id/status')
   async status(@Param('id') id: string, @Req() req: any) {
     return this.cobrancaService.getStatus(id, req.user?.empresaId);
+  }
+
+  // POST /cobrancas/:id/paypal/create-order
+  @UseGuards(JwtAuthGuard)
+  @Post('cobrancas/:id/paypal/create-order')
+  async createPaypalOrder(@Param('id') cobrancaId: string, @Req() req: any) {
+    const status = await this.cobrancaService.getStatus(cobrancaId, req.user.empresaId);
+    if (status.pago) throw new BadRequestException('Esta cobrança já está paga.');
+    
+    // Buscar o valor da cobrança
+    const cobranca = await this.prisma.cobranca.findUnique({ where: { id: cobrancaId } });
+    if (!cobranca) throw new NotFoundException('Cobrança não encontrada');
+
+    return this.paypal.createOrder(Number(cobranca.valor), cobranca.id);
+  }
+
+  // POST /cobrancas/:id/paypal/capture-order
+  @UseGuards(JwtAuthGuard)
+  @Post('cobrancas/:id/paypal/capture-order')
+  async capturePaypalOrder(
+    @Param('id') cobrancaId: string,
+    @Body('orderId') orderId: string,
+    @Req() req: any
+  ) {
+    const status = await this.cobrancaService.getStatus(cobrancaId, req.user.empresaId);
+    if (status.pago) return { success: true };
+
+    const captureResult = await this.paypal.captureOrder(orderId);
+    if (captureResult.status === 'COMPLETED') {
+      await this.cobrancaService.confirmarPagamentoLocal(cobrancaId, req.user.empresaId);
+      return { success: true };
+    }
+    
+    throw new BadRequestException('Pagamento PayPal não foi concluído.');
   }
 
   // POST /cobrancas/webhook/asaas — PUBLIC, validates header
