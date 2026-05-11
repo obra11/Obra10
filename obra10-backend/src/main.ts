@@ -22,7 +22,14 @@ async function bootstrap() {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'"],
           styleSrc: ["'self'", "'unsafe-inline'"],
-          imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+          imgSrc: [
+            "'self'",
+            'data:',
+            'blob:',
+            process.env.AWS_S3_PUBLIC_URL
+              ? `https://${new URL(process.env.AWS_S3_PUBLIC_URL).hostname}`
+              : 'https:',
+          ],
           connectSrc: ["'self'"],
           fontSrc: ["'self'"],
           objectSrc: ["'none'"],
