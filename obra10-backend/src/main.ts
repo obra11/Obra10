@@ -7,6 +7,21 @@ import cookieParser from 'cookie-parser';
 import { AuditInterceptor } from './core/interceptors/audit.interceptor';
 import { SanitizePipe } from './core/pipes/sanitize.pipe';
 
+
+function getImgSrcPolicy(): string[] {
+  const base = ["'self'", 'data:', 'blob:'];
+  try {
+    const raw = process.env.AWS_S3_PUBLIC_URL;
+    if (raw) {
+      const { hostname } = new URL(raw);
+      if (hostname) return [...base, `https://${hostname}`];
+    }
+  } catch {
+    // env var malformada — continua só com 'self'
+  }
+  return base;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
@@ -22,14 +37,7 @@ async function bootstrap() {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'"],
           styleSrc: ["'self'", "'unsafe-inline'"],
-          imgSrc: [
-            "'self'",
-            'data:',
-            'blob:',
-            process.env.AWS_S3_PUBLIC_URL
-              ? `https://${new URL(process.env.AWS_S3_PUBLIC_URL).hostname}`
-              : 'https:',
-          ],
+          imgSrc: getImgSrcPolicy(),
           connectSrc: ["'self'"],
           fontSrc: ["'self'"],
           objectSrc: ["'none'"],
