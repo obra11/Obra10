@@ -44,7 +44,6 @@ import { ApiVersionMiddleware } from './core/middlewares/api-version.middleware'
     ServeStaticModule.forRoot(
       {
         rootPath: join(process.cwd(), 'client'),
-        exclude: ['/auth/{*path}', '/health', '/obras/{*path}', '/rdos/{*path}', '/anexos/{*path}', '/uploads/{*path}', '/ai/{*path}', '/tenants/{*path}', '/usuarios/{*path}', '/cobrancas/{*path}', '/admin/{*path}', '/features/{*path}', '/email/{*path}', '/modulos/{*path}', '/cupons/{*path}'],
       },
       {
         rootPath: join(process.cwd(), 'uploads'),
