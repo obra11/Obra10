@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/auth.service';
 import { HardHat, Lock, Mail, Loader2, Eye, EyeOff } from 'lucide-react';
@@ -153,7 +153,7 @@ export const Login: React.FC = () => {
             </button>
           </form>
           <div className="mt-6 text-center text-sm text-gray-600">
-            Ainda não tem conta? <a href="/register" className="font-semibold text-lunardeli-red hover:underline">Criar conta</a>
+            Ainda não tem conta? <Link to="/register" className="font-semibold text-lunardeli-red hover:underline">Criar conta</Link>
           </div>
 
           <div className="mt-8 text-center text-sm text-gray-500">
