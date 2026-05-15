@@ -355,6 +355,41 @@ export const DiarioDeObra: React.FC = () => {
     atividadesPendentes,
     observacoes,
   });
+  const uploadMidas = async (rdoIdAlvo: string) => {
+    if (!obraId) return;
+    const todosArquivos = [
+      ...fotos.map(f => f.file),
+      ...videos.map(v => v.file),
+      ...anexos.map(a => a.file)
+    ];
+
+    if (todosArquivos.length === 0) return;
+
+    let successCount = 0;
+    for (let i = 0; i < todosArquivos.length; i++) {
+      const file = todosArquivos[i];
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        setToast(`⏳ Fazendo upload das mídias... (${i + 1}/${todosArquivos.length})`);
+        await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        successCount++;
+      } catch (err: any) {
+        console.error('Erro ao subir arquivo:', file.name, err);
+      }
+    }
+    
+    // Clear files from memory after upload
+    setFotos([]);
+    setVideos([]);
+    setAnexos([]);
+    
+    if (successCount > 0) {
+      setTimeout(() => showToast(`✅ ${successCount} arquivo(s) anexado(s) com sucesso!`), 500);
+    }
+  };
 
   // ── Salvar Rascunho ──
   const handleSalvarRascunho = async () => {
@@ -368,11 +403,13 @@ export const DiarioDeObra: React.FC = () => {
         // Criar RDO novo
         const res = await api.post('/rdos', { dataReferencia: data, dadosExtras }, { headers });
         setRdoIdAtual(res.data.id);
+        await uploadMidas(res.data.id);
         navigate(`/obras/${obraId}/rdos/${res.data.id}`, { replace: true });
         showToast('💾 Rascunho criado!');
       } else {
         // Atualizar rascunho existente
         await api.put(`/rdos/${rdoIdAtual}/rascunho`, { dadosExtras }, { headers });
+        await uploadMidas(rdoIdAtual!);
         showToast('💾 Rascunho salvo!');
       }
     } catch (err: any) {
@@ -398,6 +435,8 @@ export const DiarioDeObra: React.FC = () => {
       } else {
         await api.put(`/rdos/${idParaSubmeter}/rascunho`, { dadosExtras: buildDadosExtras() }, { headers });
       }
+
+      await uploadMidas(idParaSubmeter!);
 
       // Submeter com aprovador selecionado
       await api.put(`/rdos/${idParaSubmeter}/submeter`,

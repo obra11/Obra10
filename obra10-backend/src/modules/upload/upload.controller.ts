@@ -29,10 +29,10 @@ function safeFilename(originalname: string): string {
 }
 
 /** Allowed image MIME types */
-const ALLOWED_IMAGE_TYPES = /^image\/(jpeg|jpg|png|gif|webp|svg\+xml)$/;
+const ALLOWED_IMAGE_TYPES = /^image\/(jpeg|jpg|png|gif|webp|svg\+xml|heic|heif)$/i;
 /** Allowed document MIME types (for RDO attachments) */
 const ALLOWED_DOC_TYPES =
-  /^(image\/(jpeg|jpg|png|gif|webp)|application\/(pdf|vnd\.openxmlformats-officedocument\.(spreadsheetml\.sheet|wordprocessingml\.document))|video\/mp4)$/;
+  /^(image\/(jpeg|jpg|png|gif|webp|heic|heif)|application\/(pdf|vnd\.openxmlformats-officedocument\.(spreadsheetml\.sheet|wordprocessingml\.document))|video\/mp4)$/i;
 
 @UseGuards(JwtAuthGuard)
 @Controller('upload')
@@ -56,22 +56,32 @@ export class UploadController {
     
     // AWS S3 / Cloudflare R2 Upload
     if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_S3_PUBLIC_URL) {
-      const s3Key = `uploads/${folder}/${fileName}`;
-      await this.s3Client.send(new PutObjectCommand({
-        Bucket: this.bucketName,
-        Key: s3Key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
-      }));
-      const baseUrl = process.env.AWS_S3_PUBLIC_URL.replace(/\/$/, '');
-      return `${baseUrl}/${s3Key}`;
+      try {
+        const s3Key = `uploads/${folder}/${fileName}`;
+        await this.s3Client.send(new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: s3Key,
+          Body: file.buffer,
+          ContentType: file.mimetype,
+        }));
+        const baseUrl = process.env.AWS_S3_PUBLIC_URL.replace(/\/$/, '');
+        return `${baseUrl}/${s3Key}`;
+      } catch (err: any) {
+        console.error('S3 Upload Error:', err);
+        throw new BadRequestException(`Erro no provedor de nuvem (R2/S3): ${err.message}. Verifique as variáveis de ambiente AWS_S3_ENDPOINT, AWS_ACCESS_KEY_ID, etc.`);
+      }
     }
 
     // Fallback: Local Disk
-    const dir = path.join(process.cwd(), 'uploads');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, fileName), file.buffer);
-    return `/uploads/${fileName}`;
+    try {
+      const dir = path.join(process.cwd(), 'uploads');
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, fileName), file.buffer);
+      return `/uploads/${fileName}`;
+    } catch (err: any) {
+      console.error('Local Upload Error:', err);
+      throw new BadRequestException(`Erro ao salvar arquivo no disco local: ${err.message}`);
+    }
   }
 
   @Post('empresa/:id/logo')
@@ -96,7 +106,7 @@ export class UploadController {
     @Req() req: any,
     @UploadedFile(
       new ParseFilePipe({
-        validators: [new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 })],
+        validators: [new MaxFileSizeValidator({ maxSize: 15 * 1024 * 1024 })],
       }),
     )
     file: Express.Multer.File,
@@ -137,7 +147,7 @@ export class UploadController {
     @Req() req: any,
     @UploadedFile(
       new ParseFilePipe({
-        validators: [new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 })],
+        validators: [new MaxFileSizeValidator({ maxSize: 15 * 1024 * 1024 })],
       }),
     )
     file: Express.Multer.File,
@@ -182,7 +192,7 @@ export class UploadController {
     @Req() req: any,
     @UploadedFile(
       new ParseFilePipe({
-        validators: [new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 })],
+        validators: [new MaxFileSizeValidator({ maxSize: 15 * 1024 * 1024 })],
       }),
     )
     file: Express.Multer.File,
@@ -226,7 +236,7 @@ export class UploadController {
     @Param('rdoId') rdoId: string,
     @UploadedFile(
       new ParseFilePipe({
-        validators: [new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 })],
+        validators: [new MaxFileSizeValidator({ maxSize: 50 * 1024 * 1024 })],
       }),
     )
     file: Express.Multer.File,
