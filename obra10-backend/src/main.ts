@@ -9,15 +9,24 @@ import { SanitizePipe } from './core/pipes/sanitize.pipe';
 
 
 function getImgSrcPolicy(): string[] {
-  const base = ["'self'", 'data:', 'blob:'];
+  // Domínio público fixo do R2 — fallback obrigatório para garantir que
+  // imagens do bucket SEMPRE carreguem, mesmo se a env var estiver ausente.
+  const R2_PUBLIC_DOMAIN = 'https://pub-afddad92a0b8456aa8e8ef580b4de8b5.r2.dev';
+  const base = ["'self'", 'data:', 'blob:', R2_PUBLIC_DOMAIN];
   try {
     const raw = process.env.AWS_S3_PUBLIC_URL;
     if (raw) {
       const { hostname } = new URL(raw);
-      if (hostname) return [...base, `https://${hostname}`];
+      const envDomain = `https://${hostname}`;
+      // Se a env var apontar para um domínio diferente do hardcoded, inclui ambos
+      if (envDomain !== R2_PUBLIC_DOMAIN) {
+        return [...base, envDomain];
+      }
+    } else {
+      console.warn('[CSP] AWS_S3_PUBLIC_URL não definida — usando fallback R2 hardcoded.');
     }
   } catch {
-    // env var malformada — continua só com 'self'
+    console.warn('[CSP] AWS_S3_PUBLIC_URL malformada — usando fallback R2 hardcoded.');
   }
   return base;
 }
