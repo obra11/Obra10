@@ -3,7 +3,8 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   LogOut, Settings, LayoutDashboard, Users, FileText, ArrowLeft, BarChart2, Loader2,
-  Beaker, ClipboardCheck, Home, Package, Calendar, Clock, Layers, Files, ShieldCheck, Heart, BadgeDollarSign
+  Beaker, ClipboardCheck, Home, Package, Calendar, Clock, Layers, Files, ShieldCheck, Heart, BadgeDollarSign,
+  Building2
 } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
@@ -24,10 +25,13 @@ const MODULE_ICONS: Record<string, any> = {
 };
 
 export const ObraLayout: React.FC = () => {
-  const { logout, obraAtiva, empresa, setObraAtiva, user, updateUserPhoto } = useAuth();
+  const { logout, obraAtiva, empresa, setObraAtiva, user, updateUserPhoto, updateEmpresaLogo } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [uploadingUserPhoto, setUploadingUserPhoto] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  const canEditLogo = user?.perfilGlobal === 'GESTOR' || (obraAtiva?.minhasPermissoes && (obraAtiva.minhasPermissoes.includes('SUPER') || obraAtiva.minhasPermissoes.includes('CONFIGURACOES')));
 
   // Hide bottom nav when the user is inside DiarioDeObra (it has its own floating action bar)
   const isInsideDiario = /\/rdos\/(novo|[a-f0-9-]+)$/i.test(location.pathname);
@@ -35,6 +39,27 @@ export const ObraLayout: React.FC = () => {
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !empresa) return;
+
+    setUploadingLogo(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await api.post(`/upload/empresa/${empresa.id}/logo`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      updateEmpresaLogo(response.data.url);
+    } catch (err: any) {
+      alert('Erro ao atualizar logotipo da empresa: ' + (err?.response?.data?.message || err.message));
+    } finally {
+      setUploadingLogo(false);
+      e.target.value = '';
+    }
   };
 
   const handleBackToCompany = () => {
@@ -108,11 +133,44 @@ export const ObraLayout: React.FC = () => {
         
         {/* Brand Area */}
         <div className="h-20 flex flex-col justify-center px-4 bg-black/30 border-b border-white/10 relative overflow-hidden">
-             <div className="flex items-center justify-between mb-1 z-10">
-                <button title="Voltar" onClick={handleBackToCompany} className="p-1.5 -ml-1.5 hover:bg-white/10 rounded-md text-gray-400 hover:text-white transition-colors">
+             <div className="flex items-center justify-between mb-1 z-10 gap-2">
+                <button title="Voltar" onClick={handleBackToCompany} className="p-1.5 -ml-1.5 hover:bg-white/10 rounded-md text-gray-400 hover:text-white transition-colors shrink-0">
                   <ArrowLeft size={18} />
                 </button>
-                <div className="flex-1 min-w-0 pl-2">
+                
+                {/* Logotipo da Empresa com upload direto */}
+                <div className="relative shrink-0">
+                  {canEditLogo ? (
+                    <label title="Alterar Logotipo da Empresa" className="relative cursor-pointer group flex items-center justify-center w-10 h-10 rounded overflow-hidden transition-all hover:ring-2 hover:ring-lunardeli-red bg-white/10 border border-white/10 shrink-0">
+                      {uploadingLogo ? (
+                        <Loader2 className="animate-spin text-white" size={16} />
+                      ) : empresa?.logoUrl ? (
+                        <>
+                          <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="w-full h-full object-contain" />
+                          <div className="absolute inset-0 bg-black/60 hidden group-hover:flex items-center justify-center transition-all">
+                            <span className="text-[8px] text-white font-bold uppercase tracking-wider">Logo</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <Building2 className="text-gray-400" size={18} />
+                          <div className="absolute inset-0 bg-black/60 hidden group-hover:flex items-center justify-center transition-all">
+                            <span className="text-[8px] text-white font-bold uppercase tracking-wider">Logo</span>
+                          </div>
+                        </>
+                      )}
+                      <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} />
+                    </label>
+                  ) : empresa?.logoUrl ? (
+                    <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="w-10 h-10 rounded object-contain bg-white/10 border border-white/10 shrink-0" />
+                  ) : (
+                    <div className="w-10 h-10 rounded bg-white/5 border border-dashed border-white/20 flex items-center justify-center text-gray-400 shrink-0">
+                      <Building2 size={18} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
                    <span className="text-[11px] font-bold tracking-widest uppercase block text-lunardeli-red truncate">{empresa?.razaoSocial}</span>
                    <span className="text-sm font-semibold text-white block truncate">{obraAtiva?.nome || 'Obra Indefinida'}</span>
                 </div>
@@ -194,10 +252,43 @@ export const ObraLayout: React.FC = () => {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header Mobile */}
         <header className="h-14 bg-white shadow-sm flex items-center justify-between px-4 md:hidden shrink-0 z-10 relative">
-          <div className="flex items-center text-lunardeli-dark min-w-0">
-            <button onClick={handleBackToCompany} className="p-2.5 -ml-2 mr-1 text-gray-500 hover:text-lunardeli-red active:bg-gray-100 rounded-lg">
+          <div className="flex items-center text-lunardeli-dark min-w-0 gap-2">
+            <button onClick={handleBackToCompany} className="p-2.5 -ml-2 mr-1 text-gray-500 hover:text-lunardeli-red active:bg-gray-100 rounded-lg shrink-0">
                <ArrowLeft size={20} />
             </button>
+            
+            {/* Logotipo da Empresa com upload direto no Mobile */}
+            <div className="relative shrink-0">
+              {canEditLogo ? (
+                <label title="Alterar Logotipo da Empresa" className="relative cursor-pointer group flex items-center justify-center w-9 h-9 rounded overflow-hidden transition-all hover:ring-2 hover:ring-lunardeli-red bg-gray-50 border border-gray-200 shrink-0">
+                  {uploadingLogo ? (
+                    <Loader2 className="animate-spin text-lunardeli-red" size={14} />
+                  ) : empresa?.logoUrl ? (
+                    <>
+                      <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="w-full h-full object-contain" />
+                      <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center transition-all">
+                        <span className="text-[7px] text-white font-bold uppercase tracking-wider">Logo</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Building2 className="text-gray-400" size={16} />
+                      <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center transition-all">
+                        <span className="text-[7px] text-white font-bold uppercase tracking-wider">Logo</span>
+                      </div>
+                    </>
+                  )}
+                  <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} />
+                </label>
+              ) : empresa?.logoUrl ? (
+                <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="w-9 h-9 rounded object-contain bg-gray-50 border border-gray-200 shrink-0" />
+              ) : (
+                <div className="w-9 h-9 rounded bg-gray-50 border border-dashed border-gray-300 flex items-center justify-center text-gray-400 shrink-0">
+                  <Building2 size={16} />
+                </div>
+              )}
+            </div>
+
              <div className="min-w-0">
                 <span className="text-[10px] font-bold uppercase text-lunardeli-red block truncate leading-tight">{empresa?.razaoSocial}</span>
                 <span className="font-bold text-sm truncate block leading-tight">{obraAtiva?.nome || 'Obra Indefinida'}</span>

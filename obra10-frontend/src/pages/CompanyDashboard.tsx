@@ -156,6 +156,7 @@ export const CompanyDashboard: React.FC = () => {
       alert('Erro ao fazer upload da logo: ' + (err?.response?.data?.message || err.message));
     } finally {
       setUploadingLogo(false);
+      e.target.value = '';
       if(fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -191,7 +192,32 @@ export const CompanyDashboard: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 md:h-20 flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <div className="relative flex-shrink-0">
-              {empresa?.logoUrl ? (
+              {user?.perfilGlobal === 'GESTOR' ? (
+                <label title="Alterar Logotipo da Empresa" className="relative cursor-pointer group flex items-center justify-center h-12 w-12 sm:w-auto sm:max-w-[150px] rounded overflow-hidden transition-all hover:ring-2 hover:ring-lunardeli-red shrink-0">
+                  {uploadingLogo ? (
+                    <div className="h-12 w-12 bg-gray-100 rounded flex items-center justify-center">
+                      <Loader2 className="animate-spin text-lunardeli-red" size={24} />
+                    </div>
+                  ) : empresa?.logoUrl ? (
+                    <>
+                      <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="h-12 w-auto max-w-[150px] object-contain" />
+                      <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center transition-all">
+                        <span className="text-[9px] text-white font-bold uppercase tracking-wider">Logo</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="h-12 w-12 bg-gray-100 rounded border-dashed border-2 border-gray-300 flex items-center justify-center text-gray-400 group-hover:bg-gray-200">
+                        <Building2 size={24} />
+                      </div>
+                      <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center transition-all">
+                        <span className="text-[9px] text-white font-bold uppercase tracking-wider">Logo</span>
+                      </div>
+                    </>
+                  )}
+                  <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} />
+                </label>
+              ) : empresa?.logoUrl ? (
                 <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="h-12 w-auto max-w-[150px] object-contain" />
               ) : (
                 <div className="h-12 w-12 bg-gray-100 rounded border-dashed border-2 border-gray-300 flex items-center justify-center text-gray-400">
