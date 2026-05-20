@@ -19,8 +19,12 @@ function getCookie(name: string) {
 
 // Interceptor para adicionar o header de obra e XSRF
 api.interceptors.request.use((config) => {
-  // Força o envio do token XSRF mesmo em cross-origin
-  const xsrfToken = getCookie('XSRF-TOKEN');
+  // Força o envio do token XSRF mesmo em cross-origin.
+  // Fallback: se o cookie não estiver legível (comum em ambientes cross-site/subdomínios diferentes),
+  // tentamos obter o token que foi exposto pelo backend e salvo no localStorage.
+  // DÍVIDA TÉCNICA/SEGURANÇA: O uso do localStorage para o CSRF token introduz vulnerabilidade a XSS,
+  // mas é aceitável temporariamente para o ambiente beta. Deve ser removido após migração para domínios same-site.
+  const xsrfToken = getCookie('XSRF-TOKEN') || localStorage.getItem('obra10_csrf_token');
   if (xsrfToken) {
     config.headers['x-xsrf-token'] = xsrfToken;
   }
@@ -42,8 +46,19 @@ api.interceptors.request.use((config) => {
 
 // Interceptor de Resposta Global para CSRF/Expirados
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Se o backend retornou o token CSRF exposto na resposta, salva no localStorage como fallback.
+    const csrfHeader = response.headers['x-xsrf-token'];
+    if (csrfHeader) {
+      localStorage.setItem('obra10_csrf_token', csrfHeader);
+    }
+    return response;
+  },
   (error) => {
+    if (error.response?.headers && error.response.headers['x-xsrf-token']) {
+      localStorage.setItem('obra10_csrf_token', error.response.headers['x-xsrf-token']);
+    }
+
     if (error.response && error.response.status === 401) {
       const publicPaths = ['/login', '/register', '/precos', '/verificar-email'];
       if (!publicPaths.includes(window.location.pathname)) {

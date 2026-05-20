@@ -85,6 +85,7 @@ async function bootstrap() {
     origin: allowedOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
+    exposedHeaders: ['x-xsrf-token'],
   });
 
   // 4. Global Pipes: Sanitização XSS + Validação de DTOs

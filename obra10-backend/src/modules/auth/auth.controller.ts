@@ -49,7 +49,7 @@ export class AuthController {
     res.cookie('obra10_token', result.access_token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
       maxAge: 3600000, // 1h
     });
 
@@ -59,7 +59,12 @@ export class AuthController {
 
   @Post('logout')
   async logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie('obra10_token');
+    res.clearCookie('obra10_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+      path: '/',
+    });
     return { success: true };
   }
 
@@ -97,7 +102,12 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     await this.authService.anonimizarConta(req.user.sub);
-    res.clearCookie('obra10_token');
+    res.clearCookie('obra10_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+      path: '/',
+    });
     return {
       success: true,
       message:

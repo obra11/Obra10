@@ -18,15 +18,28 @@ export class CryptoService {
 
   constructor() {
     const envKey = process.env.ENCRYPTION_KEY;
-    if (envKey && envKey.length === 64) {
-      this.key = Buffer.from(envKey, 'hex');
+    let parsedKey: Buffer | null = null;
+
+    if (envKey) {
+      // O formato esperado para ENCRYPTION_KEY é exatamente 64 caracteres hexadecimais (chave AES-256 de 32 bytes).
+      // Caso a chave configurada não atenda a este formato (ex: chave menor ou string simples de texto),
+      // fazemos um fallback seguro gerando um hash SHA-256 da string fornecida para derivar uma chave de 32 bytes.
+      if (envKey.length === 64 && /^[0-9a-fA-F]{64}$/.test(envKey)) {
+        parsedKey = Buffer.from(envKey, 'hex');
+      } else {
+        this.logger.warn(
+          'ENCRYPTION_KEY não é uma chave hexadecimal de 64 caracteres válida. ' +
+            'Efetuando fallback seguro via derivador de chave SHA-256.',
+        );
+        parsedKey = crypto.createHash('sha256').update(envKey).digest();
+      }
     } else {
-      this.key = null;
       this.logger.warn(
-        'ENCRYPTION_KEY não configurada ou inválida (precisa de 64 caracteres hex). ' +
-          'Campos sensíveis serão armazenados SEM criptografia.',
+        'ENCRYPTION_KEY não configurada. Campos sensíveis serão armazenados SEM criptografia.',
       );
     }
+
+    this.key = parsedKey;
   }
 
   /** Returns true if encryption is configured and operational. */
