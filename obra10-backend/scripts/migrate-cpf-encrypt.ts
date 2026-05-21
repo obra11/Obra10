@@ -14,6 +14,8 @@ dotenv.config();
 
 import { PrismaClient } from '@prisma/client';
 import * as crypto from 'crypto';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
 
 // ── Config ────────────────────────────────────────────────────────────
 const ALGORITHM = 'aes-256-gcm';
@@ -73,7 +75,10 @@ function isPlaintext(value: string): boolean {
 // ── Main ──────────────────────────────────────────────────────────────
 
 async function main() {
-  const prisma = new PrismaClient();
+  const connectionString = process.env.DATABASE_URL;
+  const pool = new Pool({ connectionString });
+  const adapter = new PrismaPg(pool as any);
+  const prisma = new PrismaClient({ adapter });
   console.log(`\n🔐  Migração de CPF/CNPJ — Criptografia AES-256-GCM`);
   console.log(`    Modo: ${DRY_RUN ? '🟡 DRY-RUN (nenhuma alteração será feita)' : '🟢 PRODUÇÃO'}\n`);
 

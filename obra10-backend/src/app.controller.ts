@@ -13,11 +13,19 @@ export class AppController {
         status: 'ok',
         database: 'connected',
         message: 'Obra 10 - MVP API Operacional',
+        env: {
+          nodeEnv: process.env.NODE_ENV,
+          hasEncryptionKey: process.env.ENCRYPTION_KEY ? `defined_len_${process.env.ENCRYPTION_KEY.length}` : 'undefined',
+        }
       };
     } catch (error) {
       return {
         status: 'error',
         database: 'disconnected',
+        env: {
+          nodeEnv: process.env.NODE_ENV,
+          hasEncryptionKey: process.env.ENCRYPTION_KEY ? `defined_len_${process.env.ENCRYPTION_KEY.length}` : 'undefined',
+        }
       };
     }
   }
