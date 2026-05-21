@@ -1,0 +1,10 @@
+.git
+node_modules
+obra10-frontend/node_modules
+obra10-frontend/dist
+obra10-backend/node_modules
+obra10-backend/dist
+docs
+*.log
+*.tmp
+*.bak
