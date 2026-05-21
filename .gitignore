@@ -59,8 +59,8 @@ test-login.js
 secops_tester.js
 
 # Root-level package (only localtunnel dep, not project code)
-/package.json
-/package-lock.json
+# /package.json
+# /package-lock.json
 
 # AI agent generated intermediary files
 *.metadata.json

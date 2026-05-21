@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["cd obra10-backend && npm install"]
+
+[phases.build]
+cmds = ["cd obra10-backend && npx prisma generate && npx nest build"]
+
+[start]
+cmd = "cd obra10-backend && npx prisma migrate deploy && node dist/src/main"

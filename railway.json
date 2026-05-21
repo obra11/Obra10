@@ -2,11 +2,11 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "nixpacksConfigPath": "obra10-backend/nixpacks.toml",
+    "nixpacksConfigPath": "nixpacks.toml",
     "watchPatterns": ["obra10-backend/**"]
   },
   "deploy": {
-    "startCommand": "npx prisma migrate deploy && npm run start:prod",
+    "startCommand": "cd obra10-backend && npx prisma migrate deploy && npm run start:prod",
     "restartPolicyType": "ON_FAILURE"
   }
 }
