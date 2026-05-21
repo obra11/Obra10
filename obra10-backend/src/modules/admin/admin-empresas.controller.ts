@@ -54,6 +54,20 @@ export class AdminEmpresasController {
   async criarEmpresa(@Body() dto: CriarEmpresaAdminDto) {
     // Verificar se documento já existe
     const docLimpo = dto.documento.replace(/\D/g, '');
+    
+    // Verificar duplicidade de documento (decrypted comparison in-memory since columns are encrypted using random IVs)
+    const todasEmpresas = await this.prisma.empresa.findMany({
+      select: { id: true, cpfCnpj: true, cnpj: true }
+    });
+    const docExiste = todasEmpresas.some(emp => {
+      const decCpfCnpj = emp.cpfCnpj ? this.cryptoService.decrypt(emp.cpfCnpj) : null;
+      const decCnpj = emp.cnpj ? this.cryptoService.decrypt(emp.cnpj) : null;
+      return decCpfCnpj === docLimpo || decCnpj === docLimpo;
+    });
+    if (docExiste) {
+      throw new ConflictException('Já existe uma empresa cadastrada com este CPF/CNPJ.');
+    }
+
     const docEncriptado = this.cryptoService.encrypt(docLimpo);
 
     // Verificar duplicidade de email do gestor

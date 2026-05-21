@@ -101,15 +101,19 @@ export class TenantService {
         throw new BadRequestException('CNPJ inválido.');
     }
 
-    // Check uniqueness
-    const existe = await this.prisma.empresa.findFirst({
-      where: {
-        OR: [
-          { cpfCnpj: cpfCnpjLimpo },
-          { cnpj: cpfCnpjLimpo },
-          { email: dto.email },
-        ],
-      },
+    // Check uniqueness (decrypted comparison in-memory since columns are encrypted using random IVs)
+    const todasEmpresas = await this.prisma.empresa.findMany({
+      select: { id: true, cpfCnpj: true, cnpj: true, email: true },
+    });
+    const existe = todasEmpresas.some((emp) => {
+      if (emp.email === dto.email) return true;
+      const decCpfCnpj = emp.cpfCnpj
+        ? this.cryptoService.decrypt(emp.cpfCnpj)
+        : null;
+      const decCnpj = emp.cnpj
+        ? this.cryptoService.decrypt(emp.cnpj)
+        : null;
+      return decCpfCnpj === cpfCnpjLimpo || decCnpj === cpfCnpjLimpo;
     });
     if (existe)
       throw new ConflictException(

@@ -9,6 +9,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AsaasService } from './asaas.service';
 import { EmailService } from '../email/email.service';
 import { CupomService } from '../cupom/cupom.service';
+import { CryptoService } from '../../core/services/crypto.service';
 
 const PLANO_PRECOS: Record<string, number> = {};
 
@@ -29,6 +30,7 @@ export class CobrancaService {
     private readonly asaas: AsaasService,
     private readonly email: EmailService,
     private readonly cupomService: CupomService,
+    private readonly cryptoService: CryptoService,
   ) {}
 
   // ===================== CONTRATAR MÓDULOS =====================
@@ -87,11 +89,13 @@ export class CobrancaService {
     if (existente)
       throw new BadRequestException('Cobrança para este mês já gerada.');
 
-    // Ensure client exists in Asaas
+    // Ensure client exists in Asaas (decrypting document first to send plaintext to Asaas API)
     let idAsaasCliente: string = empresa.idAsaas || '';
     if (!idAsaasCliente && !pularAsaas) {
+      const decCpfCnpj = empresa.cpfCnpj ? this.cryptoService.decrypt(empresa.cpfCnpj) : '';
+      const decCnpj = empresa.cnpj ? this.cryptoService.decrypt(empresa.cnpj) : '';
       idAsaasCliente = await this.asaas.criarClienteAsaas({
-        cpfCnpj: empresa.cpfCnpj || empresa.cnpj || '',
+        cpfCnpj: decCpfCnpj || decCnpj || '',
         razaoSocial: empresa.razaoSocial || undefined,
         nomeCompleto: empresa.nomeCompleto || undefined,
         email: empresa.email || '',

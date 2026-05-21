@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Patch, Param, Body, UseGuards, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CryptoService } from '../../core/services/crypto.service';
 import { SuperAdminGuard } from '../../core/guards/super-admin.guard';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { CriarCupomAdminDto, AtualizarCupomAdminDto, EnviarCupomAdminDto } from './dto/admin.dto';
@@ -7,7 +8,10 @@ import { CriarCupomAdminDto, AtualizarCupomAdminDto, EnviarCupomAdminDto } from 
 @Controller('admin/cupons')
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
 export class AdminCuponsController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cryptoService: CryptoService
+  ) {}
 
   @Get()
   async getCupons() {
@@ -75,17 +79,18 @@ export class AdminCuponsController {
       empresa = await this.prisma.empresa.findUnique({ where: { id: dto.empresaId } });
     }
     
-    // Then try by CNPJ or CPF
+    // Then try by CNPJ or CPF (decrypted in-memory comparison since columns are encrypted using random IVs)
     if (!empresa) {
-      empresa = await this.prisma.empresa.findFirst({
-        where: {
-          OR: [
-            { cnpj: dto.empresaId },
-            { cnpj: limpo },
-            { cpfCnpj: dto.empresaId },
-            { cpfCnpj: limpo }
-          ]
-        }
+      const todasEmpresas = await this.prisma.empresa.findMany();
+      empresa = todasEmpresas.find(emp => {
+        const decCpfCnpj = emp.cpfCnpj ? this.cryptoService.decrypt(emp.cpfCnpj) : null;
+        const decCnpj = emp.cnpj ? this.cryptoService.decrypt(emp.cnpj) : null;
+        return (
+          decCpfCnpj === dto.empresaId ||
+          decCpfCnpj === limpo ||
+          decCnpj === dto.empresaId ||
+          decCnpj === limpo
+        );
       });
     }
 
