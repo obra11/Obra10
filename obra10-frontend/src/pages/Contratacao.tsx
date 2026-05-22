@@ -128,18 +128,20 @@ export const Contratacao: React.FC = () => {
       });
 
       // If coupon zeroed the value, modules are already active
-      if (res.data.status === 'PAGO' && res.data.valor === 0) {
-        navigate('/dashboard');
+      if (res.data.status === 'PAGO' || res.data.valor === 0) {
+        window.location.href = '/dashboard';
         return;
       }
 
-      if (formaPagamento === 'PIX') {
-        navigate(`/aguardando-pagamento/${res.data.cobrancaId}`, {
-          state: { qrCode: res.data.qrCode, qrCodeBase64: res.data.qrCodeBase64, linkPagamento: res.data.linkPagamento, valor: res.data.valor },
-        });
-      } else {
-        navigate('/dashboard');
-      }
+      navigate(`/aguardando-pagamento/${res.data.cobrancaId}`, {
+        state: {
+          qrCode: res.data.qrCode,
+          qrCodeBase64: res.data.qrCodeBase64,
+          linkPagamento: res.data.linkPagamento,
+          valor: res.data.valor,
+          method: formaPagamento === 'CARTAO' ? 'paypal' : 'pix',
+        },
+      });
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Erro ao processar contratação.');
     } finally { setSubmitting(false); }

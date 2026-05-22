@@ -28,6 +28,9 @@ export interface Empresa {
   bairro?: string;
   cidade?: string;
   estado?: string;
+  cobrancasCount?: number;
+  cobrancasPagasCount?: number;
+  lastPendingCobrancaId?: string | null;
 }
 
 export interface Obra {
@@ -52,6 +55,7 @@ interface AuthContextType {
   updateEmpresaLogo: (url: string) => void;
   updateObraImage: (obraId: string, url: string) => void;
   updateUserPhoto: (url: string) => void;
+  fetchSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -147,7 +151,8 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   return (
     <AuthContext.Provider value={{ 
       isAuthenticated, isLoading, user, empresa, obras, obraAtiva, 
-      setObraAtiva, login, logout, updateEmpresaLogo, updateObraImage, updateUserPhoto
+      setObraAtiva, login, logout, updateEmpresaLogo, updateObraImage, updateUserPhoto,
+      fetchSession
     }}>
       {children}
     </AuthContext.Provider>

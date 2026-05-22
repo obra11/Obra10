@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { CheckCircle, Loader2, Copy, ExternalLink, CreditCard } from 'lucide-react';
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
@@ -7,12 +7,11 @@ import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 export const AguardandoPagamento: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
-  const navigate = useNavigate();
   const state = location.state as any;
 
   const [status, setStatus] = useState<'pending' | 'paid'>('pending');
   const [copied, setCopied] = useState(false);
-  const [method, setMethod] = useState<'pix' | 'paypal'>('pix');
+  const [method, setMethod] = useState<'pix' | 'paypal'>(state?.method === 'paypal' ? 'paypal' : 'pix');
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const qrCode = state?.qrCode || '';
@@ -28,7 +27,7 @@ export const AguardandoPagamento: React.FC = () => {
         if (res.data.pago) {
           setStatus('paid');
           clearInterval(intervalRef.current!);
-          setTimeout(() => navigate('/dashboard'), 3000);
+          setTimeout(() => { window.location.href = '/dashboard'; }, 3000);
         }
       } catch { }
     }, 5000);
@@ -133,7 +132,7 @@ export const AguardandoPagamento: React.FC = () => {
                   try {
                     await api.post(`/cobrancas/${id}/paypal/capture-order`, { orderId: data.orderID });
                     setStatus('paid');
-                    setTimeout(() => navigate('/dashboard'), 3000);
+                    setTimeout(() => { window.location.href = '/dashboard'; }, 3000);
                   } catch (err: any) {
                     alert('Erro ao capturar pagamento: ' + (err.response?.data?.message || err.message));
                   }
@@ -143,7 +142,7 @@ export const AguardandoPagamento: React.FC = () => {
                   // Ignore se for erro de Mock Mode (client=test)
                   if (!import.meta.env.VITE_PAYPAL_CLIENT_ID) {
                     setStatus('paid');
-                    setTimeout(() => navigate('/dashboard'), 3000);
+                    setTimeout(() => { window.location.href = '/dashboard'; }, 3000);
                   }
                 }}
               />

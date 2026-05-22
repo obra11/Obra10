@@ -85,6 +85,22 @@ export class AuthService {
       },
     });
 
+    let cobrancasCount = 0;
+    let cobrancasPagasCount = 0;
+    let lastPendingCobrancaId: string | null = null;
+
+    if (user.empresaId) {
+      const cobrancas = await this.prisma.cobranca.findMany({
+        where: { empresaId: user.empresaId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, status: true },
+      });
+      cobrancasCount = cobrancas.length;
+      cobrancasPagasCount = cobrancas.filter((c) => c.status === 'PAGO').length;
+      const lastPending = cobrancas.find((c) => c.status !== 'PAGO');
+      lastPendingCobrancaId = lastPending ? lastPending.id : null;
+    }
+
     const obrasPermitidas = await this.buildObrasPermitidas(
       user.id,
       user.empresaId,
@@ -118,6 +134,9 @@ export class AuthService {
           grupo: tm.modulo.grupo,
         })),
         cupons: user.empresa?.cupons || [],
+        cobrancasCount,
+        cobrancasPagasCount,
+        lastPendingCobrancaId,
       },
       obrasPermitidas,
     };
@@ -145,6 +164,22 @@ export class AuthService {
     if (!user)
       throw new UnauthorizedException('Usuário não encontrado ou inativo.');
 
+    let cobrancasCount = 0;
+    let cobrancasPagasCount = 0;
+    let lastPendingCobrancaId: string | null = null;
+
+    if (user.empresaId) {
+      const cobrancas = await this.prisma.cobranca.findMany({
+        where: { empresaId: user.empresaId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, status: true },
+      });
+      cobrancasCount = cobrancas.length;
+      cobrancasPagasCount = cobrancas.filter((c) => c.status === 'PAGO').length;
+      const lastPending = cobrancas.find((c) => c.status !== 'PAGO');
+      lastPendingCobrancaId = lastPending ? lastPending.id : null;
+    }
+
     const obrasPermitidas = await this.buildObrasPermitidas(
       user.id,
       user.empresaId,
@@ -169,6 +204,9 @@ export class AuthService {
           grupo: tm.modulo.grupo,
         })),
         cupons: user.empresa?.cupons || [],
+        cobrancasCount,
+        cobrancasPagasCount,
+        lastPendingCobrancaId,
       },
       obrasPermitidas,
     };
