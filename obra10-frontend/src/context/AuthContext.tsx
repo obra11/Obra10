@@ -29,8 +29,7 @@ export interface Empresa {
   cidade?: string;
   estado?: string;
   cobrancasCount?: number;
-  cobrancasPagasCount?: number;
-  lastPendingCobrancaId?: string | null;
+  planoAtivo?: boolean;
 }
 
 export interface Obra {

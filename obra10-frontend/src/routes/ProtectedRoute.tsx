@@ -22,29 +22,21 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ childr
     return <Navigate to="/admin/dashboard" replace />;
   }
 
-  // Redirect to contracting if tenant has no billing setup/history
-  if (
-    user?.perfilGlobal !== 'SUPER_ADMIN' &&
-    empresa &&
-    empresa.cobrancasCount === 0 &&
-    location.pathname !== '/contratacao' &&
-    !location.pathname.startsWith('/aguardando-pagamento/')
-  ) {
-    return <Navigate to="/contratacao" replace />;
-  }
+  const precisaContratar =
+    empresa && empresa.cobrancasCount === 0 && empresa.planoAtivo !== true;
 
-  // Redirect to payment if tenant has billing history but has never completed a payment (first payment pending)
-  if (
-    user?.perfilGlobal !== 'SUPER_ADMIN' &&
-    empresa &&
-    typeof empresa.cobrancasCount === 'number' &&
-    empresa.cobrancasCount > 0 &&
-    empresa.cobrancasPagasCount === 0 &&
-    empresa.lastPendingCobrancaId &&
-    location.pathname !== '/contratacao' &&
-    !location.pathname.startsWith('/aguardando-pagamento/')
-  ) {
-    return <Navigate to={`/aguardando-pagamento/${empresa.lastPendingCobrancaId}`} replace />;
+  const rotasIsentas = [
+    '/contratacao',
+    '/aguardando-pagamento',
+    '/verificar-email',
+  ];
+
+  const estaEmRotaIsenta = rotasIsentas.some(rota =>
+    location.pathname.startsWith(rota)
+  );
+
+  if (precisaContratar && !estaEmRotaIsenta) {
+    return <Navigate to="/contratacao" replace />;
   }
 
   return <>{children}</>;
