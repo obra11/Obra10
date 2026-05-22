@@ -1,17 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import { ArrowRight, ArrowLeft, Loader2, CheckCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 type TipoPessoa = 'FISICA' | 'JURIDICA';
 type Step = 1 | 2 | 3 | 4;
 
 export const Register: React.FC = () => {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [step, setStep] = useState<Step>(1);
   const [tipo, setTipo] = useState<TipoPessoa>('JURIDICA');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    logout();
+  }, [logout]);
 
   const [form, setForm] = useState({
     cpfCnpj: '', razaoSocial: '', nomeFantasia: '', nomeCompleto: '',

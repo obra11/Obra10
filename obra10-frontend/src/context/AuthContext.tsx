@@ -116,6 +116,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     setObras([]);
     setObraAtivaState(null);
     localStorage.removeItem('obra10_obraAtiva');
+    localStorage.removeItem('obra10_csrf_token');
     setIsAuthenticated(false);
   };
 
