@@ -10,8 +10,9 @@ RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
-# Copy package.json and prisma schema first (layer caching)
+# Copy package.json, prisma schema, and prisma config first (layer caching)
 COPY obra10-backend/package.json ./
+COPY obra10-backend/prisma.config.ts ./
 COPY obra10-backend/prisma ./prisma/
 
 # Install all dependencies (including devDependencies for nest build)
