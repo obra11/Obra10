@@ -6,7 +6,6 @@
     "watchPatterns": ["obra10-backend/**", "Dockerfile"]
   },
   "deploy": {
-    "startCommand": "npx prisma migrate deploy && node dist/src/main",
     "restartPolicyType": "ON_FAILURE"
   }
 }

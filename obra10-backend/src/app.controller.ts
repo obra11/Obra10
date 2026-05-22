@@ -7,7 +7,8 @@ export class AppController {
 
   @Get('health')
   async healthCheck() {
-    // Forçar trigger do deploy usando Dockerfile
+    // Forçar trigger do deploy usando Dockerfile nativo sem startCommand
+    console.log('[Health] Verificação de integridade recebida');
     try {
       await this.prisma.$queryRaw`SELECT 1`;
       return {
