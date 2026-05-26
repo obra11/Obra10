@@ -1,9 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" fill="none">
-  <rect width="192" height="192" rx="32" fill="#E5192C"/>
-  <g transform="translate(30, 30)">
-    <path d="M66 0C36 0 12 24 12 54v6H0v18h12v6c0 6 3 9 9 9h90c6 0 9-3 9-9v-6h12v-18h-12v-6C120 24 96 0 66 0z" fill="white" opacity="0.95"/>
-    <path d="M66 12c-22.5 0-42 19.5-42 42v6h84v-6c0-22.5-19.5-42-42-42z" fill="#E5192C"/>
-    <text x="66" y="118" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-weight="900" font-size="26" fill="white" letter-spacing="-1">OBRA</text>
-    <text x="66" y="136" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-weight="900" font-size="18" fill="white" opacity="0.9" letter-spacing="3">10</text>
+  <rect width="192" height="192" rx="36" fill="#E5192C"/>
+  <g transform="translate(33, 33) scale(5.25)" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2 18h20" />
+    <path d="M20 18v-8a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v8" />
+    <path d="M9 6h6a1 1 0 0 1 1 1v2H8V7a1 1 0 0 1 1-1Z" />
   </g>
 </svg>
