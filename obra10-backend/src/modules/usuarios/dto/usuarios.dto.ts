@@ -53,3 +53,26 @@ export class SetModulosDto {
   @IsString({ each: true, message: 'Cada módulo deve ser uma string (slug).' })
   modulos: string[];
 }
+
+export class UpdatePerfilDto {
+  @IsString()
+  @IsOptional()
+  nome?: string;
+
+  @IsString()
+  @IsOptional()
+  telefone?: string;
+
+  @IsString()
+  @IsOptional()
+  fotoUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  @MinLength(6, { message: 'A nova senha deve ter no mínimo 6 caracteres.' })
+  novaSenha?: string;
+
+  @IsString()
+  @IsOptional()
+  senhaAtual?: string;
+}

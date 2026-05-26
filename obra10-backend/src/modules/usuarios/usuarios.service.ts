@@ -252,4 +252,42 @@ export class UsuariosService {
       select: { id: true, nome: true, deletedAt: true },
     });
   }
+
+  async updatePerfil(userId: string, dto: any) {
+    const { nome, telefone, fotoUrl, novaSenha, senhaAtual } = dto;
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: userId, deletedAt: null },
+    });
+    if (!usuario) throw new NotFoundException('Usuário não encontrado.');
+
+    const updateData: any = {};
+    if (nome) updateData.nome = nome;
+    if (telefone !== undefined) updateData.telefone = telefone;
+    if (fotoUrl !== undefined) updateData.fotoUrl = fotoUrl;
+
+    if (novaSenha) {
+      if (!senhaAtual) {
+        throw new BadRequestException('Para alterar a senha, você deve fornecer a senha atual.');
+      }
+      const senhaOk = await bcrypt.compare(senhaAtual, usuario.senhaHash);
+      if (!senhaOk) {
+        throw new BadRequestException('Senha atual incorreta.');
+      }
+      updateData.senhaHash = await bcrypt.hash(novaSenha, 12);
+      updateData.jwtVersion = { increment: 1 }; // Force re-authentication / invalidate old tokens
+    }
+
+    return this.prisma.usuario.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        nome: true,
+        email: true,
+        telefone: true,
+        fotoUrl: true,
+        perfilGlobal: true,
+      },
+    });
+  }
 }

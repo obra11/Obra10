@@ -379,4 +379,92 @@ export class CobrancaService {
     ]);
     return { items, total, page, pages: Math.ceil(total / limit) };
   }
+
+  async obterCobranca(id: string, empresaId: string) {
+    const cobranca = await this.prisma.cobranca.findUnique({
+      where: { id },
+    });
+    if (!cobranca) throw new NotFoundException('Cobrança não encontrada.');
+    if (cobranca.empresaId !== empresaId) {
+      throw new ForbiddenException('Acesso negado.');
+    }
+    return cobranca;
+  }
+
+  async aplicarCupomCobranca(cobrancaId: string, codigo: string, empresaId: string) {
+    const cobranca = await this.prisma.cobranca.findUnique({
+      where: { id: cobrancaId },
+      include: { empresa: true },
+    });
+    if (!cobranca) throw new NotFoundException('Cobrança não encontrada.');
+    if (cobranca.empresaId !== empresaId) {
+      throw new ForbiddenException('Acesso negado. A cobrança não pertence à sua empresa.');
+    }
+    if (cobranca.status === 'PAGO') {
+      throw new BadRequestException('Esta cobrança já está paga.');
+    }
+
+    // Validar e aplicar o cupom para a empresa
+    await this.cupomService.aplicarCupom(codigo, empresaId);
+
+    // Calcular o desconto
+    const valorBase = Number(cobranca.valor);
+    const desconto = await this.cupomService.calcularDesconto(empresaId, valorBase);
+
+    const novoValor = desconto.valorFinal;
+    const pularAsaas = desconto.pularAsaas;
+
+    if (pularAsaas || novoValor <= 0) {
+      // Se zerou, ativa os módulos e marca como paga
+      await this.prisma.cobranca.update({
+        where: { id: cobrancaId },
+        data: {
+          valor: 0,
+          status: 'PAGO',
+          dataPagamento: new Date(),
+        },
+      });
+
+      // Ativar módulos da construtora
+      const tenantModulos = await this.prisma.tenantModulo.findMany({
+        where: { empresaId, ativo: true },
+        include: { modulo: true },
+      });
+      const slugsAtivos = tenantModulos.map((tm) => tm.modulo.slug);
+      if (slugsAtivos.length > 0) {
+        await this.ativarModulos(empresaId, slugsAtivos);
+      }
+
+      await this.prisma.empresa.update({
+        where: { id: empresaId },
+        data: { suspensa: false, diasInadimplente: 0 },
+      });
+
+      // Incrementar meses e expirar o cupom
+      await this.cupomService.incrementarMesEExpirar(empresaId);
+
+      return {
+        success: true,
+        status: 'PAGO',
+        valor: 0,
+        mensagem: 'Cupom de 100% aplicado! Cobrança quitada com sucesso.',
+      };
+    } else {
+      // Se apenas reduziu, atualiza o valor da cobrança local
+      await this.prisma.cobranca.update({
+        where: { id: cobrancaId },
+        data: { valor: novoValor },
+      });
+
+      // Incrementar meses e expirar o cupom
+      await this.cupomService.incrementarMesEExpirar(empresaId);
+
+      return {
+        success: true,
+        status: 'PENDENTE',
+        valor: novoValor,
+        mensagem: `Cupom aplicado! Valor da cobrança reduzido para R$ ${novoValor.toFixed(2)}.`,
+      };
+    }
+  }
 }

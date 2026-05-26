@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth, type Obra } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Trash2, Edit2, Users, AlertTriangle, DollarSign, ExternalLink } from 'lucide-react';
+import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Trash2, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
 
@@ -301,6 +301,9 @@ export const CompanyDashboard: React.FC = () => {
                 </button>
               </>
             )}
+            <button onClick={() => navigate('/perfil')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Meu Perfil">
+              <User size={18} className="sm:mr-2" /> <span className="hidden sm:inline">Perfil</span>
+            </button>
             <button onClick={handleLogout} className="flex items-center text-gray-500 hover:text-lunardeli-red font-medium transition-colors" title="Sair">
               <LogOut size={18} className="sm:mr-2" /> <span className="hidden sm:inline">Sair</span>
             </button>

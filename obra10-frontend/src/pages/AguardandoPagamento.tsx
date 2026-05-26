@@ -14,10 +14,30 @@ export const AguardandoPagamento: React.FC = () => {
   const [method, setMethod] = useState<'pix' | 'paypal'>(state?.method === 'paypal' ? 'paypal' : 'pix');
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const qrCode = state?.qrCode || '';
-  const qrBase64 = state?.qrCodeBase64 || '';
-  const link = state?.linkPagamento || '';
-  const valor = state?.valor || 0;
+  const [cobranca, setCobranca] = useState<any>(null);
+  const [loadingCobranca, setLoadingCobranca] = useState(!state);
+
+  useEffect(() => {
+    if (!state && id) {
+      api.get(`/cobrancas/${id}`)
+        .then(res => {
+          setCobranca(res.data);
+          if (res.data.status === 'PAGO') {
+            setStatus('paid');
+          }
+          setLoadingCobranca(false);
+        })
+        .catch(err => {
+          console.error(err);
+          setLoadingCobranca(false);
+        });
+    }
+  }, [id, state]);
+
+  const qrCode = state?.qrCode || cobranca?.qrCode || '';
+  const qrBase64 = state?.qrCodeBase64 || cobranca?.qrCodeBase64 || '';
+  const link = state?.linkPagamento || cobranca?.linkPagamento || '';
+  const valor = state?.valor || cobranca?.valor || 0;
 
   useEffect(() => {
     if (!id) return;
@@ -39,6 +59,14 @@ export const AguardandoPagamento: React.FC = () => {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  if (loadingCobranca) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <Loader2 className="animate-spin text-red-600 animate-pulse" size={40} />
+      </div>
+    );
+  }
 
   if (status === 'paid') {
     return (

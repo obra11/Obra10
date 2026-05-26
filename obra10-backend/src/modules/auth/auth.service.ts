@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -19,6 +20,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly emailService: EmailService,
   ) {}
 
   async login(email: string, senhaPlana: string, empresaId: string) {
@@ -242,6 +244,12 @@ export class AuthService {
       where: { id: user.id },
       data: { resetToken: token, resetTokenExp: expires },
     });
+
+    try {
+      await this.emailService.enviarResetSenha(user.email, token, user.nome);
+    } catch (err: any) {
+      this.logger.error(`[RESET SENHA] Falha ao enviar e-mail de reset: ${err.message}`);
+    }
 
     this.logger.warn(
       `[RESET SENHA] Solicitação de reset emitida para userId=${user.id}`,

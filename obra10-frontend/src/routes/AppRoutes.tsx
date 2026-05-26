@@ -2,6 +2,8 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Login } from '../pages/Login';
 import { Register } from '../pages/Register';
+import { EsqueciSenha } from '../pages/EsqueciSenha';
+import { RedefinirSenha } from '../pages/RedefinirSenha';
 import { Dashboard } from '../pages/DashboardPainel';
 import { ProtectedRoute } from './ProtectedRoute';
 import { useAuth } from '../context/AuthContext';
@@ -22,6 +24,7 @@ import { AguardandoPagamento } from '../pages/AguardandoPagamento';
 import { Precos } from '../pages/Precos';
 import { Assinatura } from '../pages/Assinatura';
 import { Efetivo } from '../pages/obras/Efetivo';
+import { Perfil } from '../pages/Perfil';
 
 import { AdminRoute } from './AdminRoute';
 import { AdminLayout } from '../layouts/AdminLayout';
@@ -58,6 +61,8 @@ export const AppRoutes: React.FC = () => {
       <Route path="/precos" element={<Precos />} />
       <Route path="/verificar-email" element={<VerificarEmail />} />
       <Route path="/diario-de-obra" element={<DiarioDeObra />} />
+      <Route path="/esqueci-senha" element={<EsqueciSenha />} />
+      <Route path="/redefinir-senha" element={<RedefinirSenha />} />
 
       {/* === SUPER ADMIN === */}
       <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
@@ -78,6 +83,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/contratacao" element={<ProtectedRoute><Contratacao /></ProtectedRoute>} />
       <Route path="/aguardando-pagamento/:id" element={<ProtectedRoute><AguardandoPagamento /></ProtectedRoute>} />
       <Route path="/assinatura" element={<ProtectedRoute><Assinatura /></ProtectedRoute>} />
+      <Route path="/perfil" element={<ProtectedRoute><Perfil /></ProtectedRoute>} />
 
       {/* === MAIN DASHBOARD === */}
       <Route path="/dashboard" element={<ProtectedRoute><CompanyDashboard /></ProtectedRoute>} />

@@ -272,4 +272,25 @@ export class EmailService {
     `,
     );
   }
+
+  async enviarResetSenha(email: string, token: string, nomeUsuario: string) {
+    const link = `${this.appUrl}/redefinir-senha?token=${token}`;
+    await this.send(
+      email,
+      '🔑 Redefinir sua senha — OBRA 10',
+      `
+      <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
+        <h2 style="color:#dc2626;margin-top:0">Recuperação de Senha</h2>
+        <p>Olá, <strong>${nomeUsuario}</strong>!</p>
+        <p>Você solicitou a redefinição de sua senha de acesso ao OBRA 10.</p>
+        <p>Clique no botão abaixo para cadastrar uma nova senha:</p>
+        <a href="${link}" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
+          Redefinir Senha
+        </a>
+        <p style="color:#6b7280;font-size:12px;margin-top:24px">Este link é válido por 15 minutos. Se você não solicitou esta alteração, ignore este e-mail.</p>
+        <p style="color:#9ca3af;font-size:11px;border-top:1px solid #e5e7eb;padding-top:12px">Ou copie o endereço no seu navegador: <br/>${link}</p>
+      </div>
+    `,
+    );
+  }
 }

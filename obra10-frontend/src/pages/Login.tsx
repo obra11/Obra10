@@ -131,9 +131,9 @@ export const Login: React.FC = () => {
                 </label>
               </div>
               <div className="text-sm">
-                <a href="#" className="font-semibold text-lunardeli-red hover:text-red-800 transition-colors">
+                <Link to="/esqueci-senha" className="font-semibold text-lunardeli-red hover:text-red-800 transition-colors">
                   Esqueceu a senha?
-                </a>
+                </Link>
               </div>
             </div>
 

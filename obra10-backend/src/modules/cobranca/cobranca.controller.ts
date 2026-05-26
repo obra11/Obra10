@@ -86,6 +86,27 @@ export class CobrancaController {
     return this.cobrancaService.getStatus(id, req.user?.empresaId);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('cobrancas/:id')
+  async obterCobranca(@Param('id') id: string, @Req() req: any) {
+    const empresaId = req.user?.empresaId;
+    if (!empresaId) throw new ForbiddenException('Tenant não identificado.');
+    return this.cobrancaService.obterCobranca(id, empresaId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('cobrancas/:id/aplicar-cupom')
+  async aplicarCupomCobranca(
+    @Param('id') cobrancaId: string,
+    @Body('codigo') codigo: string,
+    @Req() req: any,
+  ) {
+    const empresaId = req.user?.empresaId;
+    if (!empresaId) throw new ForbiddenException('Tenant não identificado.');
+    if (!codigo) throw new BadRequestException('Código do cupom é obrigatório.');
+    return this.cobrancaService.aplicarCupomCobranca(cobrancaId, codigo, empresaId);
+  }
+
   // POST /cobrancas/:id/paypal/create-order
   @UseGuards(JwtAuthGuard)
   @Post('cobrancas/:id/paypal/create-order')

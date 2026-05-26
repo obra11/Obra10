@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   LogOut, Settings, LayoutDashboard, Users, FileText, ArrowLeft, BarChart2, Loader2,
   Beaker, ClipboardCheck, Home, Package, Calendar, Clock, Layers, Files, ShieldCheck, Heart, BadgeDollarSign,
-  Building2
+  Building2, User
 } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
@@ -239,6 +239,14 @@ export const ObraLayout: React.FC = () => {
             </div>
 
             <button 
+              onClick={() => navigate('/perfil')}
+              className="flex w-full items-center px-3 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors font-medium text-sm"
+            >
+              <User className="mr-3" size={18} />
+              Meu Perfil
+            </button>
+
+            <button 
               onClick={handleLogout}
               className="flex w-full items-center px-3 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors font-medium text-sm"
             >
@@ -296,16 +304,13 @@ export const ObraLayout: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-2">
-            <label className="relative cursor-pointer flex items-center justify-center w-9 h-9 rounded-full overflow-hidden bg-gray-100 border border-gray-300 shrink-0">
-               {uploadingUserPhoto ? (
-                 <Loader2 className="animate-spin text-lunardeli-red" size={14} />
-               ) : user?.fotoUrl ? (
+            <button onClick={() => navigate('/perfil')} title="Ver Perfil" className="relative flex items-center justify-center w-9 h-9 rounded-full overflow-hidden bg-gray-100 border border-gray-300 shrink-0">
+               {user?.fotoUrl ? (
                  <img src={getImageUrl(user.fotoUrl)} alt="Meu Perfil" className="w-full h-full object-cover" />
                ) : (
                  <span className="text-xs font-bold text-gray-600">{user?.nome?.charAt(0).toUpperCase()}</span>
                )}
-               <input type="file" className="hidden" accept="image/*" onChange={handleUserPhotoUpload} />
-            </label>
+            </button>
             <button onClick={handleLogout} className="text-gray-500 hover:text-lunardeli-red p-2.5 shrink-0 active:bg-gray-100 rounded-lg">
               <LogOut size={20} />
             </button>

@@ -16,6 +16,7 @@ import {
   CreateUsuarioDto,
   UpdateUsuarioDto,
   SetModulosDto,
+  UpdatePerfilDto,
 } from './dto/usuarios.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -33,6 +34,12 @@ export class UsuariosController {
   async criar(@Body() dto: CreateUsuarioDto, @Req() req: any) {
     this.assertGestorOuAdmin(req);
     return this.usuariosService.create(req.user.empresaId, dto);
+  }
+
+  @Patch('perfil')
+  async atualizarPerfil(@Req() req: any, @Body() dto: UpdatePerfilDto) {
+    const userId = req.user?.sub;
+    return this.usuariosService.updatePerfil(userId, dto);
   }
 
   @Patch(':id')

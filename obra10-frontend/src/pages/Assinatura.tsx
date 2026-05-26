@@ -30,6 +30,16 @@ export const Assinatura: React.FC = () => {
     }
   };
 
+  const handleAplicarCupomCobranca = async (cobrancaId: string, codigo: string) => {
+    try {
+      const res = await api.post(`/cobrancas/${cobrancaId}/aplicar-cupom`, { codigo });
+      alert(res.data.mensagem);
+      carregarDados();
+    } catch (err: any) {
+      alert('Erro ao aplicar cupom: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
   const handleUpgrade = async () => {
     if (!planoSelecionado || planoSelecionado === dados?.plano) return;
     setUpgrading(true);
@@ -123,6 +133,7 @@ export const Assinatura: React.FC = () => {
                   <th className="px-6 py-3 text-sm font-semibold text-gray-600">Valor</th>
                   <th className="px-6 py-3 text-sm font-semibold text-gray-600">Vencimento</th>
                   <th className="px-6 py-3 text-sm font-semibold text-gray-600">Status</th>
+                  <th className="px-6 py-3 text-sm font-semibold text-gray-600">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -135,6 +146,32 @@ export const Assinatura: React.FC = () => {
                       <span className={`px-2 py-1 rounded-full text-xs font-bold ${c.status === 'PAGO' ? 'bg-green-100 text-green-700' : c.status === 'VENCIDO' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
                         {c.status}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm flex items-center gap-2 flex-wrap">
+                      {c.status !== 'PAGO' ? (
+                        <>
+                          <button
+                            onClick={() => navigate(`/aguardando-pagamento/${c.id}`, { state: c })}
+                            className="px-3 py-1.5 bg-green-600 text-white rounded-lg font-bold text-xs hover:bg-green-700 transition-colors shadow-sm"
+                          >
+                            Pagar
+                          </button>
+                          
+                          <button
+                            onClick={() => {
+                              const cupom = prompt('Digite o código do cupom de desconto:');
+                              if (cupom) {
+                                handleAplicarCupomCobranca(c.id, cupom);
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-gray-900 text-white rounded-lg font-bold text-xs hover:bg-gray-800 transition-colors shadow-sm"
+                          >
+                            Aplicar Cupom
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-gray-400 text-xs">Sem ações</span>
+                      )}
                     </td>
                   </tr>
                 ))}
