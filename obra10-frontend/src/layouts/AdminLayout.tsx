@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Building2, Users, Package, Ticket, LogOut, ToggleLeft } from 'lucide-react';
+import { LayoutDashboard, Building2, Users, Package, Ticket, LogOut, ToggleLeft, HardHat } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const AdminLayout: React.FC = () => {
@@ -26,10 +26,8 @@ export const AdminLayout: React.FC = () => {
       {/* Sidebar */}
       <aside className="w-full md:w-64 bg-white border-b md:border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-100 flex items-center gap-3">
-          <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center shrink-0">
-            <svg viewBox="0 0 512 512" className="w-5 h-5 text-white fill-current" preserveAspectRatio="xMidYMid meet">
-              <path d="M256 80c-80 0-144 64-144 144v16h-32v48h32v16c0 16 8 24 24 24h240c16 0 24-8 24-24v-16h32v-48h-32v-16c0-80-64-144-144-144z" />
-            </svg>
+          <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center shrink-0 text-white">
+            <HardHat size={18} />
           </div>
           <div>
             <h1 className="font-extrabold text-gray-900 tracking-tight leading-none text-lg">OBRA 10</h1>
