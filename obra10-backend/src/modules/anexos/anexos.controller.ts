@@ -7,6 +7,7 @@ import {
   Query,
   Req,
   UseGuards,
+  Delete,
 } from '@nestjs/common';
 import { AnexosService } from './anexos.service';
 import { ObraContextGuard } from '../../core/guards/obra-context.guard';
@@ -39,5 +40,11 @@ export class AnexosController {
   async visualizarSeguro(@Param('id') id: string, @Req() req: any) {
     const obraId = req.headers['x-obra-id'];
     return this.anexosService.gerarViewerUrlSegura(id, obraId);
+  }
+
+  @Delete(':id')
+  async deletarAnexo(@Param('id') id: string, @Req() req: any) {
+    const obraId = req.headers['x-obra-id'];
+    return this.anexosService.deletar(id, obraId);
   }
 }

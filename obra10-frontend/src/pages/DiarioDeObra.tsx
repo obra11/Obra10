@@ -53,6 +53,13 @@ interface Anexo {
   descricao: string;
 }
 
+interface SavedFile {
+  id: string;
+  nomeOriginal: string;
+  urlS3: string;
+  mimeType: string;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    Constants
    ═══════════════════════════════════════════════════════════════ */
@@ -182,6 +189,7 @@ export const DiarioDeObra: React.FC = () => {
           setAtividadesPendentes(extras.atividadesPendentes || '');
           setObservacoes(extras.observacoes || '');
           setAprovadorIdSelecionado(rdo.aprovadorId || '');
+          setSavedFiles(rdo.anexos || []);
 
           // Mapear status do backend para status do componente
           const statusMap: Record<string, RdoStatus> = {
@@ -238,6 +246,7 @@ export const DiarioDeObra: React.FC = () => {
   const [fotos, setFotos] = useState<Foto[]>([]);
   const [videos, setVideos] = useState<VideoFile[]>([]);
   const [anexos, setAnexos] = useState<Anexo[]>([]);
+  const [savedFiles, setSavedFiles] = useState<SavedFile[]>([]);
   const fotoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const anexoInputRef = useRef<HTMLInputElement>(null);
@@ -255,9 +264,32 @@ export const DiarioDeObra: React.FC = () => {
     setTimeout(() => setToast(null), 3000);
   }, []);
 
+  // Helper para obter URL de visualização de arquivos
+  const getFileUrl = (urlS3: string) => {
+    if (!urlS3) return '';
+    if (urlS3.startsWith('http://') || urlS3.startsWith('https://')) {
+      return urlS3;
+    }
+    const apiBase = import.meta.env.VITE_API_URL ?? '';
+    const cleanBase = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
+    const cleanPath = urlS3.startsWith('/') ? urlS3 : `/${urlS3}`;
+    return `${cleanBase}${cleanPath}`;
+  };
+
+  const handleDeleteAnexo = async (anexoId: string) => {
+    if (!window.confirm('Deseja realmente excluir este anexo permanentemente?')) return;
+    try {
+      await api.delete(`/anexos/${anexoId}`);
+      setSavedFiles(prev => prev.filter(item => item.id !== anexoId));
+      showToast('🗑️ Anexo removido com sucesso.');
+    } catch (err: any) {
+      showToast(`❌ Erro ao remover anexo: ${err?.response?.data?.message || 'tente novamente'}`);
+    }
+  };
+
   // ── Computed values ──
   const totalEfetivo = profissionais.reduce((s, p) => s + p.quantidade, 0);
-  const totalAnexos = fotos.length + videos.length + anexos.length;
+  const totalAnexos = savedFiles.length + fotos.length + videos.length + anexos.length;
 
   // Cleanup blob URLs
   useEffect(() => {
@@ -366,15 +398,19 @@ export const DiarioDeObra: React.FC = () => {
     if (todosArquivos.length === 0) return;
 
     let successCount = 0;
+    const novosAnexos: SavedFile[] = [];
     for (let i = 0; i < todosArquivos.length; i++) {
       const file = todosArquivos[i];
       const formData = new FormData();
       formData.append('file', file);
       try {
         setToast(`⏳ Fazendo upload das mídias... (${i + 1}/${todosArquivos.length})`);
-        await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
+        const res = await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
+        if (res.data?.anexo) {
+          novosAnexos.push(res.data.anexo);
+        }
         successCount++;
       } catch (err: any) {
         console.error('Erro ao subir arquivo:', file.name, err);
@@ -385,6 +421,10 @@ export const DiarioDeObra: React.FC = () => {
     setFotos([]);
     setVideos([]);
     setAnexos([]);
+
+    if (novosAnexos.length > 0) {
+      setSavedFiles(prev => [...prev, ...novosAnexos]);
+    }
     
     if (successCount > 0) {
       setTimeout(() => showToast(`✅ ${successCount} arquivo(s) anexado(s) com sucesso!`), 500);
@@ -718,6 +758,21 @@ export const DiarioDeObra: React.FC = () => {
                    <button onClick={() => fotoInputRef.current?.click()} className="text-xs font-semibold text-lunardeli-red hover:underline">+ Upload</button>
                 </div>
                 <div className="space-y-3">
+                   {/* Saved Fotos */}
+                   {savedFiles.filter(a => a.mimeType?.startsWith('image/')).map((sf) => (
+                      <div key={sf.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col relative group">
+                         <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer">
+                            <img src={getFileUrl(sf.urlS3)} alt={sf.nomeOriginal || 'Foto'} className="w-full h-24 object-cover hover:opacity-90 transition-opacity" />
+                         </a>
+                         <div className="p-2 flex justify-between items-center bg-green-50 border-t border-gray-100">
+                            <span className="text-[10px] font-bold text-green-700 truncate max-w-[70%]" title={sf.nomeOriginal || 'Salvo'}>
+                               {sf.nomeOriginal || 'Salvo'}
+                            </span>
+                            <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors" title="Excluir do RDO"><Trash2 size={14}/></button>
+                         </div>
+                      </div>
+                   ))}
+                   {/* Pending Fotos */}
                    {fotos.map((f, i) => (
                       <div key={i} className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col">
                          <img src={f.preview} alt="" className="w-full h-24 object-cover" />
@@ -727,7 +782,9 @@ export const DiarioDeObra: React.FC = () => {
                          </div>
                       </div>
                    ))}
-                   {fotos.length === 0 && <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhuma foto</div>}
+                   {savedFiles.filter(a => a.mimeType?.startsWith('image/')).length === 0 && fotos.length === 0 && (
+                      <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhuma foto</div>
+                   )}
                 </div>
              </div>
 
@@ -743,6 +800,18 @@ export const DiarioDeObra: React.FC = () => {
                    <button onClick={() => videoInputRef.current?.click()} className="text-xs font-semibold text-lunardeli-red hover:underline">+ Upload</button>
                 </div>
                 <div className="space-y-2">
+                   {/* Saved Videos */}
+                   {savedFiles.filter(a => a.mimeType?.startsWith('video/')).map((sf) => (
+                      <div key={sf.id} className="bg-white border border-gray-200 p-2 rounded-lg flex items-center justify-between gap-2 bg-green-50/40">
+                         <div className="flex-1 min-w-0">
+                            <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-blue-600 hover:underline truncate block">
+                               🎥 {sf.nomeOriginal || 'Vídeo Salvo'}
+                            </a>
+                         </div>
+                         <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors"><Trash2 size={14}/></button>
+                      </div>
+                   ))}
+                   {/* Pending Videos */}
                    {videos.map((v, i) => (
                       <div key={i} className="bg-white border border-gray-200 p-2 rounded-lg flex items-center gap-2">
                          <div className="flex-1 min-w-0">
@@ -752,7 +821,9 @@ export const DiarioDeObra: React.FC = () => {
                          <button onClick={() => setVideos(prev => prev.filter((_, idx) => idx !== i))} className="text-red-500 p-1"><Trash2 size={14}/></button>
                       </div>
                    ))}
-                   {videos.length === 0 && <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhum vídeo</div>}
+                   {savedFiles.filter(a => a.mimeType?.startsWith('video/')).length === 0 && videos.length === 0 && (
+                      <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhum vídeo</div>
+                   )}
                 </div>
              </div>
 
@@ -768,6 +839,21 @@ export const DiarioDeObra: React.FC = () => {
                    <button onClick={() => anexoInputRef.current?.click()} className="text-xs font-semibold text-lunardeli-red hover:underline">+ Upload</button>
                 </div>
                 <div className="space-y-2">
+                   {/* Saved Documentos */}
+                   {savedFiles.filter(a => !a.mimeType?.startsWith('image/') && !a.mimeType?.startsWith('video/')).map((sf) => (
+                      <div key={sf.id} className="bg-white border border-gray-200 p-2 rounded-lg flex items-center justify-between gap-2 bg-green-50/40">
+                         <span className="shrink-0 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                            {getFileExt(sf.nomeOriginal || 'FILE')}
+                         </span>
+                         <div className="flex-1 min-w-0">
+                            <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-blue-600 hover:underline truncate block">
+                               {sf.nomeOriginal || 'Documento'}
+                            </a>
+                         </div>
+                         <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors"><Trash2 size={14}/></button>
+                      </div>
+                   ))}
+                   {/* Pending Documentos */}
                    {anexos.map((a, i) => (
                       <div key={i} className="bg-white border border-gray-200 p-2 rounded-lg flex items-center gap-2">
                          <span className="shrink-0 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">{getFileExt(a.file.name)}</span>
@@ -778,10 +864,13 @@ export const DiarioDeObra: React.FC = () => {
                          <button onClick={() => setAnexos(prev => prev.filter((_, idx) => idx !== i))} className="text-red-500 p-1"><Trash2 size={14}/></button>
                       </div>
                    ))}
-                   {anexos.length === 0 && <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhum anexo</div>}
+                   {savedFiles.filter(a => !a.mimeType?.startsWith('image/') && !a.mimeType?.startsWith('video/')).length === 0 && anexos.length === 0 && (
+                      <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhum anexo</div>
+                   )}
                 </div>
              </div>
           </div>
+
         </SectionContainer>
 
         {/* 9. Observações */}

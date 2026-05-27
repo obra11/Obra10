@@ -127,4 +127,18 @@ export class AnexosService {
       },
     });
   }
+
+  async deletar(anexoId: string, obraId: string) {
+    const anexo = await this.prisma.anexo.findFirst({
+      where: { id: anexoId, obraId, deletedAt: null },
+    });
+    if (!anexo) {
+      throw new NotFoundException('Anexo não encontrado ou não pertence a esta obra.');
+    }
+    return this.prisma.anexo.update({
+      where: { id: anexoId },
+      data: { deletedAt: new Date() },
+    });
+  }
 }
+

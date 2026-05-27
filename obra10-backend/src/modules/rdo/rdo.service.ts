@@ -88,7 +88,15 @@ export class RdoService {
       },
     });
     if (!rdo) throw new NotFoundException('RDO não encontrado.');
-    return rdo;
+
+    const anexos = await this.prisma.anexo.findMany({
+      where: { obraId, origem: 'RDO', attachableId: id, deletedAt: null },
+    });
+
+    return {
+      ...rdo,
+      anexos,
+    };
   }
 
   // ===================== BLOQUEAR EDIÇÃO SE IMUTÁVEL =====================
