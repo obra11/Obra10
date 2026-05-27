@@ -293,4 +293,41 @@ export class EmailService {
     `,
     );
   }
+
+  async enviarAvisoCobrancaPendente(
+    email: string,
+    nomeUsuario: string,
+    empresaNome: string,
+    valor: number,
+    dataVencimento: string,
+    linkPagamento: string | null,
+  ) {
+    const linkSection = linkPagamento
+      ? `<div style="text-align:center;margin:24px 0">
+          <a href="${linkPagamento}" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">
+            Ir para o Pagamento
+          </a>
+         </div>`
+      : `<p>Acesse o painel do gestor na aba <strong>Financeiro</strong> para realizar o pagamento.</p>`;
+
+    await this.send(
+      email,
+      '💳 Lembrete de Fatura Pendente — OBRA 10',
+      `
+      <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
+        <h2 style="color:#dc2626;margin-top:0">Fatura Pendente</h2>
+        <p>Olá, <strong>${nomeUsuario}</strong> (${empresaNome})!</p>
+        <p>Gostaríamos de lembrar que existe uma fatura pendente para a sua assinatura no OBRA 10:</p>
+        <div style="background:#f9fafb;border:1px solid #e5e7eb;padding:16px;border-radius:8px;margin:16px 0">
+          <p style="margin:0 0 8px">Valor: <strong>R$ ${valor.toFixed(2)}</strong></p>
+          <p style="margin:0">Vencimento: <strong>${dataVencimento}</strong></p>
+        </div>
+        ${linkSection}
+        <p style="color:#6b7280;font-size:12px;margin-top:24px">Se você já realizou o pagamento, por favor desconsidere este aviso. A compensação do boleto/PIX pode levar até 2 horas.</p>
+        <p style="color:#9ca3af;font-size:11px;border-top:1px solid #e5e7eb;padding-top:12px">Esta é uma notificação automática do OBRA 10. Não responda este e-mail.</p>
+      </div>
+    `,
+    );
+  }
 }
+

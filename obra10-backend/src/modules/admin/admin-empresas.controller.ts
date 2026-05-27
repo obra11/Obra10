@@ -5,13 +5,15 @@ import { SuperAdminGuard } from '../../core/guards/super-admin.guard';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { AtualizarEmpresaAdminDto, ModulosEmpresaAdminDto, CriarEmpresaAdminDto } from './dto/admin.dto';
 import * as bcrypt from 'bcrypt';
+import { EmailService } from '../email/email.service';
 
 @Controller('admin/empresas')
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
 export class AdminEmpresasController {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cryptoService: CryptoService
+    private readonly cryptoService: CryptoService,
+    private readonly emailService: EmailService
   ) {}
 
   @Get()
@@ -246,6 +248,11 @@ export class AdminEmpresasController {
 
   @Post(':id/avisar-gestor')
   async avisarGestor(@Param('id') empresaId: string) {
+    const empresa = await this.prisma.empresa.findUnique({
+      where: { id: empresaId }
+    });
+    if (!empresa) throw new NotFoundException('Empresa não encontrada.');
+
     // Buscar cobranças pendentes/vencidas não notificadas
     const cobrancasPendentes = await this.prisma.cobranca.findMany({
       where: {
@@ -257,6 +264,35 @@ export class AdminEmpresasController {
 
     if (cobrancasPendentes.length === 0) {
       throw new BadRequestException('Não há cobranças pendentes para notificar.');
+    }
+
+    // Buscar gestores da empresa
+    const gestores = await this.prisma.usuario.findMany({
+      where: {
+        empresaId,
+        perfilGlobal: 'GESTOR',
+        ativo: true,
+        deletedAt: null
+      }
+    });
+
+    // Enviar e-mail para todos os gestores
+    for (const cobranca of cobrancasPendentes) {
+      const dataVencimentoStr = cobranca.dataVencimento.toLocaleDateString('pt-BR');
+      for (const gestor of gestores) {
+        try {
+          await this.emailService.enviarAvisoCobrancaPendente(
+            gestor.email,
+            gestor.nome,
+            empresa.nomeFantasia || empresa.razaoSocial || 'Empresa',
+            Number(cobranca.valor),
+            dataVencimentoStr,
+            cobranca.linkPagamento
+          );
+        } catch (err: any) {
+          console.error(`Falha ao notificar gestor ${gestor.email}: ${err.message}`);
+        }
+      }
     }
 
     // Marcar todas como notificadas (inclui re-notificação)
@@ -277,6 +313,49 @@ export class AdminEmpresasController {
   @Post('avisar-todos')
   async avisarTodos() {
     // Buscar todas as cobranças pendentes/vencidas de TODAS as empresas
+    const cobrancasPendentes = await this.prisma.cobranca.findMany({
+      where: {
+        status: { in: ['PENDENTE', 'VENCIDO', 'OVERDUE'] },
+        notificadoEm: null
+      },
+      include: {
+        empresa: {
+          include: {
+            usuarios: {
+              where: { perfilGlobal: 'GESTOR', ativo: true, deletedAt: null }
+            }
+          }
+        }
+      }
+    });
+
+    if (cobrancasPendentes.length === 0) {
+      return { message: 'Nenhuma cobrança pendente para notificar.', total: 0 };
+    }
+
+    // Enviar e-mail para os gestores de cada cobrança
+    for (const cobranca of cobrancasPendentes) {
+      const dataVencimentoStr = cobranca.dataVencimento.toLocaleDateString('pt-BR');
+      const empresa = cobranca.empresa;
+      const gestores = empresa.usuarios;
+
+      for (const gestor of gestores) {
+        try {
+          await this.emailService.enviarAvisoCobrancaPendente(
+            gestor.email,
+            gestor.nome,
+            empresa.nomeFantasia || empresa.razaoSocial || 'Empresa',
+            Number(cobranca.valor),
+            dataVencimentoStr,
+            cobranca.linkPagamento
+          );
+        } catch (err: any) {
+          console.error(`Falha ao notificar gestor ${gestor.email} no envio em lote: ${err.message}`);
+        }
+      }
+    }
+
+    // Marcar todas como notificadas
     const result = await this.prisma.cobranca.updateMany({
       where: {
         status: { in: ['PENDENTE', 'VENCIDO', 'OVERDUE'] }
