@@ -14,7 +14,8 @@ export class AppController {
       return {
         status: 'ok',
         database: 'connected',
-        message: 'Obra 10 - MVP API Operacional (v1.5.3)',
+        message: 'Obra 10 - MVP API Operacional (v1.5.5)',
+
         env: {
           nodeEnv: process.env.NODE_ENV,
           hasEncryptionKey: process.env.ENCRYPTION_KEY ? `defined_len_${process.env.ENCRYPTION_KEY.length}` : 'undefined',

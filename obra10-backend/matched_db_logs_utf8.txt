@@ -1,0 +1,237 @@
+﻿=== MATCH Step 49 ===
+Created At: 2026-05-25T18:06:48Z
+Completed At: 2026-05-25T18:06:51Z
+
+				The command completed successfully.
+				Output:
+				=== USER OBRA ROLES ===
+[
+  {
+    "id": "af2123ea-da75-4f3b-a9c1-46a73da02384",
+    "usuario_nome": "Tarcisio Lunardeli",
+    "usuario_email": "tarcisio@lunardeli.com.br",
+    "obra_nome": "EdifÃ­cio Comercial Torres",
+    "perfil_nome": "COLABORADOR"
+  },
+  {
+    "id": "ad6ec3c5-54c7-422e-9c13-658d8a78537a",
+    "usuario_nome": "Lucas",
+    "usuario_email": "lucaspetri2007@gmail.com",
+    "obra_nome": "EquilÃ­brio",
+    "perfil_nome": "ENGENHEIRO"
+  },
+  {
+    "id": "7d23225e-5c20-4e38-bfec-2a2a0dabcc5e",
+    "usuario_nome": "Marcelo Jose Felippe",
+    "usuario_email": "marcelompele@gmail.com",
+    "obra_nome": "FelicitÃ¡",
+    "perfil_nome": "COLABORADOR"
+  },
+  {
+    "id": "73de38be-2d70-4add-8fc8-5fc0cdbcd108",
+    "usuario_nome": "tecnicogiliardi@gmail.com",
+    "usuario_email": "tecnicogiliardi@gmail.com",
+    "obra_nome": "FelicitÃ¡",
+    "perfil_nome": "ENGENHEIRO"
+  },
+  {
+    "id": "f5e1a74c-2ae1-4f41-8b9c-a8f8e504b12b",
+    "usuario_nome": "Tarcisio Lunardeli",
+    "usuario_email": "tarcisio@lunardeli.com.br",
+    "obra_nome": "GalpÃ£o LogÃ­stico Bandeirantes",
+    "perfil_nome": "COLABORADOR"
+  },
+  {
+    "id": "a5346ad6-2efd-4192-ac85-5bd54ae4af90",
+    "usuario_nome": "Tarcisio Lunardeli",
+    "usuario_email": "tarcisio@lunardeli.com.br",
+    "obra_nome": "Loteamento Parque das Ãguas",
+    "perfil_nome": "COLABORADOR"
+  },
+  {
+    "id": "3af94224-3711-4b89-b2c5-054437d911dd",
+    "usuario_nome": "Test User",
+    "usuario_email": "ai_test_123@example.com",
+    "obra_nome": "Obra de Teste Jetski",
+    "perfil_nome": "ENGENHEIRO"
+  },
+  {
+    "id": "a41819da-b525-4ae9-8ae5-7a6f8451e6f3",
+    "usuario_nome": "Tarcisio Lunardeli",
+    "usuario_email": "tarcisio@lunardeli.com.br",
+    "obra_nome": "Obra Floripa 10",
+    "perfil_nome": "ENGENHEIRO"
+  },
+  {
+    "id": "40aa86ca-a941-4dce-8ec7-28c4c91b97df",
+    "usuario_nome": "Tarcisio Lunardeli",
+    "usuario_email": "tarcisio@lunardeli.com.br",
+    "obra_nome": "Reforma Hospital SÃ£o JoÃ£o",
+    "perfil_nome": "COLABORADOR"
+  },
+  {
+    "id": "a407c5d4-8425-4a98-9617-58d8809424eb",
+    "usuario_nome": "Tarcisio Lunardeli",
+    "usuario_email": "tarcisio@lunardeli.com.br",
+    "obra_nome": "Residencial Alphaville",
+    "perfil_nome": "COLABORADOR"
+  },
+  {
+    "id": "132700a0-e8ab-40f9-8628-ef7ce65b34b6",
+    "usuario_nome": "Drunn",
+    "usuario_email": "mautd82@hotmail.com",
+    "obra_nome": "Silvio Lopes",
+    "perfil_nome": "ENGENHEIRO"
+  },
+  {
+    "id": "075e0301-0387-4a12-8f7b-916db5683be6",
+    "usuario_nome": "Giliardi",
+    "usuario_email": "giliardi@lunardeli.com.br",
+    "obra_nome": "VICTORIA RESIDENCE",
+    "perfil_nome": "COLABORADOR"
+  },
+  {
+    "id": "a945d5fe-ba29-4bc6-a018-9f093f19a6a3",
+    "usuario_nome": "Tarcisio Lunardeli",
+    "usuario_email": "tarcisio@lunardeli.com.br",
+    "obra_nome": "VICTORIA RESIDENCE",
+    "perfil_nome": "ENGENHEIRO"
+  }
+]
+
+
+==============================
+=== MATCH Step 53 ===
+Created At: 2026-05-25T18:07:01Z
+Completed At: 2026-05-25T18:07:05Z
+
+				The command completed successfully.
+				Output:
+				=== ALL OBRAS ===
+[
+  {
+    "id": "695a75c9-1fbe-4763-961e-9aafc3471b64",
+    "nome": "Silvio Lopes",
+    "created_at": "2026-05-23T14:46:01.259Z",
+    "status": "ATIVA",
+    "empresa_nome": null,
+    "empresa_id": "eb468920-85b0-4edb-8414-78117c2b9d55"
+  },
+  {
+    "id": "bd0e4c60-9db0-4e08-a184-6cae8f479d99",
+    "nome": "EquilÃ­brio",
+    "created_at": "2026-05-23T02:39:30.711Z",
+    "status": "ATIVA",
+    "empresa_nome": null,
+    "empresa_id": "59db1922-628b-4f74-9d79-1bf58c057daa"
+  },
+  {
+    "id": "78188e19-d7cb-4847-b6eb-ba5ea7d15453",
+    "nome": "FelicitÃ¡",
+    "created_at": "2026-05-22T17:27:07.031Z",
+    "status": "ATIVA",
+    "empresa_nome": "Gjf - Engenharia",
+    "empresa_id": "3d952506-866f-47f7-88de-df2fa376089b"
+  },
+  {
+    "id": "519c13d2-763f-4be7-a716-e14f9bbecca1",
+    "nome": "BELLE VIE",
+    "created_at": "2026-05-14T15:14:09.998Z",
+    "status": "ATIVA",
+    "empresa_nome": "LUNARDELI ENGENHARIA",
+    "empresa_id": "95abdcb5-bad5-45b5-9d96-1302e82d04ef"
+  },
+  {
+    "id": "a79cd7a9-90d8-4663-b98e-c23fd78cecab",
+    "nome": "VICTORIA RESIDENCE",
+    "created_at": "2026-05-14T14:52:50.323Z",
+    "status": "ATIVA",
+    "empresa_nome": "LUNARDELI ENGENHARIA",
+    "empresa_id": "95abdcb5-bad5-45b5-9d96-1302e82d04ef"
+  },
+  {
+    "id": "5c644e30-ebe9-4079-a711-80d3e3f35b59",
+    "nome": "Obra Floripa 10",
+    "created_at": "2026-05-13T15:55:23.863Z",
+    "status": "EXCLUIDA",
+    "empresa_nome": "LUNARDELI ENGENHARIA",
+    "empresa_id": "95abdcb5-bad5-45b5-9d96-1302e82d04ef"
+  },
+  {
+    "id": "10b1dbd6-a736-4c53-a32f-789365b37574",
+    "nome": "Obra de Teste Jetski",
+    "created_at": "2026-05-11T15:33:42.740Z",
+    "status": "ATIVA",
+    "empresa_nome": "Test Company",
+    "empresa_id": "1c77e326-c1e1-4bc5-b892-de9ceb6488ad"
+  },
+  {
+    "id": "ff281e92-4f92-4703-ae79-257a40c5ce1e",
+    "nome": "Loteamento Parque das Ãguas",
+    "created_at": "2026-05-08T00:00:27.79
+<truncated 277 bytes>
+",
+    "status": "EXCLUIDA",
+    "empresa_nome": "LUNARDELI ENGENHARIA",
+    "empresa_id": "95abdcb5-bad5-45b5-9d96-1302e82d04ef"
+  },
+  {
+    "id": "9259d0cc-e1a9-4bfa-889b-ccebb03b696d",
+    "nome": "GalpÃ£o LogÃ­stico Bandeirantes",
+    "created_at": "2026-05-08T00:00:27.398Z",
+    "status": "EXCLUIDA",
+    "empresa_nome": "LUNARDELI ENGENHARIA",
+    "empresa_id": "95abdcb5-bad5-45b5-9d96-1302e82d04ef"
+  },
+  {
+    "id": "486b1ee4-eb23-40e8-bef4-eb6892361a6f",
+    "nome": "EdifÃ­cio Comercial Torres",
+    "created_at": "2026-05-08T00:00:27.198Z",
+    "status": "EXCLUIDA",
+    "empresa_nome": "LUNARDELI ENGENHARIA",
+    "empresa_id": "95abdcb5-bad5-45b5-9d96-1302e82d04ef"
+  },
+  {
+    "id": "2dbebb5e-9184-4ecb-a43c-810413648bc1",
+    "nome": "CondomÃ­nio Reserva da Mata",
+    "created_at": "2026-05-08T00:00:26.999Z",
+    "status": "EXCLUIDA",
+    "empresa_nome": "LUNARDELI ENGENHARIA",
+    "empresa_id": "95abdcb5-bad5-45b5-9d96-1302e82d04ef"
+  },
+  {
+    "id": "239570ab-2a71-488f-a54f-50c4b087e573",
+    "nome": "Residencial Alphaville",
+    "created_at": "2026-05-08T00:00:26.801Z",
+    "status": "EXCLUIDA",
+    "empresa_nome": "LUNARDELI ENGENHARIA",
+    "empresa_id": "95abdcb5-bad5-45b5-9d96-1302e82d04ef"
+  },
+  {
+    "id": "ccc33333-3333-4333-a333-333333333333",
+    "nome": "Residencial Lunardeli Alpha",
+    "created_at": "2026-05-08T00:00:25.216Z",
+    "status": "EXCLUIDA",
+    "empresa_nome": "LUNARDELI ENGENHARIA",
+    "empresa_id": "95abdcb5-bad5-45b5-9d96-1302e82d04ef"
+  },
+  {
+    "id": "bbb22222-2222-4222-a222-222222222222",
+    "nome": "Complexo Comercial Delta",
+    "created_at": "2026-05-07T23:59:36.865Z",
+    "status": "ATIVA",
+    "empresa_nome": "Acme Construtora MVP",
+    "empresa_id": "a4d64ac6-5e84-4eeb-a422-cae95ab456fa"
+  },
+  {
+    "id": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+    "nome": "Residencial MVP LumiÃ¨re",
+    "created_at": "2026-05-07T23:59:35.876Z",
+    "status": "ATIVA",
+    "empresa_nome": "Acme Construtora MVP",
+    "empresa_id": "a4d64ac6-5e84-4eeb-a422-cae95ab456fa"
+  }
+]
+
+
+==============================
