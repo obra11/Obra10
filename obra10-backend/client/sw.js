@@ -1,4 +1,4 @@
-const CACHE_NAME = 'obra10-v1.5.2';
+const CACHE_NAME = 'obra10-v1.5.5';
 const STATIC_ASSETS = [
   '/',
   '/favicon-16.png',
@@ -35,18 +35,45 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   
-  // Only cache GET requests
+  // Only handle GET requests
   if (request.method !== 'GET') return;
   
-  // Don't cache API calls
-  if (request.url.includes('/api/') || request.url.includes(':3000')) return;
+  const url = new URL(request.url);
+
+  // Apenas cacheia assets estáticos conhecidos. Nunca cachear chamadas de API.
+  const isGoogleFont = 
+    url.hostname.includes('fonts.gstatic.com') || 
+    url.hostname.includes('fonts.googleapis.com');
+
+  const isStaticAsset =
+    url.pathname.startsWith('/assets/') ||
+    url.pathname === '/' ||
+    url.pathname === '/manifest.json' ||
+    url.pathname.endsWith('.png') ||
+    url.pathname.endsWith('.jpg') ||
+    url.pathname.endsWith('.jpeg') ||
+    url.pathname.endsWith('.svg') ||
+    url.pathname.endsWith('.ico') ||
+    url.pathname.endsWith('.woff') ||
+    url.pathname.endsWith('.woff2') ||
+    isGoogleFont;
+
+  // SPA navigation documents (like /login, /admin/empresas, /dashboard) request the HTML page
+  const isNavigation = request.destination === 'document';
+
+  if (!isStaticAsset && !isNavigation) {
+    // É uma requisição de API dinâmica (ex: /admin/empresas, /obras, /usuarios)
+    // Deixa passar direto para a rede sem encostar no cache do Service Worker
+    return;
+  }
 
   event.respondWith(
     caches.match(request).then((cached) => {
-      // Network-first for HTML, cache-first for assets
-      if (request.destination === 'document') {
+      // Network-first para páginas/documentos (index.html de navegação)
+      if (isNavigation) {
         return fetch(request).catch(() => cached || new Response('Offline', { status: 503 }));
       }
+      // Cache-first para assets estáticos compilados
       return cached || fetch(request).then((response) => {
         if (response.ok) {
           const clone = response.clone();
@@ -57,3 +84,4 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
