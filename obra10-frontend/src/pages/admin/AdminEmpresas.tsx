@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { Search, Loader2, Building, AlertTriangle, Plus, X, User, Mail, Lock, Phone, FileText, Bell, BellRing } from 'lucide-react';
+import { getImageUrl } from '../../utils/image';
 
 interface EmpresaGridItem {
   id: string;
@@ -15,6 +16,7 @@ interface EmpresaGridItem {
   totalUsuarios: number;
   totalModulos: number;
   statusPagamento: string;
+  logoUrl?: string | null;
 }
 
 const INITIAL_FORM = {
@@ -193,8 +195,12 @@ export const AdminEmpresas: React.FC = () => {
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10 flex items-center justify-center bg-gray-100 rounded-lg text-gray-500 border border-gray-200">
-                          <Building size={20} />
+                        <div className="flex-shrink-0 h-10 w-10 flex items-center justify-center bg-gray-100 rounded-lg text-gray-500 border border-gray-200 overflow-hidden">
+                          {emp.logoUrl ? (
+                            <img src={getImageUrl(emp.logoUrl)} alt="Logo" className="w-full h-full object-contain" />
+                          ) : (
+                            <Building size={20} />
+                          )}
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">{emp.nomeFantasia || emp.razaoSocial}</div>

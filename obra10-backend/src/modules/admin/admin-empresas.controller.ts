@@ -47,7 +47,8 @@ export class AdminEmpresasController {
         totalObras: emp._count.obras,
         totalUsuarios: emp._count.usuarios,
         totalModulos: emp._count.tenantModulos,
-        statusPagamento: emp.cobrancas[0]?.status || 'SEM COBRANCA'
+        statusPagamento: emp.cobrancas[0]?.status || 'SEM COBRANCA',
+        logoUrl: emp.logoUrl
       };
     });
   }

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { getImageUrl } from '../../utils/image';
 
 export const AdminEmpresaDetalhe: React.FC = () => {
   const { id } = useParams();
@@ -200,8 +201,12 @@ export const AdminEmpresaDetalhe: React.FC = () => {
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 flex flex-col md:flex-row gap-6 justify-between items-start mb-6 shadow-sm">
         <div className="flex gap-4 items-center">
-          <div className="w-16 h-16 bg-gray-100 rounded-xl border flex items-center justify-center text-gray-400">
-            <Building size={32} />
+          <div className="w-16 h-16 bg-gray-100 rounded-xl border flex items-center justify-center text-gray-400 overflow-hidden">
+            {empresa.logoUrl ? (
+              <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="w-full h-full object-contain" />
+            ) : (
+              <Building size={32} />
+            )}
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
