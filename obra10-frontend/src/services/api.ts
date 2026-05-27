@@ -60,7 +60,15 @@ api.interceptors.response.use(
     }
 
     if (error.response && error.response.status === 401) {
-      const publicPaths = ['/login', '/register', '/precos', '/verificar-email'];
+      const publicPaths = [
+        '/login',
+        '/register',
+        '/precos',
+        '/verificar-email',
+        '/esqueci-senha',
+        '/redefinir-senha',
+        '/diario-de-obra'
+      ];
       if (!publicPaths.includes(window.location.pathname)) {
          window.dispatchEvent(new Event('auth:unauthorized'));
          window.location.href = '/login';
@@ -71,3 +79,4 @@ api.interceptors.response.use(
 );
 
 export default api;
+
