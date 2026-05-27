@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { 
   Building, Users, Key, AlertTriangle, ArrowLeft, Loader2, Ban, PlayCircle, ShieldIcon, 
-  Receipt, ClipboardList, Package, DollarSign, Save, Bell, CheckCircle2
+  Receipt, ClipboardList, Package, DollarSign, Save, Bell, CheckCircle2, Trash2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -177,6 +177,19 @@ export const AdminEmpresaDetalhe: React.FC = () => {
     }
   };
 
+  const handleRemoverCupom = async (cupomId: string) => {
+    if (!window.confirm('Tem certeza que deseja remover este cupom desta empresa? Esta ação afetará os próximos faturamentos da empresa.')) {
+      return;
+    }
+    try {
+      await api.delete(`/admin/cupons/empresa/${id}/cupom/${cupomId}`);
+      await fetchEmpresa();
+      alert('Cupom removido com sucesso!');
+    } catch (e: any) {
+      alert(e.response?.data?.message || 'Erro ao remover cupom');
+    }
+  };
+
   if (loading || !empresa) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-red-600" size={40} /></div>;
 
   return (
@@ -281,12 +294,21 @@ export const AdminEmpresaDetalhe: React.FC = () => {
               <div className="p-5">
                 {empresa.cupons.length === 0 ? <p className="text-gray-500 text-sm mb-3">Nenhum cupom resgatado.</p> : null}
                 {empresa.cupons.map((c: any) => (
-                  <div key={c.id} className="p-3 border border-red-100 bg-red-50 rounded-lg mb-2">
-                    <div className="flex justify-between">
-                      <span className="font-bold text-red-700">{c.cupom.codigo}</span>
-                      <span className="text-xs font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded">{c.cupom.tipo}</span>
+                  <div key={c.id} className="p-3 border border-red-100 bg-red-50 rounded-lg mb-2 flex justify-between items-center">
+                    <div className="flex-1">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="font-bold text-red-700">{c.cupom.codigo}</span>
+                        <span className="text-[10px] font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded">{c.cupom.tipo.replace('_', ' ')}</span>
+                      </div>
+                      <p className="text-xs text-gray-600">Meses usados: {c.mesesUsados || 0}</p>
                     </div>
-                    <p className="text-xs text-gray-600 mt-1">Meses usados: {c.mesesUsados || 0}</p>
+                    <button 
+                      onClick={() => handleRemoverCupom(c.cupom.id)}
+                      className="ml-3 p-1.5 text-red-600 hover:text-red-800 border border-red-100 hover:border-red-200 bg-white rounded transition-colors"
+                      title="Remover Cupom"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 ))}
 

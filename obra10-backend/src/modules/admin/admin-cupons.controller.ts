@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, UseGuards, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CryptoService } from '../../core/services/crypto.service';
 import { SuperAdminGuard } from '../../core/guards/super-admin.guard';
@@ -120,5 +120,35 @@ export class AdminCuponsController {
     }
 
     return { message: 'Cupom vinculado à conta e notificado à empresa (simulação).' };
+  }
+
+  @Delete('empresa/:empresaId/cupom/:cupomId')
+  async removerCupom(
+    @Param('empresaId') empresaId: string,
+    @Param('cupomId') cupomId: string,
+  ) {
+    const vinculoExistente = await this.prisma.empresaCupom.findUnique({
+      where: {
+        empresaId_cupomId: {
+          empresaId,
+          cupomId
+        }
+      }
+    });
+
+    if (!vinculoExistente) {
+      throw new NotFoundException('Vínculo entre empresa e cupom não encontrado.');
+    }
+
+    await this.prisma.empresaCupom.delete({
+      where: {
+        empresaId_cupomId: {
+          empresaId,
+          cupomId
+        }
+      }
+    });
+
+    return { message: 'Cupom removido da empresa com sucesso.' };
   }
 }
