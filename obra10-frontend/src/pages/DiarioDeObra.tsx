@@ -7,6 +7,14 @@ import {
   Plus, Trash2, Video, FileText, Image as ImageIcon, Save, Send, RotateCcw
 } from 'lucide-react';
 import { RdoShareBar } from '../components/RdoShareBar';
+import {
+  generateUUID,
+  saveOfflineAttachment,
+  getOfflineAttachments,
+  deleteOfflineAttachment,
+  updateRdoId,
+  incrementarTentativa
+} from '../utils/offlineStorage';
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -41,16 +49,28 @@ interface Foto {
   file: File;
   preview: string;
   legenda: string;
+  offlineId?: string;
+  isOfflinePending?: boolean;
+  uploadFalhou?: boolean;
+  isUploading?: boolean;
 }
 
 interface VideoFile {
   file: File;
   legenda: string;
+  offlineId?: string;
+  isOfflinePending?: boolean;
+  uploadFalhou?: boolean;
+  isUploading?: boolean;
 }
 
 interface Anexo {
   file: File;
   descricao: string;
+  offlineId?: string;
+  isOfflinePending?: boolean;
+  uploadFalhou?: boolean;
+  isUploading?: boolean;
 }
 
 interface SavedFile {
@@ -124,6 +144,7 @@ const InputField = ({ label, type = 'text', ...props }: any) => (
 export const DiarioDeObra: React.FC = () => {
   const { obraId, rdoId } = useParams<{ obraId: string; rdoId: string }>();
   const navigate = useNavigate();
+  const tempRdoId = useRef(rdoId || generateUUID());
   const [initLoading, setInitLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [rdoIdAtual, setRdoIdAtual] = useState<string | null>(rdoId || null);
@@ -287,6 +308,98 @@ export const DiarioDeObra: React.FC = () => {
     }
   };
 
+  const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  const marcarEnviandoLocal = (offlineId: string) => {
+    setFotos(prev => prev.map(f => f.offlineId === offlineId ? { ...f, isUploading: true, uploadFalhou: false } : f));
+    setVideos(prev => prev.map(v => v.offlineId === offlineId ? { ...v, isUploading: true, uploadFalhou: false } : v));
+    setAnexos(prev => prev.map(a => a.offlineId === offlineId ? { ...a, isUploading: true, uploadFalhou: false } : a));
+  };
+
+  const marcarFalhaLocal = (offlineId: string) => {
+    setFotos(prev => prev.map(f => f.offlineId === offlineId ? { ...f, isUploading: false, uploadFalhou: true } : f));
+    setVideos(prev => prev.map(v => v.offlineId === offlineId ? { ...v, isUploading: false, uploadFalhou: true } : v));
+    setAnexos(prev => prev.map(a => a.offlineId === offlineId ? { ...a, isUploading: false, uploadFalhou: true } : a));
+  };
+
+  const removerPendenteLocal = (offlineId: string) => {
+    setFotos(prev => prev.filter(f => f.offlineId !== offlineId));
+    setVideos(prev => prev.filter(v => v.offlineId !== offlineId));
+    setAnexos(prev => prev.filter(a => a.offlineId !== offlineId));
+  };
+
+  const syncOfflineFiles = async (rdoIdAlvo: string) => {
+    if (!navigator.onLine || !rdoIdAlvo || !obraId) return;
+
+    try {
+      const realFiles = await getOfflineAttachments(rdoIdAlvo);
+      const tempFiles = tempRdoId.current !== rdoIdAlvo ? await getOfflineAttachments(tempRdoId.current) : [];
+      const filesToSync = [...realFiles, ...tempFiles];
+
+      for (const item of filesToSync) {
+        if (item.tentativas >= 3) {
+          marcarFalhaLocal(item.id);
+          continue;
+        }
+
+        marcarEnviandoLocal(item.id);
+
+        const file = new File([item.dados], item.nomeArquivo, { type: item.mimeType });
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+          const res = await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+
+          if (res.data?.anexo) {
+             setSavedFiles(prev => {
+               if (prev.some(a => a.id === res.data.anexo.id)) return prev;
+               return [...prev, res.data.anexo];
+             });
+          }
+          await deleteOfflineAttachment(item.id);
+          removerPendenteLocal(item.id);
+        } catch (err) {
+          console.error('Erro de upload ao sincronizar:', err);
+          await incrementarTentativa(item.id);
+          marcarFalhaLocal(item.id);
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao ler do IndexedDB para sincronização:', e);
+    }
+  };
+
+  const handleDeletePendingFoto = async (idx: number, offlineId?: string) => {
+    if (offlineId) {
+      await deleteOfflineAttachment(offlineId);
+    }
+    setFotos(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleDeletePendingVideo = async (idx: number, offlineId?: string) => {
+    if (offlineId) {
+      await deleteOfflineAttachment(offlineId);
+    }
+    setVideos(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleDeletePendingAnexo = async (idx: number, offlineId?: string) => {
+    if (offlineId) {
+      await deleteOfflineAttachment(offlineId);
+    }
+    setAnexos(prev => prev.filter((_, i) => i !== idx));
+  };
+
   // ── Computed values ──
   const totalEfetivo = profissionais.reduce((s, p) => s + p.quantidade, 0);
   const totalAnexos = savedFiles.length + fotos.length + videos.length + anexos.length;
@@ -341,7 +454,40 @@ export const DiarioDeObra: React.FC = () => {
   const handleEquipChange = (idx: number, field: keyof EquipamentoItem, val: string) => {
     setEquipamentos(prev => prev.map((e, i) => i === idx ? { ...e, [field]: val } : e));
   };
-  const handleFotosDrop = (files: File[]) => {
+  const handleFotosDrop = async (files: File[]) => {
+    if (!navigator.onLine) {
+      for (const file of files) {
+        try {
+          const offlineId = generateUUID();
+          const buffer = await readFileAsArrayBuffer(file);
+          const preview = URL.createObjectURL(file);
+          
+          await saveOfflineAttachment({
+            id: offlineId,
+            rdoId: rdoIdAtual || tempRdoId.current,
+            tipo: 'foto',
+            nomeArquivo: file.name,
+            mimeType: file.type || 'image/jpeg',
+            dados: buffer,
+            previewUrl: preview,
+            tentativas: 0,
+            criadoEm: new Date().toISOString()
+          });
+
+          setFotos(prev => [...prev, {
+            file,
+            preview,
+            legenda: '',
+            offlineId,
+            isOfflinePending: true,
+            uploadFalhou: false
+          }]);
+        } catch (err) {
+          console.error('Erro ao guardar foto offline:', err);
+        }
+      }
+      return;
+    }
     setFotos(prev => [...prev, ...files.map(f => ({ file: f, preview: URL.createObjectURL(f), legenda: '' }))]);
   };
   const handleFotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -349,7 +495,37 @@ export const DiarioDeObra: React.FC = () => {
     e.target.value = '';
   };
 
-  const handleVideosDrop = (files: File[]) => {
+  const handleVideosDrop = async (files: File[]) => {
+    if (!navigator.onLine) {
+      for (const file of files) {
+        try {
+          const offlineId = generateUUID();
+          const buffer = await readFileAsArrayBuffer(file);
+          
+          await saveOfflineAttachment({
+            id: offlineId,
+            rdoId: rdoIdAtual || tempRdoId.current,
+            tipo: 'video',
+            nomeArquivo: file.name,
+            mimeType: file.type || 'video/mp4',
+            dados: buffer,
+            tentativas: 0,
+            criadoEm: new Date().toISOString()
+          });
+
+          setVideos(prev => [...prev, {
+            file,
+            legenda: '',
+            offlineId,
+            isOfflinePending: true,
+            uploadFalhou: false
+          }]);
+        } catch (err) {
+          console.error('Erro ao guardar vídeo offline:', err);
+        }
+      }
+      return;
+    }
     setVideos(prev => [...prev, ...files.map(f => ({ file: f, legenda: '' }))]);
   };
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -357,7 +533,37 @@ export const DiarioDeObra: React.FC = () => {
     e.target.value = '';
   };
 
-  const handleAnexosDrop = (files: File[]) => {
+  const handleAnexosDrop = async (files: File[]) => {
+    if (!navigator.onLine) {
+      for (const file of files) {
+        try {
+          const offlineId = generateUUID();
+          const buffer = await readFileAsArrayBuffer(file);
+          
+          await saveOfflineAttachment({
+            id: offlineId,
+            rdoId: rdoIdAtual || tempRdoId.current,
+            tipo: 'anexo',
+            nomeArquivo: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            dados: buffer,
+            tentativas: 0,
+            criadoEm: new Date().toISOString()
+          });
+
+          setAnexos(prev => [...prev, {
+            file,
+            descricao: '',
+            offlineId,
+            isOfflinePending: true,
+            uploadFalhou: false
+          }]);
+        } catch (err) {
+          console.error('Erro ao guardar anexo offline:', err);
+        }
+      }
+      return;
+    }
     setAnexos(prev => [...prev, ...files.map(f => ({ file: f, descricao: '' }))]);
   };
   const handleAnexoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -442,14 +648,18 @@ export const DiarioDeObra: React.FC = () => {
       if (!rdoIdAtual) {
         // Criar RDO novo
         const res = await api.post('/rdos', { dataReferencia: data, dadosExtras }, { headers });
-        setRdoIdAtual(res.data.id);
-        await uploadMidas(res.data.id);
-        navigate(`/obras/${obraId}/rdos/${res.data.id}`, { replace: true });
+        const newId = res.data.id;
+        setRdoIdAtual(newId);
+        await updateRdoId(tempRdoId.current, newId);
+        await uploadMidas(newId);
+        await syncOfflineFiles(newId);
+        navigate(`/obras/${obraId}/rdos/${newId}`, { replace: true });
         showToast('💾 Rascunho criado!');
       } else {
         // Atualizar rascunho existente
         await api.put(`/rdos/${rdoIdAtual}/rascunho`, { dadosExtras }, { headers });
         await uploadMidas(rdoIdAtual!);
+        await syncOfflineFiles(rdoIdAtual!);
         showToast('💾 Rascunho salvo!');
       }
     } catch (err: any) {
@@ -472,11 +682,13 @@ export const DiarioDeObra: React.FC = () => {
         const res = await api.post('/rdos', { dataReferencia: data, dadosExtras: buildDadosExtras() }, { headers });
         idParaSubmeter = res.data.id;
         setRdoIdAtual(idParaSubmeter);
+        await updateRdoId(tempRdoId.current, idParaSubmeter!);
       } else {
         await api.put(`/rdos/${idParaSubmeter}/rascunho`, { dadosExtras: buildDadosExtras() }, { headers });
       }
 
       await uploadMidas(idParaSubmeter!);
+      await syncOfflineFiles(idParaSubmeter!);
 
       // Submeter com aprovador selecionado
       await api.put(`/rdos/${idParaSubmeter}/submeter`,
@@ -774,11 +986,42 @@ export const DiarioDeObra: React.FC = () => {
                    ))}
                    {/* Pending Fotos */}
                    {fotos.map((f, i) => (
-                      <div key={i} className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col">
+                      <div key={f.offlineId || i} className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col relative">
                          <img src={f.preview} alt="" className="w-full h-24 object-cover" />
+                         {/* Offline badge overlay */}
+                         {f.isOfflinePending && (
+                            <div className="absolute top-1 left-1 right-1 flex flex-col gap-1 z-10">
+                               {!f.isUploading && !f.uploadFalhou && (
+                                  <div className="flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-amber-600">
+                                     <span>☁️</span>
+                                     <span>Offline</span>
+                                  </div>
+                               )}
+                               {f.isUploading && (
+                                  <div className="flex items-center justify-center gap-1 bg-blue-500 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-blue-600 animate-pulse">
+                                     <span className="animate-spin mr-0.5">🔄</span>
+                                     <span>Enviando</span>
+                                  </div>
+                               )}
+                               {f.uploadFalhou && (
+                                  <div className="flex flex-col gap-1 items-center justify-center bg-red-600 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-red-700">
+                                     <div className="flex items-center gap-1">
+                                        <span>⚠️</span>
+                                        <span>Falha</span>
+                                     </div>
+                                     <button
+                                        onClick={(e) => { e.preventDefault(); syncOfflineFiles(rdoIdAtual || tempRdoId.current); }}
+                                        className="mt-0.5 bg-white text-red-600 px-2 py-0.5 rounded text-[8px] font-black hover:bg-gray-100 transition-colors shadow-sm"
+                                     >
+                                        Tentar
+                                     </button>
+                                  </div>
+                               )}
+                            </div>
+                         )}
                          <div className="p-2 flex gap-1 items-center bg-gray-50">
                             <input className="flex-1 text-xs px-2 py-1 border rounded" placeholder="Legenda..." value={f.legenda} onChange={e => setFotos(prev => prev.map((item, idx) => idx === i ? { ...item, legenda: e.target.value } : item))} />
-                            <button onClick={() => setFotos(prev => prev.filter((_, idx) => idx !== i))} className="text-red-500 p-1"><Trash2 size={14}/></button>
+                            <button onClick={() => handleDeletePendingFoto(i, f.offlineId)} className="text-red-500 p-1"><Trash2 size={14}/></button>
                          </div>
                       </div>
                    ))}
@@ -813,12 +1056,43 @@ export const DiarioDeObra: React.FC = () => {
                    ))}
                    {/* Pending Videos */}
                    {videos.map((v, i) => (
-                      <div key={i} className="bg-white border border-gray-200 p-2 rounded-lg flex items-center gap-2">
-                         <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium truncate">{v.file.name}</p>
-                            <input className="w-full text-xs px-1.5 py-1 border border-gray-100 rounded mt-1 bg-gray-50" placeholder="Legenda..." value={v.legenda} onChange={e => setVideos(prev => prev.map((item, idx) => idx === i ? { ...item, legenda: e.target.value } : item))} />
+                      <div key={v.offlineId || i} className="bg-white border border-gray-200 p-2 rounded-lg flex flex-col gap-2 relative">
+                         <div className="flex items-center justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                               <p className="text-xs font-medium truncate">{v.file.name}</p>
+                               <input className="w-full text-xs px-1.5 py-1 border border-gray-100 rounded mt-1 bg-gray-50" placeholder="Legenda..." value={v.legenda} onChange={e => setVideos(prev => prev.map((item, idx) => idx === i ? { ...item, legenda: e.target.value } : item))} />
+                            </div>
+                            <button onClick={() => handleDeletePendingVideo(i, v.offlineId)} className="text-red-500 p-1"><Trash2 size={14}/></button>
                          </div>
-                         <button onClick={() => setVideos(prev => prev.filter((_, idx) => idx !== i))} className="text-red-500 p-1"><Trash2 size={14}/></button>
+                         {/* Offline badge */}
+                         {v.isOfflinePending && (
+                            <div className="w-full flex items-center justify-between gap-2 border-t border-gray-100 pt-1.5">
+                               {!v.isUploading && !v.uploadFalhou && (
+                                  <div className="w-full flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-amber-600">
+                                     <span>☁️ Offline</span>
+                                  </div>
+                               )}
+                               {v.isUploading && (
+                                  <div className="w-full flex items-center justify-center gap-1 bg-blue-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-blue-600 animate-pulse">
+                                     <span className="animate-spin mr-0.5">🔄</span>
+                                     <span>Enviando</span>
+                                  </div>
+                               )}
+                               {v.uploadFalhou && (
+                                  <div className="w-full flex flex-col gap-1 items-center justify-center bg-red-600 text-white text-[10px] font-black uppercase py-1 rounded shadow border border-red-700">
+                                     <div className="flex items-center gap-1">
+                                        <span>⚠️ Falha</span>
+                                     </div>
+                                     <button
+                                        onClick={(e) => { e.preventDefault(); syncOfflineFiles(rdoIdAtual || tempRdoId.current); }}
+                                        className="bg-white text-red-600 px-2 py-0.5 rounded text-[8px] font-black hover:bg-gray-100 transition-colors shadow-sm"
+                                     >
+                                        Tentar
+                                     </button>
+                                  </div>
+                               )}
+                            </div>
+                         )}
                       </div>
                    ))}
                    {savedFiles.filter(a => a.mimeType?.startsWith('video/')).length === 0 && videos.length === 0 && (
@@ -855,13 +1129,44 @@ export const DiarioDeObra: React.FC = () => {
                    ))}
                    {/* Pending Documentos */}
                    {anexos.map((a, i) => (
-                      <div key={i} className="bg-white border border-gray-200 p-2 rounded-lg flex items-center gap-2">
-                         <span className="shrink-0 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">{getFileExt(a.file.name)}</span>
-                         <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium truncate">{a.file.name}</p>
-                            <input className="w-full text-xs px-1.5 py-1 border border-gray-100 rounded mt-1 bg-gray-50" placeholder="Info..." value={a.descricao} onChange={e => setAnexos(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: e.target.value } : item))} />
+                      <div key={a.offlineId || i} className="bg-white border border-gray-200 p-2 rounded-lg flex flex-col gap-2 relative">
+                         <div className="flex items-center justify-between gap-2">
+                            <span className="shrink-0 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">{getFileExt(a.file.name)}</span>
+                            <div className="flex-1 min-w-0">
+                               <p className="text-xs font-medium truncate">{a.file.name}</p>
+                               <input className="w-full text-xs px-1.5 py-1 border border-gray-100 rounded mt-1 bg-gray-50" placeholder="Info..." value={a.descricao} onChange={e => setAnexos(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: e.target.value } : item))} />
+                            </div>
+                            <button onClick={() => handleDeletePendingAnexo(i, a.offlineId)} className="text-red-500 p-1"><Trash2 size={14}/></button>
                          </div>
-                         <button onClick={() => setAnexos(prev => prev.filter((_, idx) => idx !== i))} className="text-red-500 p-1"><Trash2 size={14}/></button>
+                         {/* Offline badge */}
+                         {a.isOfflinePending && (
+                            <div className="w-full flex items-center justify-between gap-2 border-t border-gray-100 pt-1.5">
+                               {!a.isUploading && !a.uploadFalhou && (
+                                  <div className="w-full flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-amber-600">
+                                     <span>☁️ Offline</span>
+                                  </div>
+                               )}
+                               {a.isUploading && (
+                                  <div className="w-full flex items-center justify-center gap-1 bg-blue-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-blue-600 animate-pulse">
+                                     <span className="animate-spin mr-0.5">🔄</span>
+                                     <span>Enviando</span>
+                                  </div>
+                               )}
+                               {a.uploadFalhou && (
+                                  <div className="w-full flex flex-col gap-1 items-center justify-center bg-red-600 text-white text-[10px] font-black uppercase py-1 rounded shadow border border-red-700">
+                                     <div className="flex items-center gap-1">
+                                        <span>⚠️ Falha</span>
+                                     </div>
+                                     <button
+                                        onClick={(e) => { e.preventDefault(); syncOfflineFiles(rdoIdAtual || tempRdoId.current); }}
+                                        className="bg-white text-red-600 px-2 py-0.5 rounded text-[8px] font-black hover:bg-gray-100 transition-colors shadow-sm"
+                                     >
+                                        Tentar
+                                     </button>
+                                  </div>
+                               )}
+                            </div>
+                         )}
                       </div>
                    ))}
                    {savedFiles.filter(a => !a.mimeType?.startsWith('image/') && !a.mimeType?.startsWith('video/')).length === 0 && anexos.length === 0 && (
