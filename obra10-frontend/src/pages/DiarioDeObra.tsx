@@ -207,7 +207,7 @@ export const DiarioDeObra: React.FC = () => {
           const rdo = res.data;
           const extras = rdo.dadosExtras || {};
           setNomeObra(rdo.obra?.nome || '');
-          setRdoNumberStr(`RDO #${rdo.id.slice(-6).toUpperCase()}`);
+          setRdoNumberStr(`RDO #${rdo.sequencial ?? rdo.id.slice(-6).toUpperCase()}`);
           setData(extras.data || rdo.dataReferencia?.split('T')[0] || today);
           setResponsavel(extras.responsavel || '');
           setClimaManha(extras.climaManha || '');

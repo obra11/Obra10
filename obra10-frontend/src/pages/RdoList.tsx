@@ -181,6 +181,7 @@ export const RdoList: React.FC = () => {
     (r) =>
       format(new Date(r.dataReferencia), 'dd/MM/yyyy').includes(busca) ||
       r.status?.toLowerCase().includes(busca.toLowerCase()) ||
+      String(r.sequencial || '').includes(busca.replace('#', '')) ||
       r.id.toLowerCase().includes(busca.replace('#', '').toLowerCase()),
   );
 
@@ -734,7 +735,7 @@ export const RdoList: React.FC = () => {
                           navigate(`/obras/${obraAtiva?.id}/rdos/${rdo.id}`)
                         }
                       >
-                        #{rdo.id.slice(-6).toUpperCase()}
+                        #{rdo.sequencial ?? rdo.id.slice(-6).toUpperCase()}
                       </td>
                       <td
                         className="p-4 font-medium text-lunardeli-dark cursor-pointer"
@@ -847,7 +848,7 @@ export const RdoList: React.FC = () => {
                     >
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className="text-xs font-bold text-lunardeli-red">
-                          #{rdo.id.slice(-6).toUpperCase()}
+                          #{rdo.sequencial ?? rdo.id.slice(-6).toUpperCase()}
                         </span>
                         <span
                           className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${st.color}`}

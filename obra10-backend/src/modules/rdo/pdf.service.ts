@@ -53,6 +53,15 @@ export class PdfService {
     if (rdo.obra.empresa.id !== usuarioEmpresaId)
       throw new ForbiddenException('Acesso negado: este RDO não pertence à sua empresa.');
 
+    // Calcular número sequencial do RDO
+    const allRdos = await this.prisma.rdo.findMany({
+      where: { obraId: rdo.obraId, deletedAt: null },
+      select: { id: true },
+      orderBy: [{ dataReferencia: 'asc' }, { createdAt: 'asc' }],
+    });
+    const idx = allRdos.findIndex((r) => r.id === rdoId);
+    const sequencial = idx === -1 ? 1 : idx + 1;
+
     // Buscar anexos vinculados ao RDO
     const anexos = await this.prisma.anexo.findMany({
       where: { attachableId: rdoId, deletedAt: null },
@@ -143,8 +152,10 @@ export class PdfService {
 
     const pageH = ctx.page.getHeight();
     ctx.page.drawRectangle({ x: 0, y: pageH - 50, width: ctx.w, height: 50, color: RED });
-    ctx.page.drawText('RDO', { x: m.l, y: pageH - 31, size: 20, font: bold, color: WHITE });
-    ctx.page.drawText('Relatorio Diario de Obra', { x: m.l + 56, y: pageH - 31, size: 11, font: reg, color: rgb(1, 0.80, 0.80) });
+    const rdoLabel = `RDO #${sequencial}`;
+    const rdoLabelWidth = bold.widthOfTextAtSize(rdoLabel, 20);
+    ctx.page.drawText(rdoLabel, { x: m.l, y: pageH - 31, size: 20, font: bold, color: WHITE });
+    ctx.page.drawText('Relatorio Diario de Obra', { x: m.l + rdoLabelWidth + 10, y: pageH - 31, size: 11, font: reg, color: rgb(1, 0.80, 0.80) });
 
     ctx.y -= 10;
     drawText(nomeEmpresa.toUpperCase(), m.l, ctx.y, 10, bold, RED);

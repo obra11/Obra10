@@ -58,7 +58,18 @@ export class RdoService {
       where.status = RdoStatus.APROVADO;
     }
 
-    return this.prisma.rdo.findMany({
+    const allRdos = await this.prisma.rdo.findMany({
+      where: { obraId, deletedAt: null },
+      select: { id: true },
+      orderBy: [{ dataReferencia: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    const sequenceMap = new Map<string, number>();
+    allRdos.forEach((r, idx) => {
+      sequenceMap.set(r.id, idx + 1);
+    });
+
+    const list = await this.prisma.rdo.findMany({
       where,
       select: {
         id: true,
@@ -79,6 +90,11 @@ export class RdoService {
       },
       orderBy: { dataReferencia: 'desc' },
     });
+
+    return list.map(rdo => ({
+      ...rdo,
+      sequencial: sequenceMap.get(rdo.id) || 1,
+    }));
   }
 
   async findOne(id: string, obraId: string, obraRole?: any) {
@@ -105,6 +121,8 @@ export class RdoService {
       }
     }
 
+    const sequencial = await this.getSequencialNumber(id, obraId);
+
     let anexos = await this.prisma.anexo.findMany({
       where: { obraId, origem: 'RDO', attachableId: id, deletedAt: null },
     });
@@ -127,12 +145,14 @@ export class RdoService {
         ocorrencias: [],
         anexos: [],
         observacoes: null,
+        sequencial,
       };
     }
 
     return {
       ...rdo,
       anexos,
+      sequencial,
     };
   }
 
@@ -599,6 +619,16 @@ export class RdoService {
         rejeitadoMotivo: null,
       },
     });
+  }
+
+  async getSequencialNumber(rdoId: string, obraId: string): Promise<number> {
+    const allRdos = await this.prisma.rdo.findMany({
+      where: { obraId, deletedAt: null },
+      select: { id: true },
+      orderBy: [{ dataReferencia: 'asc' }, { createdAt: 'asc' }],
+    });
+    const idx = allRdos.findIndex((r) => r.id === rdoId);
+    return idx === -1 ? 1 : idx + 1;
   }
 
   // ===================== STATS PARA DASHBOARD =====================
