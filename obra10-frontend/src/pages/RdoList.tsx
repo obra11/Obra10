@@ -180,7 +180,8 @@ export const RdoList: React.FC = () => {
   const rdosFiltrados = rdos.filter(
     (r) =>
       format(new Date(r.dataReferencia), 'dd/MM/yyyy').includes(busca) ||
-      r.status?.toLowerCase().includes(busca.toLowerCase()),
+      r.status?.toLowerCase().includes(busca.toLowerCase()) ||
+      r.id.toLowerCase().includes(busca.replace('#', '').toLowerCase()),
   );
 
   return (
@@ -692,6 +693,7 @@ export const RdoList: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                <th className="p-4 font-semibold whitespace-nowrap">Nº RDO</th>
                 <th className="p-4 font-semibold whitespace-nowrap">Data</th>
                 <th className="p-4 font-semibold">Clima</th>
                 <th className="p-4 font-semibold">Terreno</th>
@@ -702,13 +704,13 @@ export const RdoList: React.FC = () => {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-gray-400">
+                  <td colSpan={6} className="p-8 text-center text-gray-400">
                     Carregando diários...
                   </td>
                 </tr>
               ) : rdosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-12 text-center">
+                  <td colSpan={6} className="p-12 text-center">
                     <FileText
                       className="mx-auto text-gray-300 mb-3"
                       size={40}
@@ -726,6 +728,14 @@ export const RdoList: React.FC = () => {
                       key={rdo.id}
                       className="hover:bg-gray-50/50 transition-colors"
                     >
+                      <td
+                        className="p-4 font-bold text-lunardeli-red cursor-pointer text-sm"
+                        onClick={() =>
+                          navigate(`/obras/${obraAtiva?.id}/rdos/${rdo.id}`)
+                        }
+                      >
+                        #{rdo.id.slice(-6).toUpperCase()}
+                      </td>
                       <td
                         className="p-4 font-medium text-lunardeli-dark cursor-pointer"
                         onClick={() =>
@@ -836,6 +846,9 @@ export const RdoList: React.FC = () => {
                       className="flex-1 min-w-0 text-left"
                     >
                       <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-xs font-bold text-lunardeli-red">
+                          #{rdo.id.slice(-6).toUpperCase()}
+                        </span>
                         <span
                           className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${st.color}`}
                         >

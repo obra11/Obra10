@@ -165,29 +165,52 @@ export const ModalColaboradorObra: React.FC<ModalColaboradorObraProps> = ({ obra
                     </div>
 
                     {temAcesso && temPermissaoGlobal && (
-                      <div className="ml-7 mt-3 flex items-center gap-4 p-3 bg-white rounded-md border border-red-100 shadow-sm">
-                        <label className="flex items-center cursor-pointer text-sm font-medium text-gray-600">
-                          <input 
-                            type="radio" 
-                            name={`nivel_${mod.slug}`} 
-                            value="VIEW" 
-                            checked={nivel === 'VIEW'} 
-                            onChange={() => handleChangeNivel(mod.slug, 'VIEW')}
-                            className="mr-2 text-blue-500 focus:ring-blue-500"
-                          />
-                          <Shield size={16} className="text-blue-500 mr-1"/> Apenas Visualizar
-                        </label>
-                        <label className="flex items-center cursor-pointer text-sm font-medium text-gray-600">
-                          <input 
-                            type="radio" 
-                            name={`nivel_${mod.slug}`} 
-                            value="EDIT" 
-                            checked={nivel === 'EDIT'} 
-                            onChange={() => handleChangeNivel(mod.slug, 'EDIT')}
-                            className="mr-2 text-green-500 focus:ring-green-500"
-                          />
-                          <ShieldAlert size={16} className="text-green-500 mr-1"/> Pode Editar / Criar
-                        </label>
+                      <div className="ml-7 mt-3 flex flex-col gap-2 p-3 bg-white rounded-md border border-red-100 shadow-sm">
+                        {mod.slug === 'RDO' ? (
+                          <div className="w-full">
+                            <select
+                              value={nivel}
+                              onChange={(e) => handleChangeNivel(mod.slug, e.target.value)}
+                              className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white font-medium text-gray-700 outline-none"
+                            >
+                              <option value="VIEW">Visualizar todos os diários</option>
+                              <option value="VIEW_APPROVED">Apenas diários aprovados (oculta rascunhos)</option>
+                              <option value="VIEW_PARTIAL_APPROVED">Visualização parcial — só clima e atividades de diários aprovados</option>
+                              <option value="EDIT">Criar e editar diários</option>
+                            </select>
+                            <p className="text-xs text-gray-500 mt-1.5 font-normal">
+                              {nivel === 'VIEW' && 'Permite visualizar todos os diários de obra, independente do status, sem permissão de alteração.'}
+                              {nivel === 'VIEW_APPROVED' && 'Permite visualizar apenas diários que foram finalizados e aprovados por gestor.'}
+                              {nivel === 'VIEW_PARTIAL_APPROVED' && 'Visualização parcial — só clima e atividades de diários aprovados.'}
+                              {nivel === 'EDIT' && 'Permissão total para criar, preencher e editar diários de obra.'}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-4">
+                            <label className="flex items-center cursor-pointer text-sm font-medium text-gray-600">
+                              <input 
+                                type="radio" 
+                                name={`nivel_${mod.slug}`} 
+                                value="VIEW" 
+                                checked={nivel === 'VIEW'} 
+                                onChange={() => handleChangeNivel(mod.slug, 'VIEW')}
+                                className="mr-2 text-blue-500 focus:ring-blue-500"
+                              />
+                              <Shield size={16} className="text-blue-500 mr-1"/> Apenas Visualizar
+                            </label>
+                            <label className="flex items-center cursor-pointer text-sm font-medium text-gray-600">
+                              <input 
+                                type="radio" 
+                                name={`nivel_${mod.slug}`} 
+                                value="EDIT" 
+                                checked={nivel === 'EDIT'} 
+                                onChange={() => handleChangeNivel(mod.slug, 'EDIT')}
+                                className="mr-2 text-green-500 focus:ring-green-500"
+                              />
+                              <ShieldAlert size={16} className="text-green-500 mr-1"/> Pode Editar / Criar
+                            </label>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

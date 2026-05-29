@@ -220,6 +220,7 @@ export class AuthService {
         minhasPermissoes: isPrivilegiado
           ? ['SUPER']
           : Object.keys(permissoesObj),
+        permissoes: isPrivilegiado ? { rdo: 'EDIT' } : permissoesObj,
       };
     });
   }

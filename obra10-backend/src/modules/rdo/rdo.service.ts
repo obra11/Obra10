@@ -50,9 +50,16 @@ export class RdoService {
     };
   }
 
-  async findAllByObra(obraId: string) {
+  async findAllByObra(obraId: string, obraRole?: any) {
+    const where: any = { obraId, deletedAt: null };
+
+    const permRdo = obraRole?.permissoes?.rdo;
+    if (permRdo === 'VIEW_APPROVED' || permRdo === 'VIEW_PARTIAL_APPROVED') {
+      where.status = RdoStatus.APROVADO;
+    }
+
     return this.prisma.rdo.findMany({
-      where: { obraId, deletedAt: null },
+      where,
       select: {
         id: true,
         obraId: true,
@@ -74,7 +81,7 @@ export class RdoService {
     });
   }
 
-  async findOne(id: string, obraId: string) {
+  async findOne(id: string, obraId: string, obraRole?: any) {
     const rdo = await this.prisma.rdo.findFirst({
       where: { id, obraId, deletedAt: null },
       include: {
@@ -89,9 +96,39 @@ export class RdoService {
     });
     if (!rdo) throw new NotFoundException('RDO não encontrado.');
 
-    const anexos = await this.prisma.anexo.findMany({
+    const permRdo = obraRole?.permissoes?.rdo;
+    if (permRdo === 'VIEW_APPROVED' || permRdo === 'VIEW_PARTIAL_APPROVED') {
+      if (rdo.status !== RdoStatus.APROVADO) {
+        throw new ForbiddenException(
+          'Você não tem permissão para acessar este diário de obra.',
+        );
+      }
+    }
+
+    let anexos = await this.prisma.anexo.findMany({
       where: { obraId, origem: 'RDO', attachableId: id, deletedAt: null },
     });
+
+    if (permRdo === 'VIEW_PARTIAL_APPROVED') {
+      const dadosExtras = (rdo.dadosExtras as any) || {};
+      const newDadosExtras = {
+        ...dadosExtras,
+        profissionais: [],
+        materiais: [],
+        equipamentos: [],
+        observacoes: null,
+      };
+      return {
+        ...rdo,
+        dadosExtras: newDadosExtras,
+        efetivos: [],
+        materiais: [],
+        equipamentos: [],
+        ocorrencias: [],
+        anexos: [],
+        observacoes: null,
+      };
+    }
 
     return {
       ...rdo,
@@ -100,11 +137,19 @@ export class RdoService {
   }
 
   // ===================== BLOQUEAR EDIÇÃO SE IMUTÁVEL =====================
-  private async getRdoBlockChecked(rdoId: string, obraId: string) {
+  private async getRdoBlockChecked(rdoId: string, obraId: string, user?: { role?: string; perfilGlobal?: string }) {
     const rdo = await this.prisma.rdo.findFirst({
       where: { id: rdoId, obraId, deletedAt: null },
     });
     if (!rdo) throw new NotFoundException('RDO não encontrado.');
+
+    const roleVal = user?.role || user?.perfilGlobal;
+    const isGestorOrAdmin = roleVal === 'GESTOR' || roleVal === 'SUPER_ADMIN';
+
+    if (isGestorOrAdmin) {
+      return rdo;
+    }
+
     if (
       rdo.status === RdoStatus.APROVADO ||
       rdo.status === RdoStatus.REJEITADO
@@ -153,8 +198,8 @@ export class RdoService {
   }
 
   // ===================== SALVAR RASCUNHO COMPLETO (PUT /rdos/:id/rascunho) =====================
-  async saveRascunho(rdoId: string, obraId: string, payload: any) {
-    await this.getRdoBlockChecked(rdoId, obraId);
+  async saveRascunho(rdoId: string, obraId: string, payload: any, user?: any) {
+    const rdo = await this.getRdoBlockChecked(rdoId, obraId, user);
 
     const dadosExtras = payload.dadosExtras;
     if (!dadosExtras)
@@ -170,11 +215,22 @@ export class RdoService {
     // Injetar versão canônica para garantir compatibilidade futura
     const extrasVersioned = { ...dadosExtras, versao: DADOS_EXTRAS_VERSAO };
 
+    const roleVal = user?.role || user?.perfilGlobal;
+    const isGestorOrAdmin = roleVal === 'GESTOR' || roleVal === 'SUPER_ADMIN';
+
+    let status: RdoStatus = RdoStatus.EM_PREENCHIMENTO;
+    if (
+      isGestorOrAdmin &&
+      (rdo.status === RdoStatus.APROVADO || rdo.status === RdoStatus.SUBMETIDO)
+    ) {
+      status = rdo.status;
+    }
+
     return this.prisma.rdo.update({
       where: { id: rdoId },
       data: {
         dadosExtras: extrasVersioned,
-        status: RdoStatus.EM_PREENCHIMENTO,
+        status,
       },
     });
   }
@@ -500,6 +556,48 @@ export class RdoService {
     return this.prisma.rdo.update({
       where: { id },
       data: { status: RdoStatus.RASCUNHO, rejeitadoMotivo: null },
+    });
+  }
+
+  // ===================== REABRIR (reabrir aprovado/submetido por gestor) =====================
+  async reabrir(rdoId: string, empresaId: string, user: any) {
+    const rdo = await this.prisma.rdo.findUnique({
+      where: { id: rdoId },
+      include: { obra: { select: { empresaId: true } } },
+    });
+    if (!rdo || rdo.deletedAt) throw new NotFoundException('RDO não encontrado.');
+
+    if (rdo.obra.empresaId !== empresaId) {
+      throw new ForbiddenException('Acesso negado: RDO não pertence à sua empresa.');
+    }
+
+    const roleVal = user?.role || user?.perfilGlobal;
+    const isGestorOrAdmin = roleVal === 'GESTOR' || roleVal === 'SUPER_ADMIN';
+    if (!isGestorOrAdmin) {
+      throw new ForbiddenException(
+        'Apenas gestores ou administradores podem reabrir um RDO.',
+      );
+    }
+
+    if (rdo.status === RdoStatus.RASCUNHO) {
+      throw new BadRequestException('O RDO já está em rascunho.');
+    }
+
+    if (
+      rdo.status !== RdoStatus.APROVADO &&
+      rdo.status !== RdoStatus.SUBMETIDO
+    ) {
+      throw new BadRequestException(
+        'Apenas RDOs APROVADOS ou SUBMETIDOS podem ser reabertos.',
+      );
+    }
+
+    return this.prisma.rdo.update({
+      where: { id: rdoId },
+      data: {
+        status: RdoStatus.RASCUNHO,
+        rejeitadoMotivo: null,
+      },
     });
   }
 

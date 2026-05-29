@@ -39,6 +39,7 @@ export interface Obra {
   status: string;
   imageUrl?: string;
   minhasPermissoes?: string[];
+  permissoes?: Record<string, string>;
 }
 
 interface AuthContextType {

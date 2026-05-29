@@ -68,7 +68,7 @@ export class RdoController {
   // ── LEITURA ──────────────────────────────────────────────────────────────────
   @Get()
   async listar(@Req() req: any) {
-    return this.rdoService.findAllByObra(req.headers['x-obra-id']);
+    return this.rdoService.findAllByObra(req.headers['x-obra-id'], req.obraRole);
   }
 
   // ── PDF DO RDO APROVADO ───────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ export class RdoController {
 
   @Get(':id')
   async buscarUm(@Param('id') id: string, @Req() req: any) {
-    return this.rdoService.findOne(id, req.headers['x-obra-id']);
+    return this.rdoService.findOne(id, req.headers['x-obra-id'], req.obraRole);
   }
 
   // ── CRUD RDO BASE ─────────────────────────────────────────────────────────────
@@ -108,7 +108,7 @@ export class RdoController {
     @Body() dto: SaveRascunhoDto,
     @Req() req: any,
   ) {
-    return this.rdoService.saveRascunho(id, req.headers['x-obra-id'], dto);
+    return this.rdoService.saveRascunho(id, req.headers['x-obra-id'], dto, req.user);
   }
 
   // ── REGISTROS FILHOS ──────────────────────────────────────────────────────────
@@ -228,5 +228,12 @@ export class RdoController {
   @Put(':id/revisar')
   async revisar(@Param('id') id: string, @Req() req: any) {
     return this.rdoService.revisar(id, req.headers['x-obra-id']);
+  }
+
+  /** PUT /rdos/:id/reabrir — Reabre um RDO aprovado ou submetido (somente gestor/admin). */
+  @Put(':id/reabrir')
+  @UseGuards(JwtAuthGuard)
+  async reabrir(@Param('id') id: string, @Req() req: any) {
+    return this.rdoService.reabrir(id, req.user.empresaId, req.user);
   }
 }

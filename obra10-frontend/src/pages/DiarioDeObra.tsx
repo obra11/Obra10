@@ -7,6 +7,7 @@ import {
   Plus, Trash2, Video, FileText, Image as ImageIcon, Save, Send, RotateCcw
 } from 'lucide-react';
 import { RdoShareBar } from '../components/RdoShareBar';
+import { useAuth } from '../context/AuthContext';
 import {
   generateUUID,
   saveOfflineAttachment,
@@ -149,6 +150,7 @@ const InputField = ({ label, type = 'text', ...props }: any) => (
 export const DiarioDeObra: React.FC = () => {
   const { obraId, rdoId } = useParams<{ obraId: string; rdoId: string }>();
   const navigate = useNavigate();
+  const { user, obras } = useAuth();
   const tempRdoId = useRef(rdoId || generateUUID());
   const [initLoading, setInitLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -158,6 +160,12 @@ export const DiarioDeObra: React.FC = () => {
   const [toast, setToast] = useState<string | null>(null);
   const [rdoNumberStr, setRdoNumberStr] = useState<string>(generateRdoNumber());
   const [motivoRejeicaoBackend, setMotivoRejeicaoBackend] = useState<string>('');
+
+  const obraAtual = (user as any)?.obrasPermitidas?.find((o: any) => (o.obraId || o.id) === obraId) || obras?.find((o: any) => o.id === obraId);
+  const permRdo = obraAtual?.permissoes?.rdo;
+  const isGestorOrAdmin = user?.perfilGlobal === 'GESTOR' || user?.perfilGlobal === 'SUPER_ADMIN' || (user as any)?.role === 'GESTOR' || (user as any)?.role === 'SUPER_ADMIN';
+  const isReadOnly = permRdo === 'VIEW' || permRdo === 'VIEW_APPROVED' || permRdo === 'VIEW_PARTIAL_APPROVED' || (status !== 'rascunho' && !isGestorOrAdmin);
+  const isPartialView = permRdo === 'VIEW_PARTIAL_APPROVED';
 
   // ── Colaboradores da obra (para select de aprovador) ──
   interface Colaborador { id: string; nome: string; email: string; perfilGlobal: string; }
@@ -810,6 +818,23 @@ export const DiarioDeObra: React.FC = () => {
     }
   };
 
+  // ── Reabrir (reabrir aprovado/submetido por gestor) ──
+  const handleReabrir = async () => {
+    if (!obraId || !rdoIdAtual) return;
+    if (!window.confirm('Deseja realmente reabrir este RDO? Ele voltará para o status de Rascunho.')) return;
+    try {
+      setSaving(true);
+      await api.put(`/rdos/${rdoIdAtual}/reabrir`, {}, { headers: { 'x-obra-id': obraId } });
+      setStatus('rascunho');
+      showToast('🔄 RDO reaberto com sucesso!');
+      window.location.reload();
+    } catch (err: any) {
+      showToast(`❌ ${err?.response?.data?.message || 'Erro ao reabrir RDO'}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // ── Render Helpers (movidos para o escopo global) ──
 
   const renderWeatherShift = (label: string, stateVal: string, setter: (v: string) => void) => (
@@ -817,9 +842,10 @@ export const DiarioDeObra: React.FC = () => {
       <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
       <div className="relative">
         <select
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white appearance-none text-gray-700"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white appearance-none text-gray-700 disabled:bg-gray-50 disabled:text-gray-500"
           value={stateVal}
           onChange={(e) => setter(e.target.value)}
+          disabled={isReadOnly}
         >
           <option value="" disabled>Selecione...</option>
           {WEATHER_OPTIONS.map(opt => (
@@ -898,13 +924,13 @@ export const DiarioDeObra: React.FC = () => {
         <SectionContainer>
           <SectionTitle icon={ClipboardList} title="1. Informações gerais" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <InputField label="Data" type="date" value={data} onChange={(e: any) => setData(e.target.value)} />
+            <InputField label="Data" type="date" value={data} onChange={(e: any) => setData(e.target.value)} disabled={isReadOnly} />
             <InputField label="Número RDO" value={rdoNumberStr} disabled />
             <div className="sm:col-span-2">
-               <InputField label="Nome da obra" value={nomeObra} onChange={(e: any) => setNomeObra(e.target.value)} placeholder="Ex: Edifício Residencial Solar" />
+               <InputField label="Nome da obra" value={nomeObra} onChange={(e: any) => setNomeObra(e.target.value)} placeholder="Ex: Edifício Residencial Solar" disabled={isReadOnly} />
             </div>
             <div className="sm:col-span-2">
-               <InputField label="Responsável técnico" value={responsavel} onChange={(e: any) => setResponsavel(e.target.value)} placeholder="Nome do engenheiro ou responsável" />
+               <InputField label="Responsável técnico" value={responsavel} onChange={(e: any) => setResponsavel(e.target.value)} placeholder="Nome do engenheiro ou responsável" disabled={isReadOnly} />
             </div>
           </div>
         </SectionContainer>
@@ -918,126 +944,133 @@ export const DiarioDeObra: React.FC = () => {
             {renderWeatherShift('Noite', climaNoite, setClimaNoite)}
           </div>
           <div className="grid grid-cols-2 gap-4">
-             <InputField label="Temperatura mínima (°C)" type="number" value={tempMin} onChange={(e: any) => setTempMin(e.target.value)} placeholder="Ex: 18" />
-             <InputField label="Temperatura máxima (°C)" type="number" value={tempMax} onChange={(e: any) => setTempMax(e.target.value)} placeholder="Ex: 32" />
+             <InputField label="Temperatura mínima (°C)" type="number" value={tempMin} onChange={(e: any) => setTempMin(e.target.value)} placeholder="Ex: 18" disabled={isReadOnly} />
+             <InputField label="Temperatura máxima (°C)" type="number" value={tempMax} onChange={(e: any) => setTempMax(e.target.value)} placeholder="Ex: 32" disabled={isReadOnly} />
           </div>
         </SectionContainer>
 
         {/* 3. Presentes na vistoria */}
-        <SectionContainer>
-          <SectionTitle icon={Users} title="3. Presentes na vistoria" />
-          <div className="space-y-3">
-            {pessoas.map((p, i) => (
-              <div key={i} className="flex flex-col sm:flex-row gap-3 items-start sm:items-end p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <div className="flex-1 w-full"><InputField label="Nome" value={p.nome} onChange={(e: any) => handlePessoaChange(i, 'nome', e.target.value)} placeholder="Nome completo" /></div>
-                <div className="flex-1 w-full"><InputField label="Função" value={p.funcao} onChange={(e: any) => handlePessoaChange(i, 'funcao', e.target.value)} placeholder="Ex: Engenheiro" /></div>
-                <div className="flex-1 w-full"><InputField label="Empresa" value={p.empresa} onChange={(e: any) => handlePessoaChange(i, 'empresa', e.target.value)} placeholder="Ex: Obra 10" /></div>
-                <button type="button" onClick={() => setPessoas(prev => prev.filter((_, idx) => idx !== i))} className="p-2 mb-0.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18} /></button>
-              </div>
-            ))}
-          </div>
-          <button type="button" onClick={() => setPessoas(prev => [...prev, { nome: '', funcao: '', empresa: '' }])} className="mt-4 flex items-center gap-2 text-sm font-semibold text-lunardeli-red hover:text-red-700">
-            <Plus size={16} /> Adicionar pessoa
-          </button>
-        </SectionContainer>
-
-        {/* 4. Efetivo */}
-        <SectionContainer>
-          <SectionTitle icon={Hammer} title="4. Efetivo de mão de obra" badge={<span className="ml-2 px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">{totalEfetivo} trabalhadores</span>} />
-          <div className="flex flex-col sm:flex-row gap-3 items-end mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
-             <div className="flex-1 w-full">
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Profissional</label>
-                <div className="relative">
-                   <select
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white appearance-none text-gray-700"
-                      value={selectedProfissional}
-                      onChange={(e) => setSelectedProfissional(e.target.value)}
-                   >
-                      <option value="" disabled>Selecione um profissional...</option>
-                      {DEFAULT_PROFISSIONAIS.filter(
-                        p => !profissionais.some(added => added.nome.toLowerCase() === p.toLowerCase())
-                      ).map(p => <option key={p} value={p}>{p}</option>)}
-                      <option value="outro" className="font-bold text-lunardeli-red">Outro (Digitar manualmente)...</option>
-                   </select>
-                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
-                      <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
-                   </div>
-                </div>
-             </div>
-
-             {selectedProfissional === 'outro' && (
-                <div className="flex-1 w-full">
-                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome da função</label>
-                   <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-lunardeli-red outline-none" value={novoProfissional} onChange={e => setNovoProfissional(e.target.value)} placeholder="Ex: Operador de Munck" />
-                </div>
-             )}
-
-             <div className="w-full sm:w-24">
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Qtd</label>
-                <input type="number" min="1" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-lunardeli-red text-center outline-none" value={selectedQuantidade} onChange={e => setSelectedQuantidade(e.target.value)} />
-             </div>
-
-             <button type="button" onClick={handleAddProfissional} disabled={!selectedProfissional || (selectedProfissional === 'outro' && !novoProfissional.trim())} className="w-full sm:w-auto px-4 py-2 bg-lunardeli-red text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">
-                Adicionar
-             </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-             {profissionais.length === 0 && (
-                <div className="col-span-1 border-2 border-dashed border-gray-200 rounded-lg p-6 flex items-center justify-center text-gray-400 text-sm font-medium">Nenhum profissional em campo</div>
-             )}
-             {profissionais.map((p, i) => (
-                <div key={i} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
-                   <span className="text-sm font-medium text-gray-700">{p.nome}</span>
-                   <div className="flex items-center gap-2">
-                      <button onClick={() => handleProfQty(i, -1)} className="w-7 h-7 flex items-center justify-center bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 font-bold">−</button>
-                      <input type="number" min="0" value={p.quantidade} onChange={e => handleProfQtyDirect(i, e.target.value)} className="w-12 text-center text-sm font-semibold border border-gray-300 rounded py-1 outline-none focus:border-lunardeli-red" />
-                      <button onClick={() => handleProfQty(i, 1)} className="w-7 h-7 flex items-center justify-center bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 font-bold">+</button>
-                      <button onClick={() => setProfissionais(prev => prev.filter((_, idx) => idx !== i))} className="p-1.5 text-red-400 hover:text-red-500 rounded"><Trash2 size={16}/></button>
-                   </div>
-                </div>
-             ))}
-          </div>
-        </SectionContainer>
-
-        {/* 5. Materiais e Equipamentos */}
-        <SectionContainer>
-          <SectionTitle icon={Drill} title="5. Materiais e equipamentos" />
-          
-          <div className="mb-6">
-            <h3 className="text-sm font-bold text-gray-800 mb-3">Materiais utilizados</h3>
-            <div className="space-y-2">
-              {materiais.map((m, i) => (
-                <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                  <input className="flex-[2] min-w-0 border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-lunardeli-red border" placeholder="Material..." value={m.material} onChange={e => handleMaterialChange(i, 'material', e.target.value)} />
-                  <input className="w-full sm:w-20 border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red border" placeholder="Qtd" value={m.qtd} onChange={e => handleMaterialChange(i, 'qtd', e.target.value)} />
-                  <select className="w-full sm:w-24 border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red border bg-white" value={m.unidade} onChange={e => handleMaterialChange(i, 'unidade', e.target.value)}>
-                    {UNIDADES.map(u => <option key={u}>{u}</option>)}
-                  </select>
-                  <input className="flex-[2] min-w-0 border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-lunardeli-red border" placeholder="Nota..." value={m.observacao} onChange={e => handleMaterialChange(i, 'observacao', e.target.value)} />
-                  <button onClick={() => setMateriais(prev => prev.filter((_, idx) => idx !== i))} className="p-1.5 text-red-500 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
+        {!isPartialView && (
+          <SectionContainer>
+            <SectionTitle icon={Users} title="3. Presentes na vistoria" />
+            <div className="space-y-3">
+              {pessoas.map((p, i) => (
+                <div key={i} className="flex flex-col sm:flex-row gap-3 items-start sm:items-end p-4 bg-gray-50 rounded-xl border border-gray-200">
+                  <div className="flex-1 w-full"><InputField label="Nome" value={p.nome} onChange={(e: any) => handlePessoaChange(i, 'nome', e.target.value)} placeholder="Nome completo" disabled={isReadOnly} /></div>
+                  <div className="flex-1 w-full"><InputField label="Função" value={p.funcao} onChange={(e: any) => handlePessoaChange(i, 'funcao', e.target.value)} placeholder="Ex: Engenheiro" disabled={isReadOnly} /></div>
+                  <div className="flex-1 w-full"><InputField label="Empresa" value={p.empresa} onChange={(e: any) => handlePessoaChange(i, 'empresa', e.target.value)} placeholder="Ex: Obra 10" disabled={isReadOnly} /></div>
+                  <button type="button" onClick={() => setPessoas(prev => prev.filter((_, idx) => idx !== i))} className="p-2 mb-0.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" disabled={isReadOnly}><Trash2 size={18} /></button>
                 </div>
               ))}
             </div>
-            <button type="button" onClick={() => setMateriais(prev => [...prev, { material: '', qtd: '', unidade: 'un', observacao: '' }])} className="mt-3 text-sm font-semibold text-lunardeli-red hover:text-red-700">+ Adicionar material</button>
-          </div>
-          <div>
-             <h3 className="text-sm font-bold text-gray-800 mb-3">Equipamentos do dia</h3>
-             <div className="space-y-2">
-               {equipamentos.map((eq, i) => (
-                  <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                     <input className="flex-[2] min-w-0 border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-lunardeli-red border" placeholder="Equipamento..." value={eq.equipamento} onChange={e => handleEquipChange(i, 'equipamento', e.target.value)} />
-                     <input className="w-full sm:w-24 border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red border" placeholder="Qtd" value={eq.qtd} onChange={e => handleEquipChange(i, 'qtd', e.target.value)} />
-                     <select className="w-full sm:flex-[1] border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red border bg-white" value={eq.status} onChange={e => handleEquipChange(i, 'status', e.target.value)}>
-                        {EQUIP_STATUS.map(s => <option key={s}>{s}</option>)}
+            <button type="button" onClick={() => setPessoas(prev => [...prev, { nome: '', funcao: '', empresa: '' }])} className="mt-4 flex items-center gap-2 text-sm font-semibold text-lunardeli-red hover:text-red-700 disabled:opacity-50" disabled={isReadOnly}>
+              <Plus size={16} /> Adicionar pessoa
+            </button>
+          </SectionContainer>
+        )}
+
+        {/* 4. Efetivo */}
+        {!isPartialView && (
+          <SectionContainer>
+            <SectionTitle icon={Hammer} title="4. Efetivo de mão de obra" badge={<span className="ml-2 px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">{totalEfetivo} trabalhadores</span>} />
+            <div className="flex flex-col sm:flex-row gap-3 items-end mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
+               <div className="flex-1 w-full">
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Profissional</label>
+                  <div className="relative">
+                     <select
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white appearance-none text-gray-700 disabled:bg-gray-50 disabled:text-gray-500"
+                        value={selectedProfissional}
+                        onChange={(e) => setSelectedProfissional(e.target.value)}
+                        disabled={isReadOnly}
+                     >
+                        <option value="" disabled>Selecione um profissional...</option>
+                        {DEFAULT_PROFISSIONAIS.filter(
+                          p => !profissionais.some(added => added.nome.toLowerCase() === p.toLowerCase())
+                        ).map(p => <option key={p} value={p}>{p}</option>)}
+                        <option value="outro" className="font-bold text-lunardeli-red">Outro (Digitar manualmente)...</option>
                      </select>
-                     <button onClick={() => setEquipamentos(prev => prev.filter((_, idx) => idx !== i))} className="p-1.5 text-red-500 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
+                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                        <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+                     </div>
+                  </div>
+               </div>
+
+               {selectedProfissional === 'outro' && (
+                  <div className="flex-1 w-full">
+                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome da função</label>
+                     <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-lunardeli-red outline-none disabled:bg-gray-50 disabled:text-gray-500" value={novoProfissional} onChange={e => setNovoProfissional(e.target.value)} placeholder="Ex: Operador de Munck" disabled={isReadOnly} />
+                  </div>
+               )}
+
+               <div className="w-full sm:w-24">
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Qtd</label>
+                  <input type="number" min="1" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-lunardeli-red text-center outline-none disabled:bg-gray-50 disabled:text-gray-500" value={selectedQuantidade} onChange={e => setSelectedQuantidade(e.target.value)} disabled={isReadOnly} />
+               </div>
+
+               <button type="button" onClick={handleAddProfissional} disabled={isReadOnly || !selectedProfissional || (selectedProfissional === 'outro' && !novoProfissional.trim())} className="w-full sm:w-auto px-4 py-2 bg-lunardeli-red text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">
+                  Adicionar
+               </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+               {profissionais.length === 0 && (
+                  <div className="col-span-1 border-2 border-dashed border-gray-200 rounded-lg p-6 flex items-center justify-center text-gray-400 text-sm font-medium">Nenhum profissional em campo</div>
+               )}
+               {profissionais.map((p, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
+                     <span className="text-sm font-medium text-gray-700">{p.nome}</span>
+                     <div className="flex items-center gap-2">
+                        <button onClick={() => handleProfQty(i, -1)} className="w-7 h-7 flex items-center justify-center bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 font-bold disabled:opacity-50 disabled:cursor-not-allowed" disabled={isReadOnly}>−</button>
+                        <input type="number" min="0" value={p.quantidade} onChange={e => handleProfQtyDirect(i, e.target.value)} className="w-12 text-center text-sm font-semibold border border-gray-300 rounded py-1 outline-none focus:border-lunardeli-red disabled:bg-gray-50 disabled:text-gray-500" disabled={isReadOnly} />
+                        <button onClick={() => handleProfQty(i, 1)} className="w-7 h-7 flex items-center justify-center bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 font-bold disabled:opacity-50 disabled:cursor-not-allowed" disabled={isReadOnly}>+</button>
+                        <button onClick={() => setProfissionais(prev => prev.filter((_, idx) => idx !== i))} className="p-1.5 text-red-400 hover:text-red-500 rounded disabled:opacity-50" disabled={isReadOnly}><Trash2 size={16}/></button>
+                     </div>
                   </div>
                ))}
-             </div>
-             <button type="button" onClick={() => setEquipamentos(prev => [...prev, { equipamento: '', qtd: '', status: 'Operando' }])} className="mt-3 text-sm font-semibold text-lunardeli-red hover:text-red-700">+ Adicionar equipamento</button>
-          </div>
-        </SectionContainer>
+            </div>
+          </SectionContainer>
+        )}
+
+        {/* 5. Materiais e Equipamentos */}
+        {!isPartialView && (
+          <SectionContainer>
+            <SectionTitle icon={Drill} title="5. Materiais e equipamentos" />
+            
+            <div className="mb-6">
+              <h3 className="text-sm font-bold text-gray-800 mb-3">Materiais utilizados</h3>
+              <div className="space-y-2">
+                {materiais.map((m, i) => (
+                  <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <input className="flex-[2] min-w-0 border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-lunardeli-red border disabled:bg-gray-50" placeholder="Material..." value={m.material} onChange={e => handleMaterialChange(i, 'material', e.target.value)} disabled={isReadOnly} />
+                    <input className="w-full sm:w-20 border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red border disabled:bg-gray-50" placeholder="Qtd" value={m.qtd} onChange={e => handleMaterialChange(i, 'qtd', e.target.value)} disabled={isReadOnly} />
+                    <select className="w-full sm:w-24 border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red border bg-white disabled:bg-gray-50" value={m.unidade} onChange={e => handleMaterialChange(i, 'unidade', e.target.value)} disabled={isReadOnly}>
+                      {UNIDADES.map(u => <option key={u}>{u}</option>)}
+                    </select>
+                    <input className="flex-[2] min-w-0 border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-lunardeli-red border disabled:bg-gray-50" placeholder="Nota..." value={m.observacao} onChange={e => handleMaterialChange(i, 'observacao', e.target.value)} disabled={isReadOnly} />
+                    <button onClick={() => setMateriais(prev => prev.filter((_, idx) => idx !== i))} className="p-1.5 text-red-500 hover:bg-red-50 rounded disabled:opacity-50" disabled={isReadOnly}><Trash2 size={16}/></button>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={() => setMateriais(prev => [...prev, { material: '', qtd: '', unidade: 'un', observacao: '' }])} className="mt-3 text-sm font-semibold text-lunardeli-red hover:text-red-700 disabled:opacity-50" disabled={isReadOnly}>+ Adicionar material</button>
+            </div>
+            <div>
+               <h3 className="text-sm font-bold text-gray-800 mb-3">Equipamentos do dia</h3>
+               <div className="space-y-2">
+                 {equipamentos.map((eq, i) => (
+                    <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                       <input className="flex-[2] min-w-0 border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-lunardeli-red border disabled:bg-gray-50" placeholder="Equipamento..." value={eq.equipamento} onChange={e => handleEquipChange(i, 'equipamento', e.target.value)} disabled={isReadOnly} />
+                       <input className="w-full sm:w-24 border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red border disabled:bg-gray-50" placeholder="Qtd" value={eq.qtd} onChange={e => handleEquipChange(i, 'qtd', e.target.value)} disabled={isReadOnly} />
+                       <select className="w-full sm:flex-[1] border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red border bg-white disabled:bg-gray-50" value={eq.status} onChange={e => handleEquipChange(i, 'status', e.target.value)} disabled={isReadOnly}>
+                          {EQUIP_STATUS.map(s => <option key={s}>{s}</option>)}
+                       </select>
+                       <button onClick={() => setEquipamentos(prev => prev.filter((_, idx) => idx !== i))} className="p-1.5 text-red-500 hover:bg-red-50 rounded disabled:opacity-50" disabled={isReadOnly}><Trash2 size={16}/></button>
+                    </div>
+                 ))}
+               </div>
+               <button type="button" onClick={() => setEquipamentos(prev => [...prev, { equipamento: '', qtd: '', status: 'Operando' }])} className="mt-3 text-sm font-semibold text-lunardeli-red hover:text-red-700 disabled:opacity-50" disabled={isReadOnly}>+ Adicionar equipamento</button>
+            </div>
+          </SectionContainer>
+        )}
 
         {/* 6 & 7. Atividades */}
         <div className="flex flex-col gap-6">
@@ -1054,6 +1087,7 @@ export const DiarioDeObra: React.FC = () => {
                        const newVal = e.target.value;
                        setAtividadesExecutadas(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: newVal } : item));
                      }} 
+                     disabled={isReadOnly}
                    />
                    <select 
                      className="w-full sm:w-40 border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red bg-white text-gray-700 font-medium" 
@@ -1062,6 +1096,7 @@ export const DiarioDeObra: React.FC = () => {
                        const newVal = e.target.value as 'em andamento' | 'pausado' | 'finalizada';
                        setAtividadesExecutadas(prev => prev.map((item, idx) => idx === i ? { ...item, status: newVal } : item));
                      }}
+                     disabled={isReadOnly}
                    >
                      <option value="em andamento">Em andamento</option>
                      <option value="pausado">Pausado</option>
@@ -1072,6 +1107,7 @@ export const DiarioDeObra: React.FC = () => {
                      onClick={() => setAtividadesExecutadas(prev => prev.filter((_, idx) => idx !== i))} 
                      className="p-1.5 text-red-500 hover:bg-red-50 rounded self-end sm:self-auto shrink-0"
                      title="Remover atividade"
+                     disabled={isReadOnly}
                    >
                      <Trash2 size={16}/>
                    </button>
@@ -1085,394 +1121,441 @@ export const DiarioDeObra: React.FC = () => {
                <button 
                  type="button" 
                  onClick={() => setAtividadesExecutadas(prev => [...prev, { descricao: '', status: 'em andamento' }])} 
-                 className="text-sm font-semibold text-lunardeli-red hover:text-red-700 flex items-center gap-1 mt-1"
+                 className="text-sm font-semibold text-lunardeli-red hover:text-red-700 flex items-center gap-1 mt-1 disabled:opacity-50"
+                 disabled={isReadOnly}
                >
                  + Adicionar atividade
                </button>
              </div>
            </SectionContainer>
            
-           <SectionContainer>
-             <SectionTitle icon={FileSpreadsheet} title="7. Atividades Pendentes" />
-             <textarea rows={8} className="w-full border border-gray-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red resize-y" placeholder="O que faltou concluir..." value={atividadesPendentes} onChange={e => setAtividadesPendentes(e.target.value)}></textarea>
-           </SectionContainer>
+           {!isPartialView && (
+             <SectionContainer>
+               <SectionTitle icon={FileSpreadsheet} title="7. Atividades Pendentes" />
+               <textarea rows={8} className="w-full border border-gray-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red resize-y" placeholder="O que faltou concluir..." value={atividadesPendentes} onChange={e => setAtividadesPendentes(e.target.value)} disabled={isReadOnly}></textarea>
+             </SectionContainer>
+           )}
         </div>
 
         {/* 8. Mídias e Anexos */}
-        <SectionContainer>
-          <SectionTitle icon={Paperclip} title="8. Mídias e Anexos" />
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-             {/* Fotos */}
-             <div 
-                className="bg-gray-50 border border-gray-200 rounded-xl p-4 transition-colors hover:border-lunardeli-red border-dashed drag-active:bg-red-50"
-                onDragOver={onDragOver}
-                onDrop={(e) => { e.preventDefault(); handleFotosDrop(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))); }}
-             >
-                <div className="flex justify-between items-center mb-4">
-                   <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><ImageIcon size={16}/> Fotos</h3>
-                   <input type="file" multiple accept="image/*" ref={fotoInputRef} className="hidden" onChange={handleFotoUpload} capture="environment" />
-                   <button onClick={() => fotoInputRef.current?.click()} className="text-xs font-semibold text-lunardeli-red hover:underline">+ Upload</button>
-                </div>
-                <div className="space-y-3">
-                   {/* Saved Fotos */}
-                   {savedFiles.filter(a => a.mimeType?.startsWith('image/')).map((sf) => (
-                      <div key={sf.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col relative group">
-                         <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer">
-                            <img src={getFileUrl(sf.urlS3)} alt={sf.nomeOriginal || 'Foto'} className="w-full h-24 object-cover hover:opacity-90 transition-opacity" />
-                         </a>
-                         <div className="p-2 flex justify-between items-center bg-green-50 border-t border-gray-100">
-                            <span className="text-[10px] font-bold text-green-700 truncate max-w-[70%]" title={sf.nomeOriginal || 'Salvo'}>
-                               {sf.nomeOriginal || 'Salvo'}
-                            </span>
-                            <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors" title="Excluir do RDO"><Trash2 size={14}/></button>
-                         </div>
-                      </div>
-                   ))}
-                   {/* Pending Fotos */}
-                   {fotos.map((f, i) => (
-                      <div key={f.offlineId || i} className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col relative">
-                         <img src={f.preview} alt="" className="w-full h-24 object-cover" />
-                         {/* Offline badge overlay */}
-                         {f.isOfflinePending && (
-                            <div className="absolute top-1 left-1 right-1 flex flex-col gap-1 z-10">
-                               {!f.isUploading && !f.uploadFalhou && (
-                                  <div className="flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-amber-600">
-                                     <span>☁️</span>
-                                     <span>Offline</span>
-                                  </div>
-                               )}
-                               {f.isUploading && (
-                                  <div className="flex items-center justify-center gap-1 bg-blue-500 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-blue-600 animate-pulse">
-                                     <span className="animate-spin mr-0.5">🔄</span>
-                                     <span>Enviando</span>
-                                  </div>
-                               )}
-                               {f.uploadFalhou && (
-                                  <div className="flex flex-col gap-1 items-center justify-center bg-red-600 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-red-700">
-                                     <div className="flex items-center gap-1">
-                                        <span>⚠️</span>
-                                        <span>Falha</span>
-                                     </div>
-                                     <button
-                                        onClick={(e) => { e.preventDefault(); syncOfflineFiles(rdoIdAtual || tempRdoId.current); }}
-                                        className="mt-0.5 bg-white text-red-600 px-2 py-0.5 rounded text-[8px] font-black hover:bg-gray-100 transition-colors shadow-sm"
-                                     >
-                                        Tentar
-                                     </button>
-                                  </div>
-                               )}
-                            </div>
-                         )}
-                         <div className="p-2 flex gap-1 items-center bg-gray-50">
-                            <input className="flex-1 text-xs px-2 py-1 border rounded" placeholder="Legenda..." value={f.legenda} onChange={e => setFotos(prev => prev.map((item, idx) => idx === i ? { ...item, legenda: e.target.value } : item))} />
-                            <button onClick={() => handleDeletePendingFoto(i, f.offlineId)} className="text-red-500 p-1"><Trash2 size={14}/></button>
-                         </div>
-                      </div>
-                   ))}
-                   {savedFiles.filter(a => a.mimeType?.startsWith('image/')).length === 0 && fotos.length === 0 && (
-                      <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhuma foto</div>
-                   )}
-                </div>
-             </div>
+        {!isPartialView && (
+          <SectionContainer>
+            <SectionTitle icon={Paperclip} title="8. Mídias e Anexos" />
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+               {/* Fotos */}
+               <div 
+                  className="bg-gray-50 border border-gray-200 rounded-xl p-4 transition-colors hover:border-lunardeli-red border-dashed drag-active:bg-red-50"
+                  onDragOver={onDragOver}
+                  onDrop={(e) => { e.preventDefault(); if (isReadOnly) return; handleFotosDrop(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))); }}
+               >
+                  <div className="flex justify-between items-center mb-4">
+                     <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><ImageIcon size={16}/> Fotos</h3>
+                     <input type="file" multiple accept="image/*" ref={fotoInputRef} className="hidden" onChange={handleFotoUpload} capture="environment" />
+                     <button onClick={() => fotoInputRef.current?.click()} className="text-xs font-semibold text-lunardeli-red hover:underline disabled:opacity-50" disabled={isReadOnly}>+ Upload</button>
+                  </div>
+                  <div className="space-y-3">
+                     {/* Saved Fotos */}
+                     {savedFiles.filter(a => a.mimeType?.startsWith('image/')).map((sf) => (
+                        <div key={sf.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col relative group">
+                           <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer">
+                              <img src={getFileUrl(sf.urlS3)} alt={sf.nomeOriginal || 'Foto'} className="w-full h-24 object-cover hover:opacity-90 transition-opacity" />
+                           </a>
+                           <div className="p-2 flex justify-between items-center bg-green-50 border-t border-gray-100">
+                              <span className="text-[10px] font-bold text-green-700 truncate max-w-[70%]" title={sf.nomeOriginal || 'Salvo'}>
+                                 {sf.nomeOriginal || 'Salvo'}
+                              </span>
+                              <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors disabled:opacity-50" title="Excluir do RDO" disabled={isReadOnly}><Trash2 size={14}/></button>
+                           </div>
+                        </div>
+                     ))}
+                     {/* Pending Fotos */}
+                     {fotos.map((f, i) => (
+                        <div key={f.offlineId || i} className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col relative">
+                           <img src={f.preview} alt="" className="w-full h-24 object-cover" />
+                           {/* Offline badge overlay */}
+                           {f.isOfflinePending && (
+                              <div className="absolute top-1 left-1 right-1 flex flex-col gap-1 z-10">
+                                 {!f.isUploading && !f.uploadFalhou && (
+                                    <div className="flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-amber-600">
+                                       <span>☁️</span>
+                                       <span>Offline</span>
+                                    </div>
+                                 )}
+                                 {f.isUploading && (
+                                    <div className="flex items-center justify-center gap-1 bg-blue-500 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-blue-600 animate-pulse">
+                                       <span className="animate-spin mr-0.5">🔄</span>
+                                       <span>Enviando</span>
+                                    </div>
+                                 )}
+                                 {f.uploadFalhou && (
+                                    <div className="flex flex-col gap-1 items-center justify-center bg-red-600 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-red-700">
+                                       <div className="flex items-center gap-1">
+                                          <span>⚠️</span>
+                                          <span>Falha</span>
+                                       </div>
+                                       <button
+                                          onClick={(e) => { e.preventDefault(); syncOfflineFiles(rdoIdAtual || tempRdoId.current); }}
+                                          className="mt-0.5 bg-white text-red-600 px-2 py-0.5 rounded text-[8px] font-black hover:bg-gray-100 transition-colors shadow-sm"
+                                       >
+                                          Tentar
+                                       </button>
+                                    </div>
+                                 )}
+                              </div>
+                           )}
+                           <div className="p-2 flex gap-1 items-center bg-gray-50">
+                              <input className="flex-1 text-xs px-2 py-1 border rounded" placeholder="Legenda..." value={f.legenda} onChange={e => setFotos(prev => prev.map((item, idx) => idx === i ? { ...item, legenda: e.target.value } : item))} disabled={isReadOnly} />
+                              <button onClick={() => handleDeletePendingFoto(i, f.offlineId)} className="text-red-500 p-1 disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
+                           </div>
+                        </div>
+                     ))}
+                     {savedFiles.filter(a => a.mimeType?.startsWith('image/')).length === 0 && fotos.length === 0 && (
+                        <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhuma foto</div>
+                     )}
+                  </div>
+               </div>
 
-             {/* Videos */}
-             <div 
-                className="bg-gray-50 border border-gray-200 rounded-xl p-4 transition-colors hover:border-lunardeli-red border-dashed"
-                onDragOver={onDragOver}
-                onDrop={(e) => { e.preventDefault(); handleVideosDrop(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('video/'))); }}
-             >
-                <div className="flex justify-between items-center mb-4">
-                   <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><Video size={16}/> Vídeos</h3>
-                   <input type="file" multiple accept="video/*" ref={videoInputRef} className="hidden" onChange={handleVideoUpload} capture="environment" />
-                   <button onClick={() => videoInputRef.current?.click()} className="text-xs font-semibold text-lunardeli-red hover:underline">+ Upload</button>
-                </div>
-                <div className="space-y-2">
-                   {/* Saved Videos */}
-                   {savedFiles.filter(a => a.mimeType?.startsWith('video/')).map((sf) => (
-                      <div key={sf.id} className="bg-white border border-gray-200 p-2 rounded-lg flex items-center justify-between gap-2 bg-green-50/40">
-                         <div className="flex-1 min-w-0">
-                            <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-blue-600 hover:underline truncate block">
-                               🎥 {sf.nomeOriginal || 'Vídeo Salvo'}
-                            </a>
-                         </div>
-                         <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors"><Trash2 size={14}/></button>
-                      </div>
-                   ))}
-                   {/* Pending Videos */}
-                   {videos.map((v, i) => (
-                      <div key={v.offlineId || i} className="bg-white border border-gray-200 p-2 rounded-lg flex flex-col gap-2 relative">
-                         <div className="flex items-center justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                               <p className="text-xs font-medium truncate">{v.file.name}</p>
-                               <input className="w-full text-xs px-1.5 py-1 border border-gray-100 rounded mt-1 bg-gray-50" placeholder="Legenda..." value={v.legenda} onChange={e => setVideos(prev => prev.map((item, idx) => idx === i ? { ...item, legenda: e.target.value } : item))} />
-                            </div>
-                            <button onClick={() => handleDeletePendingVideo(i, v.offlineId)} className="text-red-500 p-1"><Trash2 size={14}/></button>
-                         </div>
-                         {/* Offline badge */}
-                         {v.isOfflinePending && (
-                            <div className="w-full flex items-center justify-between gap-2 border-t border-gray-100 pt-1.5">
-                               {!v.isUploading && !v.uploadFalhou && (
-                                  <div className="w-full flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-amber-600">
-                                     <span>☁️ Offline</span>
-                                  </div>
-                               )}
-                               {v.isUploading && (
-                                  <div className="w-full flex items-center justify-center gap-1 bg-blue-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-blue-600 animate-pulse">
-                                     <span className="animate-spin mr-0.5">🔄</span>
-                                     <span>Enviando</span>
-                                  </div>
-                               )}
-                               {v.uploadFalhou && (
-                                  <div className="w-full flex flex-col gap-1 items-center justify-center bg-red-600 text-white text-[10px] font-black uppercase py-1 rounded shadow border border-red-700">
-                                     <div className="flex items-center gap-1">
-                                        <span>⚠️ Falha</span>
-                                     </div>
-                                     <button
-                                        onClick={(e) => { e.preventDefault(); syncOfflineFiles(rdoIdAtual || tempRdoId.current); }}
-                                        className="bg-white text-red-600 px-2 py-0.5 rounded text-[8px] font-black hover:bg-gray-100 transition-colors shadow-sm"
-                                     >
-                                        Tentar
-                                     </button>
-                                  </div>
-                               )}
-                            </div>
-                         )}
-                      </div>
-                   ))}
-                   {savedFiles.filter(a => a.mimeType?.startsWith('video/')).length === 0 && videos.length === 0 && (
-                      <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhum vídeo</div>
-                   )}
-                </div>
-             </div>
+               {/* Videos */}
+               <div 
+                  className="bg-gray-50 border border-gray-200 rounded-xl p-4 transition-colors hover:border-lunardeli-red border-dashed"
+                  onDragOver={onDragOver}
+                  onDrop={(e) => { e.preventDefault(); if (isReadOnly) return; handleVideosDrop(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('video/'))); }}
+               >
+                  <div className="flex justify-between items-center mb-4">
+                     <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><Video size={16}/> Vídeos</h3>
+                     <input type="file" multiple accept="video/*" ref={videoInputRef} className="hidden" onChange={handleVideoUpload} capture="environment" />
+                     <button onClick={() => videoInputRef.current?.click()} className="text-xs font-semibold text-lunardeli-red hover:underline disabled:opacity-50" disabled={isReadOnly}>+ Upload</button>
+                  </div>
+                  <div className="space-y-2">
+                     {/* Saved Videos */}
+                     {savedFiles.filter(a => a.mimeType?.startsWith('video/')).map((sf) => (
+                        <div key={sf.id} className="bg-white border border-gray-200 p-2 rounded-lg flex items-center justify-between gap-2 bg-green-50/40">
+                           <div className="flex-1 min-w-0">
+                              <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-blue-600 hover:underline truncate block">
+                                 🎥 {sf.nomeOriginal || 'Vídeo Salvo'}
+                              </a>
+                           </div>
+                           <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
+                        </div>
+                     ))}
+                     {/* Pending Videos */}
+                     {videos.map((v, i) => (
+                        <div key={v.offlineId || i} className="bg-white border border-gray-200 p-2 rounded-lg flex flex-col gap-2 relative">
+                           <div className="flex items-center justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                 <p className="text-xs font-medium truncate">{v.file.name}</p>
+                                 <input className="w-full text-xs px-1.5 py-1 border border-gray-100 rounded mt-1 bg-gray-50" placeholder="Legenda..." value={v.legenda} onChange={e => setVideos(prev => prev.map((item, idx) => idx === i ? { ...item, legenda: e.target.value } : item))} disabled={isReadOnly} />
+                              </div>
+                              <button onClick={() => handleDeletePendingVideo(i, v.offlineId)} className="text-red-500 p-1 disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
+                           </div>
+                           {/* Offline badge */}
+                           {v.isOfflinePending && (
+                              <div className="w-full flex items-center justify-between gap-2 border-t border-gray-100 pt-1.5">
+                                 {!v.isUploading && !v.uploadFalhou && (
+                                    <div className="w-full flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-amber-600">
+                                       <span>☁️ Offline</span>
+                                    </div>
+                                 )}
+                                 {v.isUploading && (
+                                    <div className="w-full flex items-center justify-center gap-1 bg-blue-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-blue-600 animate-pulse">
+                                       <span className="animate-spin mr-0.5">🔄</span>
+                                       <span>Enviando</span>
+                                    </div>
+                                 )}
+                                 {v.uploadFalhou && (
+                                    <div className="w-full flex flex-col gap-1 items-center justify-center bg-red-600 text-white text-[10px] font-black uppercase py-1 rounded shadow border border-red-700">
+                                       <div className="flex items-center gap-1">
+                                          <span>⚠️ Falha</span>
+                                       </div>
+                                       <button
+                                          onClick={(e) => { e.preventDefault(); syncOfflineFiles(rdoIdAtual || tempRdoId.current); }}
+                                          className="bg-white text-red-600 px-2 py-0.5 rounded text-[8px] font-black hover:bg-gray-100 transition-colors shadow-sm"
+                                       >
+                                          Tentar
+                                       </button>
+                                    </div>
+                                 )}
+                              </div>
+                           )}
+                        </div>
+                     ))}
+                     {savedFiles.filter(a => a.mimeType?.startsWith('video/')).length === 0 && videos.length === 0 && (
+                        <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhum vídeo</div>
+                     )}
+                  </div>
+               </div>
 
-             {/* Documentos */}
-             <div 
-                className="bg-gray-50 border border-gray-200 rounded-xl p-4 transition-colors hover:border-lunardeli-red border-dashed"
-                onDragOver={onDragOver}
-                onDrop={(e) => { e.preventDefault(); handleAnexosDrop(Array.from(e.dataTransfer.files)); }}
-             >
-                <div className="flex justify-between items-center mb-4">
-                   <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><FileText size={16}/> Outros anexos</h3>
-                   <input type="file" multiple ref={anexoInputRef} className="hidden" onChange={handleAnexoUpload} />
-                   <button onClick={() => anexoInputRef.current?.click()} className="text-xs font-semibold text-lunardeli-red hover:underline">+ Upload</button>
-                </div>
-                <div className="space-y-2">
-                   {/* Saved Documentos */}
-                   {savedFiles.filter(a => !a.mimeType?.startsWith('image/') && !a.mimeType?.startsWith('video/')).map((sf) => (
-                      <div key={sf.id} className="bg-white border border-gray-200 p-2 rounded-lg flex items-center justify-between gap-2 bg-green-50/40">
-                         <span className="shrink-0 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                            {getFileExt(sf.nomeOriginal || 'FILE')}
-                         </span>
-                         <div className="flex-1 min-w-0">
-                            <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-blue-600 hover:underline truncate block">
-                               {sf.nomeOriginal || 'Documento'}
-                            </a>
-                         </div>
-                         <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors"><Trash2 size={14}/></button>
-                      </div>
-                   ))}
-                   {/* Pending Documentos */}
-                   {anexos.map((a, i) => (
-                      <div key={a.offlineId || i} className="bg-white border border-gray-200 p-2 rounded-lg flex flex-col gap-2 relative">
-                         <div className="flex items-center justify-between gap-2">
-                            <span className="shrink-0 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">{getFileExt(a.file.name)}</span>
-                            <div className="flex-1 min-w-0">
-                               <p className="text-xs font-medium truncate">{a.file.name}</p>
-                               <input className="w-full text-xs px-1.5 py-1 border border-gray-100 rounded mt-1 bg-gray-50" placeholder="Info..." value={a.descricao} onChange={e => setAnexos(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: e.target.value } : item))} />
-                            </div>
-                            <button onClick={() => handleDeletePendingAnexo(i, a.offlineId)} className="text-red-500 p-1"><Trash2 size={14}/></button>
-                         </div>
-                         {/* Offline badge */}
-                         {a.isOfflinePending && (
-                            <div className="w-full flex items-center justify-between gap-2 border-t border-gray-100 pt-1.5">
-                               {!a.isUploading && !a.uploadFalhou && (
-                                  <div className="w-full flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-amber-600">
-                                     <span>☁️ Offline</span>
-                                  </div>
-                               )}
-                               {a.isUploading && (
-                                  <div className="w-full flex items-center justify-center gap-1 bg-blue-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-blue-600 animate-pulse">
-                                     <span className="animate-spin mr-0.5">🔄</span>
-                                     <span>Enviando</span>
-                                  </div>
-                               )}
-                               {a.uploadFalhou && (
-                                  <div className="w-full flex flex-col gap-1 items-center justify-center bg-red-600 text-white text-[10px] font-black uppercase py-1 rounded shadow border border-red-700">
-                                     <div className="flex items-center gap-1">
-                                        <span>⚠️ Falha</span>
-                                     </div>
-                                     <button
-                                        onClick={(e) => { e.preventDefault(); syncOfflineFiles(rdoIdAtual || tempRdoId.current); }}
-                                        className="bg-white text-red-600 px-2 py-0.5 rounded text-[8px] font-black hover:bg-gray-100 transition-colors shadow-sm"
-                                     >
-                                        Tentar
-                                     </button>
-                                  </div>
-                               )}
-                            </div>
-                         )}
-                      </div>
-                   ))}
-                   {savedFiles.filter(a => !a.mimeType?.startsWith('image/') && !a.mimeType?.startsWith('video/')).length === 0 && anexos.length === 0 && (
-                      <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhum anexo</div>
-                   )}
-                </div>
-             </div>
-          </div>
+               {/* Documentos */}
+               <div 
+                  className="bg-gray-50 border border-gray-200 rounded-xl p-4 transition-colors hover:border-lunardeli-red border-dashed"
+                  onDragOver={onDragOver}
+                  onDrop={(e) => { e.preventDefault(); if (isReadOnly) return; handleAnexosDrop(Array.from(e.dataTransfer.files)); }}
+               >
+                  <div className="flex justify-between items-center mb-4">
+                     <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><FileText size={16}/> Outros anexos</h3>
+                     <input type="file" multiple ref={anexoInputRef} className="hidden" onChange={handleAnexoUpload} />
+                     <button onClick={() => anexoInputRef.current?.click()} className="text-xs font-semibold text-lunardeli-red hover:underline disabled:opacity-50" disabled={isReadOnly}>+ Upload</button>
+                  </div>
+                  <div className="space-y-2">
+                     {/* Saved Documentos */}
+                     {savedFiles.filter(a => !a.mimeType?.startsWith('image/') && !a.mimeType?.startsWith('video/')).map((sf) => (
+                        <div key={sf.id} className="bg-white border border-gray-200 p-2 rounded-lg flex items-center justify-between gap-2 bg-green-50/40">
+                           <span className="shrink-0 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                              {getFileExt(sf.nomeOriginal || 'FILE')}
+                           </span>
+                           <div className="flex-1 min-w-0">
+                              <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-blue-600 hover:underline truncate block">
+                                 {sf.nomeOriginal || 'Documento'}
+                              </a>
+                           </div>
+                           <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
+                        </div>
+                     ))}
+                     {/* Pending Documentos */}
+                     {anexos.map((a, i) => (
+                        <div key={a.offlineId || i} className="bg-white border border-gray-200 p-2 rounded-lg flex flex-col gap-2 relative">
+                           <div className="flex items-center justify-between gap-2">
+                              <span className="shrink-0 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">{getFileExt(a.file.name)}</span>
+                              <div className="flex-1 min-w-0">
+                                 <p className="text-xs font-medium truncate">{a.file.name}</p>
+                                 <input className="w-full text-xs px-1.5 py-1 border border-gray-100 rounded mt-1 bg-gray-50" placeholder="Info..." value={a.descricao} onChange={e => setAnexos(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: e.target.value } : item))} disabled={isReadOnly} />
+                              </div>
+                              <button onClick={() => handleDeletePendingAnexo(i, a.offlineId)} className="text-red-500 p-1 disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
+                           </div>
+                           {/* Offline badge */}
+                           {a.isOfflinePending && (
+                              <div className="w-full flex items-center justify-between gap-2 border-t border-gray-100 pt-1.5">
+                                 {!a.isUploading && !a.uploadFalhou && (
+                                    <div className="w-full flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-amber-600">
+                                       <span>☁️ Offline</span>
+                                    </div>
+                                 )}
+                                 {a.isUploading && (
+                                    <div className="w-full flex items-center justify-center gap-1 bg-blue-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-blue-600 animate-pulse">
+                                       <span className="animate-spin mr-0.5">🔄</span>
+                                       <span>Enviando</span>
+                                    </div>
+                                 )}
+                                 {a.uploadFalhou && (
+                                    <div className="w-full flex flex-col gap-1 items-center justify-center bg-red-600 text-white text-[10px] font-black uppercase py-1 rounded shadow border border-red-700">
+                                       <div className="flex items-center gap-1">
+                                          <span>⚠️ Falha</span>
+                                       </div>
+                                       <button
+                                          onClick={(e) => { e.preventDefault(); syncOfflineFiles(rdoIdAtual || tempRdoId.current); }}
+                                          className="bg-white text-red-600 px-2 py-0.5 rounded text-[8px] font-black hover:bg-gray-100 transition-colors shadow-sm"
+                                       >
+                                          Tentar
+                                       </button>
+                                    </div>
+                                 )}
+                              </div>
+                           )}
+                        </div>
+                     ))}
+                     {savedFiles.filter(a => !a.mimeType?.startsWith('image/') && !a.mimeType?.startsWith('video/')).length === 0 && anexos.length === 0 && (
+                        <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhum anexo</div>
+                     )}
+                  </div>
+               </div>
+            </div>
 
-        </SectionContainer>
+          </SectionContainer>
+        )}
 
         {/* 9. Observações */}
-        <SectionContainer>
-          <SectionTitle icon={MessageSquare} title="9. Observações gerais" />
-          <textarea rows={4} className="w-full border border-gray-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red" placeholder="Detalhes adicionais, comentários, paralisações..." value={observacoes} onChange={e => setObservacoes(e.target.value)}></textarea>
-        </SectionContainer>
+        {!isPartialView && (
+          <SectionContainer>
+            <SectionTitle icon={MessageSquare} title="9. Observações gerais" />
+            <textarea rows={4} className="w-full border border-gray-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red" placeholder="Detalhes adicionais, comentários, paralisações..." value={observacoes} onChange={e => setObservacoes(e.target.value)} disabled={isReadOnly}></textarea>
+          </SectionContainer>
+        )}
 
         {/* 10. Validação e Aprovação */}
-        <SectionContainer>
-          <SectionTitle icon={ShieldCheck} title="10. Validação e Aprovação" />
+        {!isPartialView && (
+          <SectionContainer>
+            <SectionTitle icon={ShieldCheck} title="10. Validação e Aprovação" />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-6 rounded-xl border border-gray-200">
-             <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-6 rounded-xl border border-gray-200">
+               <div className="space-y-4">
 
-               {/* Seletor de aprovador — visível somente em rascunho */}
-               {status === 'rascunho' && (
-                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                     Enviar para aprovação de
-                   </label>
-                   <div className="relative">
-                     <select
-                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white appearance-none text-gray-700"
-                       value={aprovadorIdSelecionado}
-                       onChange={e => setAprovadorIdSelecionado(e.target.value)}
-                     >
-                       <option value="">— Selecionar aprovador (opcional) —</option>
-                       {colaboradores.map(c => (
-                         <option key={c.id} value={c.id}>{c.nome} ({c.perfilGlobal})</option>
-                       ))}
-                     </select>
-                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
-                       <svg className="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
-                     </div>
-                   </div>
-                   {aprovadorIdSelecionado && (
-                     <p className="text-xs text-green-600 mt-1 font-medium">
-                       ✉️ Um e-mail será enviado ao aprovador selecionado.
-                     </p>
-                   )}
-                 </div>
-               )}
-
-               <div className="space-y-3">
+                 {/* Seletor de aprovador — visível somente em rascunho */}
                  {status === 'rascunho' && (
-                   <div className="flex gap-3">
-                     <button
-                       onClick={handleEnviar}
-                       disabled={saving}
-                       className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-lunardeli-red text-white text-sm font-bold rounded-lg hover:bg-red-700 shadow-sm transition-colors disabled:opacity-60"
-                     >
-                       <Send size={16} /> {saving ? 'Enviando...' : 'Enviar para aprovação'}
-                     </button>
-                     <button
-                       onClick={handleSalvarRascunho}
-                       disabled={saving}
-                       className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
-                     >
-                       <Save size={16} /> {saving ? 'Salvando...' : 'Salvar'}
-                     </button>
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                       Enviar para aprovação de
+                     </label>
+                     <div className="relative">
+                       <select
+                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white appearance-none text-gray-700"
+                         value={aprovadorIdSelecionado}
+                         onChange={e => setAprovadorIdSelecionado(e.target.value)}
+                         disabled={isReadOnly}
+                       >
+                         <option value="">— Selecionar aprovador (opcional) —</option>
+                         {colaboradores.map(c => (
+                           <option key={c.id} value={c.id}>{c.nome} ({c.perfilGlobal})</option>
+                         ))}
+                       </select>
+                       <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                         <svg className="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
+                       </div>
+                     </div>
+                     {aprovadorIdSelecionado && (
+                       <p className="text-xs text-green-600 mt-1 font-medium">
+                         ✉️ Um e-mail será enviado ao aprovador selecionado.
+                       </p>
+                     )}
                    </div>
                  )}
 
-                 {status === 'pendente' && (
-                   <div className="space-y-4">
-                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm font-medium">
-                       ⏳ Aguardando aprovação do gestor.
-                     </div>
+                 <div className="space-y-3">
+                   {status === 'rascunho' && (
                      <div className="flex gap-3">
-                       <button onClick={handleAprovar} className="flex-1 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 shadow-sm transition-colors text-center">
-                         ✅ Aprovar RDO
+                       <button
+                         onClick={handleEnviar}
+                         disabled={saving}
+                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-lunardeli-red text-white text-sm font-bold rounded-lg hover:bg-red-700 shadow-sm transition-colors disabled:opacity-60"
+                       >
+                         <Send size={16} /> {saving ? 'Enviando...' : 'Enviar para aprovação'}
                        </button>
                        <button
-                         onClick={handleRejeitar}
-                         disabled={!motivoRejeicao.trim()}
-                         className={`px-4 py-2 ${motivoRejeicao.trim() ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'} text-sm font-bold rounded-lg transition-colors`}
+                         onClick={handleSalvarRascunho}
+                         disabled={saving}
+                         className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
                        >
-                         ❌ Reprovar
+                         <Save size={16} /> {saving ? 'Salvando...' : 'Salvar'}
                        </button>
                      </div>
-                     <textarea
-                       className="w-full border border-gray-300 p-2 text-sm rounded bg-white"
-                       rows={2}
-                       placeholder="Motivo da reprovação (obrigatório para reprovar)"
-                       value={motivoRejeicao}
-                       onChange={e => setMotivoRejeicao(e.target.value)}
-                     />
-                   </div>
-                 )}
+                   )}
 
-                 {status === 'aprovado' && (
-                  <div className="space-y-3">
-                    <div className="p-4 bg-green-100 border border-green-300 rounded-lg text-green-800">
-                      <p className="font-bold flex items-center gap-2"><ShieldCheck size={18}/> RDO Aprovado</p>
-                      <p className="text-sm mt-1 opacity-80">{dataAprovacao}</p>
-                    </div>
-                    {/* Barra de exportação / compartilhamento */}
-                    {rdoIdAtual && obraId && (
-                      <div className="flex flex-col gap-2">
-                        <p className="text-xs font-bold uppercase tracking-wide text-gray-400">Exportar ou Compartilhar</p>
-                        <RdoShareBar
-                          rdoId={rdoIdAtual}
-                          obraId={obraId}
-                          rdoLabel={`${rdoNumberStr.replace(/[^a-zA-Z0-9]/g, '_')}_${nomeObra.replace(/[^a-zA-Z0-9]/g, '_')}`}
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                 {status === 'rejeitado' && (
-                   <div className="p-4 bg-red-100 border border-red-300 rounded-lg text-red-800 space-y-3">
-                     <div>
-                       <p className="font-bold flex items-center gap-2 text-red-900">❌ RDO Reprovado</p>
-                       <p className="text-sm mt-1">{motivoRejeicaoBackend || motivoRejeicao}</p>
+                   {status === 'pendente' && (
+                     <div className="space-y-4">
+                       <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm font-medium">
+                         ⏳ Aguardando aprovação do gestor.
+                       </div>
+                       <div className="flex gap-3">
+                         <button onClick={handleAprovar} className="flex-1 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 shadow-sm transition-colors text-center">
+                           ✅ Aprovar RDO
+                         </button>
+                         <button
+                           onClick={handleRejeitar}
+                           disabled={!motivoRejeicao.trim()}
+                           className={`px-4 py-2 ${motivoRejeicao.trim() ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'} text-sm font-bold rounded-lg transition-colors`}
+                         >
+                           ❌ Reprovar
+                         </button>
+                       </div>
+                       <textarea
+                         className="w-full border border-gray-300 p-2 text-sm rounded bg-white"
+                         rows={2}
+                         placeholder="Motivo da reprovação (obrigatório para reprovar)"
+                         value={motivoRejeicao}
+                         onChange={e => setMotivoRejeicao(e.target.value)}
+                         disabled={isReadOnly}
+                       />
+                       {isGestorOrAdmin && (
+                         <div className="flex gap-3 pt-2 border-t border-gray-200 mt-2">
+                           <button
+                             onClick={handleSalvarRascunho}
+                             disabled={saving}
+                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-sm transition-colors"
+                           >
+                             <Save size={16} /> {saving ? 'Salvando...' : 'Salvar Alterações'}
+                           </button>
+                           <button
+                             onClick={handleReabrir}
+                             disabled={saving}
+                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-orange-500 text-white text-sm font-bold rounded-lg hover:bg-orange-600 shadow-sm transition-colors"
+                           >
+                             <RotateCcw size={16} /> Reabrir RDO
+                           </button>
+                         </div>
+                       )}
                      </div>
-                     <button onClick={handleRevisar} className="flex items-center gap-2 text-sm font-bold text-red-700 hover:underline">
-                       <RotateCcw size={14}/> Revisar e Reenviar
-                     </button>
-                   </div>
-                 )}
-               </div>
-             </div>
+                   )}
 
-             {/* Resumo do RDO */}
-             <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col justify-center">
-                 <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 text-center">Resumo do RDO</h4>
-                 <div className="grid grid-cols-2 gap-4 text-center">
-                    <div>
-                       <div className="text-3xl font-black text-lunardeli-red">{totalEfetivo}</div>
-                       <div className="text-xs font-medium text-gray-500 mt-1">Trabalhadores</div>
+                   {status === 'aprovado' && (
+                    <div className="space-y-3">
+                      <div className="p-4 bg-green-100 border border-green-300 rounded-lg text-green-800">
+                        <p className="font-bold flex items-center gap-2"><ShieldCheck size={18}/> RDO Aprovado</p>
+                        <p className="text-sm mt-1 opacity-80">{dataAprovacao}</p>
+                      </div>
+                      {/* Barra de exportação / compartilhamento */}
+                      {rdoIdAtual && obraId && (
+                        <div className="flex flex-col gap-2">
+                          <p className="text-xs font-bold uppercase tracking-wide text-gray-400">Exportar ou Compartilhar</p>
+                          <RdoShareBar
+                            rdoId={rdoIdAtual}
+                            obraId={obraId}
+                            rdoLabel={`${rdoNumberStr.replace(/[^a-zA-Z0-9]/g, '_')}_${nomeObra.replace(/[^a-zA-Z0-9]/g, '_')}`}
+                          />
+                        </div>
+                      )}
+                      {isGestorOrAdmin && (
+                        <div className="flex gap-3 pt-2 border-t border-gray-200 mt-2">
+                          <button
+                            onClick={handleSalvarRascunho}
+                            disabled={saving}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-sm transition-colors"
+                          >
+                            <Save size={16} /> {saving ? 'Salvando...' : 'Salvar Alterações'}
+                          </button>
+                          <button
+                            onClick={handleReabrir}
+                            disabled={saving}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-orange-500 text-white text-sm font-bold rounded-lg hover:bg-orange-600 shadow-sm transition-colors"
+                          >
+                            <RotateCcw size={16} /> Reabrir RDO
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <div>
-                       <div className="text-3xl font-black text-gray-800">{totalAnexos}</div>
-                       <div className="text-xs font-medium text-gray-500 mt-1">Arquivos anexos</div>
-                    </div>
-                    <div>
-                       <div className="text-3xl font-black text-blue-600">{materiais.length}</div>
-                       <div className="text-xs font-medium text-gray-500 mt-1">Materiais</div>
-                    </div>
-                    <div>
-                       <div className="text-3xl font-black text-purple-600">{equipamentos.length}</div>
-                       <div className="text-xs font-medium text-gray-500 mt-1">Equipamentos</div>
-                    </div>
+                  )}
+
+                   {status === 'rejeitado' && (
+                     <div className="p-4 bg-red-100 border border-red-300 rounded-lg text-red-800 space-y-3">
+                       <div>
+                         <p className="font-bold flex items-center gap-2 text-red-900">❌ RDO Reprovado</p>
+                         <p className="text-sm mt-1">{motivoRejeicaoBackend || motivoRejeicao}</p>
+                       </div>
+                       <button onClick={handleRevisar} className="flex items-center gap-2 text-sm font-bold text-red-700 hover:underline">
+                         <RotateCcw size={14}/> Revisar e Reenviar
+                       </button>
+                     </div>
+                   )}
                  </div>
-                 {rdoIdAtual && (
-                   <p className="text-center text-xs text-gray-400 mt-4 font-mono">{rdoIdAtual.slice(-8).toUpperCase()}</p>
-                 )}
-             </div>
-          </div>
-        </SectionContainer>
+               </div>
+
+               {/* Resumo do RDO */}
+               <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col justify-center">
+                   <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 text-center">Resumo do RDO</h4>
+                   <div className="grid grid-cols-2 gap-4 text-center">
+                      <div>
+                         <div className="text-3xl font-black text-lunardeli-red">{totalEfetivo}</div>
+                         <div className="text-xs font-medium text-gray-500 mt-1">Trabalhadores</div>
+                      </div>
+                      <div>
+                         <div className="text-3xl font-black text-gray-800">{totalAnexos}</div>
+                         <div className="text-xs font-medium text-gray-500 mt-1">Arquivos anexos</div>
+                      </div>
+                      <div>
+                         <div className="text-3xl font-black text-blue-600">{materiais.length}</div>
+                         <div className="text-xs font-medium text-gray-500 mt-1">Materiais</div>
+                      </div>
+                      <div>
+                         <div className="text-3xl font-black text-purple-600">{equipamentos.length}</div>
+                         <div className="text-xs font-medium text-gray-500 mt-1">Equipamentos</div>
+                      </div>
+                   </div>
+                   {rdoIdAtual && (
+                     <p className="text-center text-xs text-gray-400 mt-4 font-mono">{rdoIdAtual.slice(-8).toUpperCase()}</p>
+                   )}
+               </div>
+            </div>
+          </SectionContainer>
+        )}
         
       </div>
 
