@@ -157,7 +157,7 @@ model Rdo {
   obra            Obra            @relation(fields: [obraId], references: [id])
   tarefas         TarefaRdo[]
 
-  @@unique([obraId, dataReferencia, deletedAt])
+  @@index([obraId, dataReferencia, deletedAt])
   @@index([obraId, status])
   @@index([dataReferencia])
   @@map("rdos")

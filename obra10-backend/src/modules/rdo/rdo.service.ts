@@ -132,14 +132,6 @@ export class RdoService {
         'dataReferencia inválida — use formato YYYY-MM-DD.',
       );
 
-    const existe = await this.prisma.rdo.findFirst({
-      where: { obraId, dataReferencia: dataRef, deletedAt: null },
-    });
-    if (existe)
-      throw new BadRequestException(
-        'Já existe um RDO aberto para esta data nesta obra.',
-      );
-
     const dadosExtras = dataParams.dadosExtras ?? null;
     if (dadosExtras && !validarDadosExtras(dadosExtras)) {
       throw new BadRequestException(
