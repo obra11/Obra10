@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { rdoService } from '../services/rdo.service';
 import { format } from 'date-fns';
-import { Plus, Search, FileText, CheckCircle, Clock, XCircle, AlertCircle, BarChart2, X, Loader2, Users, Cloud, Calendar, CheckSquare } from 'lucide-react';
+import { Plus, Search, FileText, CheckCircle, Clock, XCircle, AlertCircle, BarChart2, X, Loader2, Users, Cloud, Calendar, CheckSquare, Image as ImageIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { MediaGalleryModal } from '../components/MediaGalleryModal';
 import api from '../services/api';
 import { RdoShareBar } from '../components/RdoShareBar';
 
@@ -25,6 +26,7 @@ export const RdoList: React.FC = () => {
   const [rdos, setRdos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
 
   // Relatório IA
   const [showIAModal, setShowIAModal] = useState(false);
@@ -70,6 +72,10 @@ export const RdoList: React.FC = () => {
           <p className="text-gray-500 text-xs md:text-sm mt-1">Gerencie os relatórios diários do canteiro ativo.</p>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => setIsGalleryOpen(true)}
+            className="flex items-center gap-2 px-3 md:px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors">
+            <ImageIcon size={16} /> <span className="hidden sm:inline">Galeria</span> Mídias
+          </button>
           <button onClick={() => setShowIAModal(true)}
             className="flex items-center gap-2 px-3 md:px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors">
             <BarChart2 size={16} /> <span className="hidden sm:inline">Relatório</span> IA
@@ -321,6 +327,13 @@ export const RdoList: React.FC = () => {
               )}
             </div>
       </div>
+      {obraAtiva?.id && (
+        <MediaGalleryModal
+          isOpen={isGalleryOpen}
+          onClose={() => setIsGalleryOpen(false)}
+          obraId={obraAtiva.id}
+        />
+      )}
     </div>
   );
 };

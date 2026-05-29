@@ -228,4 +228,64 @@ export class ObraService {
 
     return this.prisma.userObraRole.delete({ where: { id: role.id } });
   }
+
+  async getDashboardPainel(obraId: string, empresaId: string) {
+    const obra = await this.prisma.obra.findFirst({
+      where: { id: obraId, empresaId, deletedAt: null },
+    });
+    if (!obra) {
+      throw new Error('Obra não encontrada ou sem acesso.');
+    }
+
+    // 1. RDOs Pendentes (SUBMETIDO)
+    const rdosPendentes = await this.prisma.rdo.count({
+      where: { obraId, status: 'SUBMETIDO', deletedAt: null },
+    });
+
+    // 2. Últimos RDOs para efetivo e atividade recente
+    const latestRdos = await this.prisma.rdo.findMany({
+      where: { obraId, deletedAt: null },
+      orderBy: { dataReferencia: 'desc' },
+      take: 5,
+      include: {
+        efetivos: {
+          where: { deletedAt: null },
+        },
+        atividades: {
+          where: { deletedAt: null },
+        },
+      },
+    });
+
+    // Efetivo Hoje: soma das quantidades do RDO mais recente
+    let efetivoHoje = 0;
+    if (latestRdos.length > 0) {
+      const latestRdo = latestRdos[0];
+      efetivoHoje = latestRdo.efetivos.reduce(
+        (sum, item) => sum + (item.quantidade || 0),
+        0,
+      );
+    }
+
+    // Atividades Recentes: mapear últimos 5 RDOs
+    const atividadesRecentes = latestRdos.map((rdo) => {
+      const desc =
+        rdo.atividades.length > 0
+          ? rdo.atividades.map((a) => a.descricao).join(', ')
+          : 'Nenhuma atividade registrada.';
+      return {
+        id: rdo.id,
+        dataReferencia: rdo.dataReferencia,
+        status: rdo.status,
+        descricao: desc,
+      };
+    });
+
+    return {
+      rdosPendentes,
+      efetivoHoje,
+      status: obra.status,
+      atividadesRecentes,
+    };
+  }
 }

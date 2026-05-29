@@ -128,6 +128,58 @@ export class AnexosService {
     });
   }
 
+  async listarDaObra(obraId: string) {
+    const attachments = await this.prisma.anexo.findMany({
+      where: { obraId, deletedAt: null, origem: 'RDO' },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        criador: { select: { nome: true } },
+      },
+    });
+
+    return Promise.all(
+      attachments.map(async (anexo) => {
+        let viewUrl = anexo.urlS3;
+        if (
+          !anexo.urlS3.startsWith('http://') &&
+          !anexo.urlS3.startsWith('https://') &&
+          !anexo.urlS3.startsWith('/uploads/')
+        ) {
+          viewUrl = `http://localhost:3000/mock-s3-viewdir/${encodeURIComponent(anexo.urlS3)}`;
+
+          if (process.env.AWS_ACCESS_KEY_ID) {
+            const command = new GetObjectCommand({
+              Bucket: this.bucketName,
+              Key: anexo.urlS3,
+            });
+            try {
+              viewUrl = await getSignedUrl(this.s3Client, command, {
+                expiresIn: 3600,
+              });
+            } catch (err) {
+              this.logger.error(
+                `Erro ao gerar presigned url para anexo ${anexo.id}:`,
+                err,
+              );
+            }
+          }
+        }
+
+        return {
+          id: anexo.id,
+          tipoArquivo: anexo.tipoArquivo,
+          nomeOriginal: anexo.nomeOriginal,
+          mimeType: anexo.mimeType,
+          tamanhoBytes: anexo.tamanhoBytes,
+          createdAt: anexo.createdAt,
+          criador: anexo.criador,
+          urlS3: anexo.urlS3,
+          viewUrl,
+        };
+      }),
+    );
+  }
+
   async deletar(anexoId: string, obraId: string) {
     const anexo = await this.prisma.anexo.findFirst({
       where: { id: anexoId, obraId, deletedAt: null },

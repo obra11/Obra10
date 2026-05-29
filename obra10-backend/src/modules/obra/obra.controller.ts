@@ -71,6 +71,13 @@ export class ObraController {
     }
   }
 
+  @Get(':id/dashboard-painel')
+  async getDashboardPainel(@Param('id') id: string, @Req() req: any) {
+    const empresaId = req.user?.empresaId;
+    if (!empresaId) throw new UnauthorizedException('Sessão inválida.');
+    return this.obraService.getDashboardPainel(id, empresaId);
+  }
+
   // ==================== COLABORADORES DA OBRA (EFETIVO) ====================
 
   @Get(':id/colaboradores')

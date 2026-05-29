@@ -36,6 +36,12 @@ export class AnexosController {
     return this.anexosService.listarDaOrigem(obraId, origem, attachableId);
   }
 
+  @Get('obra')
+  async listarDaObra(@Req() req: any) {
+    const obraId = req.headers['x-obra-id'];
+    return this.anexosService.listarDaObra(obraId);
+  }
+
   @Get(':id/visualizar')
   async visualizarSeguro(@Param('id') id: string, @Req() req: any) {
     const obraId = req.headers['x-obra-id'];
