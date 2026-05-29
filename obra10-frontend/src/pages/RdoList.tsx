@@ -177,13 +177,58 @@ export const RdoList: React.FC = () => {
     setIaPerguntaError('');
   };
 
-  const rdosFiltrados = rdos.filter(
-    (r) =>
-      format(new Date(r.dataReferencia), 'dd/MM/yyyy').includes(busca) ||
-      r.status?.toLowerCase().includes(busca.toLowerCase()) ||
-      String(r.sequencial || '').includes(busca.replace('#', '')) ||
-      r.id.toLowerCase().includes(busca.replace('#', '').toLowerCase()),
-  );
+  const rdosFiltrados = rdos.filter((r) => {
+    if (!busca.trim()) return true;
+
+    const queryNormalized = busca
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+
+    const stConfig = STATUS_CONFIG[r.status as RdoStatus] || STATUS_CONFIG.RASCUNHO;
+    const statusLabel = stConfig.label
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+    const dateStr = format(new Date(r.dataReferencia), 'dd/MM/yyyy');
+    const climaManha = (r.dadosExtras?.climaManha || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    const climaTarde = (r.dadosExtras?.climaTarde || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    const climaNoite = (r.dadosExtras?.climaNoite || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    const terreno = (r.dadosExtras?.condicaoTerreno || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+    const searchableText = [
+      dateStr,
+      `rdo #${r.sequencial}`,
+      `rdo ${r.sequencial}`,
+      `#${r.sequencial}`,
+      String(r.sequencial || ''),
+      statusLabel,
+      climaManha,
+      climaTarde,
+      climaNoite,
+      terreno,
+      r.id,
+    ]
+      .join(' ')
+      .toLowerCase();
+
+    const terms = queryNormalized.split(/\s+/);
+    return terms.every((term) => searchableText.includes(term));
+  });
 
   return (
     <div className="p-4 md:p-8">
