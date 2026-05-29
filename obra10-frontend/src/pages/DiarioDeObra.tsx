@@ -80,6 +80,11 @@ interface SavedFile {
   mimeType: string;
 }
 
+interface AtividadeExecutadaItem {
+  descricao: string;
+  status: 'em andamento' | 'pausado' | 'finalizada';
+}
+
 /* ═══════════════════════════════════════════════════════════════
    Constants
    ═══════════════════════════════════════════════════════════════ */
@@ -206,7 +211,20 @@ export const DiarioDeObra: React.FC = () => {
           setProfissionais(extras.profissionais || []);
           setMateriais(extras.materiais || []);
           setEquipamentos(extras.equipamentos || []);
-          setAtividadesExecutadas(extras.atividadesExecutadas || '');
+          // Tratar atividades executadas estruturadas/texto antigo
+          let parsedAtividades: AtividadeExecutadaItem[] = [];
+          const rawAtv = extras.atividadesExecutadas;
+          if (typeof rawAtv === 'string') {
+            parsedAtividades = rawAtv
+              .split(/\r?\n/)
+              .map(line => line.trim().replace(/^[-*•\d.]+\s*/, '').trim())
+              .filter(Boolean)
+              .map(line => ({ descricao: line, status: 'em andamento' as const }));
+          } else if (Array.isArray(rawAtv)) {
+            parsedAtividades = rawAtv;
+          }
+          setAtividadesExecutadas(parsedAtividades);
+
           setAtividadesPendentes(extras.atividadesPendentes || '');
           setObservacoes(extras.observacoes || '');
           setAprovadorIdSelecionado(rdo.aprovadorId || '');
@@ -226,7 +244,7 @@ export const DiarioDeObra: React.FC = () => {
           setInitLoading(false);
         });
     } else {
-      // Novo RDO — buscar apenas o setup
+      // Novo RDO — buscar apenas o setup e RDOs anteriores
       api.get('/rdos/setup', { headers })
         .then(res => {
           setNomeObra(res.data.obraNome);
@@ -234,6 +252,12 @@ export const DiarioDeObra: React.FC = () => {
           setInitLoading(false);
         })
         .catch(() => setInitLoading(false));
+
+      api.get('/rdos', { headers })
+        .then(res => {
+          setPreviousRdos(res.data || []);
+        })
+        .catch(() => {/* silent */});
     }
   }, [obraId, rdoId]);
 
@@ -258,7 +282,7 @@ export const DiarioDeObra: React.FC = () => {
   const [equipamentos, setEquipamentos] = useState<EquipamentoItem[]>([]);
 
   // ── Seção 6 ── Atividades executadas
-  const [atividadesExecutadas, setAtividadesExecutadas] = useState('');
+  const [atividadesExecutadas, setAtividadesExecutadas] = useState<AtividadeExecutadaItem[]>([]);
 
   // ── Seção 7 ── Atividades pendentes
   const [atividadesPendentes, setAtividadesPendentes] = useState('');
@@ -271,6 +295,10 @@ export const DiarioDeObra: React.FC = () => {
   const fotoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const anexoInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Clonagem/Cópia de RDO Anterior ──
+  const [previousRdos, setPreviousRdos] = useState<any[]>([]);
+  const [selectedBaseRdoId, setSelectedBaseRdoId] = useState('');
 
   // ── Seção 9 ── Observações
   const [observacoes, setObservacoes] = useState('');
@@ -398,6 +426,46 @@ export const DiarioDeObra: React.FC = () => {
       await deleteOfflineAttachment(offlineId);
     }
     setAnexos(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleImportarBaseRdo = async () => {
+    if (!selectedBaseRdoId || !obraId) return;
+    try {
+      const headers = { 'x-obra-id': obraId };
+      const res = await api.get(`/rdos/${selectedBaseRdoId}`, { headers });
+      const rdo = res.data;
+      const extras = rdo.dadosExtras || {};
+
+      setResponsavel(extras.responsavel || '');
+      setClimaManha(extras.climaManha || '');
+      setClimaTarde(extras.climaTarde || '');
+      setClimaNoite(extras.climaNoite || '');
+      setTempMin(extras.tempMin || '');
+      setTempMax(extras.tempMax || '');
+      setPessoas(extras.pessoas?.length ? extras.pessoas : [{ nome: '', funcao: '', empresa: '' }]);
+      setProfissionais(extras.profissionais || []);
+      setMateriais(extras.materiais || []);
+      setEquipamentos(extras.equipamentos || []);
+      setObservacoes(extras.observacoes || '');
+
+      let parsedAtividades: AtividadeExecutadaItem[] = [];
+      const rawAtv = extras.atividadesExecutadas;
+      if (typeof rawAtv === 'string') {
+        parsedAtividades = rawAtv
+          .split(/\r?\n/)
+          .map(line => line.trim().replace(/^[-*•\d.]+\s*/, '').trim())
+          .filter(Boolean)
+          .map(line => ({ descricao: line, status: 'em andamento' as const }));
+      } else if (Array.isArray(rawAtv)) {
+        parsedAtividades = rawAtv;
+      }
+      setAtividadesExecutadas(parsedAtividades);
+      setAtividadesPendentes(extras.atividadesPendentes || '');
+
+      showToast('⚡ Dados importados com sucesso do RDO base!');
+    } catch (err: any) {
+      showToast('❌ Erro ao importar RDO base.');
+    }
   };
 
   // ── Computed values ──
@@ -794,6 +862,38 @@ export const DiarioDeObra: React.FC = () => {
 
       <div className="max-w-4xl mx-auto px-3 md:px-8 py-5 md:py-8 space-y-4 md:space-y-6">
 
+        {/* Copiar RDO anterior */}
+        {!rdoId && previousRdos.length > 0 && (
+          <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 border-t-[3px] border-t-lunardeli-red/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="font-bold text-gray-800 text-sm">Copiar Dados de RDO Anterior</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Use um diário anterior desta obra como modelo para preencher este RDO.</p>
+            </div>
+            <div className="flex w-full sm:w-auto items-center gap-2">
+              <select
+                className="flex-1 sm:flex-initial border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white appearance-none text-gray-700 font-medium outline-none"
+                value={selectedBaseRdoId}
+                onChange={(e) => setSelectedBaseRdoId(e.target.value)}
+              >
+                <option value="">Selecione um diário...</option>
+                {previousRdos.map(r => (
+                  <option key={r.id} value={r.id}>
+                    RDO #{r.id.slice(-6).toUpperCase()} ({new Date(r.dataReferencia).toLocaleDateString('pt-BR', { timeZone: 'UTC' })})
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleImportarBaseRdo}
+                disabled={!selectedBaseRdoId}
+                className="bg-lunardeli-red hover:bg-red-700 active:bg-red-800 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50 shrink-0 shadow-sm"
+              >
+                Importar
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 1. Informações */}
         <SectionContainer>
           <SectionTitle icon={ClipboardList} title="1. Informações gerais" />
@@ -921,7 +1021,6 @@ export const DiarioDeObra: React.FC = () => {
             </div>
             <button type="button" onClick={() => setMateriais(prev => [...prev, { material: '', qtd: '', unidade: 'un', observacao: '' }])} className="mt-3 text-sm font-semibold text-lunardeli-red hover:text-red-700">+ Adicionar material</button>
           </div>
-
           <div>
              <h3 className="text-sm font-bold text-gray-800 mb-3">Equipamentos do dia</h3>
              <div className="space-y-2">
@@ -944,7 +1043,53 @@ export const DiarioDeObra: React.FC = () => {
         <div className="flex flex-col gap-6">
            <SectionContainer>
              <SectionTitle icon={CheckSquare} title="6. Atividades Executadas" />
-             <textarea rows={8} className="w-full border border-gray-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red resize-y" placeholder="- Concretagem...&#10;- Alvenaria..." value={atividadesExecutadas} onChange={e => setAtividadesExecutadas(e.target.value)}></textarea>
+             <div className="space-y-3">
+               {atividadesExecutadas.map((atv, i) => (
+                 <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                   <input 
+                     className="flex-1 min-w-0 border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-lunardeli-red" 
+                     placeholder="Descrição da atividade..." 
+                     value={atv.descricao} 
+                     onChange={e => {
+                       const newVal = e.target.value;
+                       setAtividadesExecutadas(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: newVal } : item));
+                     }} 
+                   />
+                   <select 
+                     className="w-full sm:w-40 border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red bg-white text-gray-700 font-medium" 
+                     value={atv.status} 
+                     onChange={e => {
+                       const newVal = e.target.value as 'em andamento' | 'pausado' | 'finalizada';
+                       setAtividadesExecutadas(prev => prev.map((item, idx) => idx === i ? { ...item, status: newVal } : item));
+                     }}
+                   >
+                     <option value="em andamento">Em andamento</option>
+                     <option value="pausado">Pausado</option>
+                     <option value="finalizada">Finalizada</option>
+                   </select>
+                   <button 
+                     type="button"
+                     onClick={() => setAtividadesExecutadas(prev => prev.filter((_, idx) => idx !== i))} 
+                     className="p-1.5 text-red-500 hover:bg-red-50 rounded self-end sm:self-auto shrink-0"
+                     title="Remover atividade"
+                   >
+                     <Trash2 size={16}/>
+                   </button>
+                 </div>
+               ))}
+               {atividadesExecutadas.length === 0 && (
+                 <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-lg text-gray-400 text-sm">
+                   Nenhuma atividade adicionada. Clique abaixo para acrescentar.
+                 </div>
+               )}
+               <button 
+                 type="button" 
+                 onClick={() => setAtividadesExecutadas(prev => [...prev, { descricao: '', status: 'em andamento' }])} 
+                 className="text-sm font-semibold text-lunardeli-red hover:text-red-700 flex items-center gap-1 mt-1"
+               >
+                 + Adicionar atividade
+               </button>
+             </div>
            </SectionContainer>
            
            <SectionContainer>

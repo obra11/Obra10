@@ -369,13 +369,20 @@ export class PdfService {
     if (atividadesBanco.length > 0 || atividadesTexto) {
       drawSectionTitle('ATIVIDADES EXECUTADAS');
 
-      // Atividades em texto livre (diário de obra)
+      // Atividades em texto livre ou estruturadas (diário de obra)
       if (atividadesTexto) {
-        const lines = wrapText(atividadesTexto, CONTENT_W - 8, 8, reg);
-        for (const line of lines) {
-          ensureSpace(12);
-          drawText(line, m.l + 4, ctx.y, 8, reg, DARK);
-          ctx.y -= 12;
+        if (Array.isArray(atividadesTexto)) {
+          for (const a of atividadesTexto) {
+            const label = `- [${a.status.toUpperCase()}] ${a.descricao}`;
+            drawMultiLineText(label, m.l + 4, 8, reg, 12);
+          }
+        } else {
+          const lines = wrapText(String(atividadesTexto), CONTENT_W - 8, 8, reg);
+          for (const line of lines) {
+            ensureSpace(12);
+            drawText(line, m.l + 4, ctx.y, 8, reg, DARK);
+            ctx.y -= 12;
+          }
         }
       }
       // Atividades do banco (itens separados)

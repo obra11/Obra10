@@ -21,8 +21,20 @@ const AI_MODEL = 'claude-sonnet-4-20250514';
 const CACHE_TTL_HOURS = 24;
 const MAX_CHAMADAS_DIA = 3;
 
-function extrairLinhasDeTexto(texto: string): string[] {
-  if (!texto || typeof texto !== 'string') return [];
+function extrairLinhasDeTexto(texto: any): string[] {
+  if (!texto) return [];
+  if (Array.isArray(texto)) {
+    return texto
+      .map((item) => {
+        if (typeof item === 'string') return item.trim();
+        if (item && typeof item === 'object' && typeof item.descricao === 'string') {
+          return item.descricao.trim();
+        }
+        return '';
+      })
+      .filter((line) => line.length > 3);
+  }
+  if (typeof texto !== 'string') return [];
   return texto
     .split(/\r?\n/)
     .map((line) => line.trim().replace(/^[-*•\d.]+\s*/, '').trim())
