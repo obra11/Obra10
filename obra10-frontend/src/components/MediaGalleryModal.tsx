@@ -31,7 +31,9 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'fotos' | 'videos'>('fotos');
+  const [activeTab, setActiveTab] = useState<'todas' | 'fotos' | 'videos'>('todas');
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [months, setMonths] = useState<{ value: string; label: string }[]>([]);
 
   // Lightbox & Video State
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -39,6 +41,7 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
 
   useEffect(() => {
     if (isOpen && obraId) {
+      setSelectedMonth('');
       carregarMidias();
     }
   }, [isOpen, obraId]);
@@ -50,7 +53,24 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
       const res = await api.get('/anexos/obra', {
         headers: { 'x-obra-id': obraId },
       });
-      setItems(res.data || []);
+      const data = res.data || [];
+      setItems(data);
+
+      const monthsMap = new Map<string, string>();
+      data.forEach((item: MediaItem) => {
+        if (!item.createdAt) return;
+        const d = new Date(item.createdAt);
+        if (isNaN(d.getTime())) return;
+        const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+        const capitalizedLabel = label.charAt(0).toUpperCase() + label.slice(1);
+        monthsMap.set(val, capitalizedLabel);
+      });
+      
+      const sortedMonths = Array.from(monthsMap.entries())
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([value, label]) => ({ value, label }));
+      setMonths(sortedMonths);
     } catch (err: any) {
       setError(
         err?.response?.data?.message || 'Erro ao buscar as mídias da obra.',
@@ -62,8 +82,47 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
 
   if (!isOpen) return null;
 
-  const fotos = items.filter((item) => item.mimeType?.startsWith('image/'));
-  const videos = items.filter((item) => item.mimeType?.startsWith('video/'));
+  const totalFotos = items.filter((item) => item.mimeType?.startsWith('image/')).length;
+  const totalVideos = items.filter((item) => item.mimeType?.startsWith('video/')).length;
+
+  const filteredItems = items.filter((item) => {
+    const isFoto = item.mimeType?.startsWith('image/');
+    const isVideo = item.mimeType?.startsWith('video/');
+    if (activeTab === 'fotos' && !isFoto) return false;
+    if (activeTab === 'videos' && !isVideo) return false;
+
+    if (selectedMonth) {
+      const date = new Date(item.createdAt);
+      if (!isNaN(date.getTime())) {
+        const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (monthYear !== selectedMonth) return false;
+      }
+    }
+    return true;
+  });
+
+  const filteredFotos = filteredItems.filter((item) => item.mimeType?.startsWith('image/'));
+  const fotos = filteredFotos;
+
+  // Group filtered items by date (YYYY-MM-DD)
+  const groupsMap: Record<string, { formattedDate: string; items: MediaItem[] }> = {};
+  filteredItems.forEach((item) => {
+    if (!item.createdAt) return;
+    const dateObj = new Date(item.createdAt);
+    if (isNaN(dateObj.getTime())) return;
+    const yyyymmdd = dateObj.toISOString().split('T')[0];
+    const formattedDate = format(dateObj, 'dd/MM/yyyy');
+    
+    if (!groupsMap[yyyymmdd]) {
+      groupsMap[yyyymmdd] = {
+        formattedDate,
+        items: [],
+      };
+    }
+    groupsMap[yyyymmdd].items.push(item);
+  });
+
+  const sortedDates = Object.keys(groupsMap).sort((a, b) => b.localeCompare(a));
 
   const getFileUrl = (urlS3: string, viewUrl?: string) => {
     if (viewUrl) return viewUrl;
@@ -112,28 +171,59 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
           </button>
         </div>
 
-        {/* Tab Selector */}
-        <div className="px-5 py-2 border-b border-gray-100 flex items-center gap-4 bg-white shrink-0">
-          <button
-            onClick={() => setActiveTab('fotos')}
-            className={`flex items-center gap-2 py-2 px-4 border-b-2 font-semibold text-sm transition-colors ${
-              activeTab === 'fotos'
-                ? 'border-lunardeli-red text-lunardeli-red'
-                : 'border-transparent text-gray-500 hover:text-gray-800'
-            }`}
-          >
-            <ImageIcon size={16} /> Fotos ({fotos.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('videos')}
-            className={`flex items-center gap-2 py-2 px-4 border-b-2 font-semibold text-sm transition-colors ${
-              activeTab === 'videos'
-                ? 'border-lunardeli-red text-lunardeli-red'
-                : 'border-transparent text-gray-500 hover:text-gray-800'
-            }`}
-          >
-            <Film size={16} /> Vídeos ({videos.length})
-          </button>
+        {/* Tab Selector & Month Filter */}
+        <div className="px-5 py-2 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white shrink-0">
+          <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar whitespace-nowrap">
+            <button
+              onClick={() => setActiveTab('todas')}
+              className={`flex items-center gap-2 py-2 px-3 border-b-2 font-semibold text-sm transition-colors ${
+                activeTab === 'todas'
+                  ? 'border-lunardeli-red text-lunardeli-red'
+                  : 'border-transparent text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              Todas ({items.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('fotos')}
+              className={`flex items-center gap-2 py-2 px-3 border-b-2 font-semibold text-sm transition-colors ${
+                activeTab === 'fotos'
+                  ? 'border-lunardeli-red text-lunardeli-red'
+                  : 'border-transparent text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              <ImageIcon size={16} /> Fotos ({totalFotos})
+            </button>
+            <button
+              onClick={() => setActiveTab('videos')}
+              className={`flex items-center gap-2 py-2 px-3 border-b-2 font-semibold text-sm transition-colors ${
+                activeTab === 'videos'
+                  ? 'border-lunardeli-red text-lunardeli-red'
+                  : 'border-transparent text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              <Film size={16} /> Vídeos ({totalVideos})
+            </button>
+          </div>
+
+          {/* Filtro de Mês */}
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+              Mês:
+            </span>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white font-semibold text-gray-700 outline-none focus:ring-1 focus:ring-lunardeli-red/50 shadow-sm cursor-pointer"
+            >
+              <option value="">Todos os meses</option>
+              {months.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Gallery Content */}
@@ -148,88 +238,96 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
               <p className="font-semibold mb-2">Ops! Houve um erro</p>
               <p className="text-sm">{error}</p>
             </div>
-          ) : activeTab === 'fotos' && fotos.length === 0 ? (
+          ) : filteredItems.length === 0 ? (
             <div className="text-center py-20 text-gray-400">
               <ImageIcon size={48} className="mx-auto mb-3 opacity-20" />
-              <p className="font-medium text-sm">Nenhuma foto encontrada neste projeto.</p>
-            </div>
-          ) : activeTab === 'videos' && videos.length === 0 ? (
-            <div className="text-center py-20 text-gray-400">
-              <Film size={48} className="mx-auto mb-3 opacity-20" />
-              <p className="font-medium text-sm">Nenhum vídeo encontrado neste projeto.</p>
+              <p className="font-medium text-sm">Nenhuma mídia encontrada com os filtros selecionados.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-5">
-              {activeTab === 'fotos'
-                ? fotos.map((item, idx) => (
-                    <div
-                      key={item.id}
-                      onClick={() => setLightboxIndex(idx)}
-                      className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm cursor-pointer hover:shadow-md transition-shadow group flex flex-col"
-                    >
-                      <div className="relative aspect-video w-full overflow-hidden bg-gray-100">
-                        <img
-                          src={getFileUrl(item.urlS3, item.viewUrl)}
-                          alt={item.nomeOriginal}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          loading="lazy"
-                        />
-                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                          <Maximize2 className="text-white" size={20} />
-                        </div>
-                      </div>
-                      <div className="p-3 flex-1 flex flex-col justify-between">
-                        <p className="text-xs font-bold text-gray-800 truncate" title={item.nomeOriginal}>
-                          {item.nomeOriginal}
-                        </p>
-                        <div className="mt-2 space-y-1">
-                          <div className="flex items-center gap-1 text-[10px] text-gray-400 truncate">
-                            <User size={10} className="shrink-0" />
-                            <span>{item.criador?.nome || 'Desconhecido'}</span>
-                          </div>
-                          <div className="flex items-center gap-1 text-[10px] text-gray-400">
-                            <Calendar size={10} className="shrink-0" />
-                            <span>
-                              {format(new Date(item.createdAt), 'dd/MM/yyyy')}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+            <div className="space-y-8">
+              {sortedDates.map((yyyymmdd) => {
+                const group = groupsMap[yyyymmdd];
+                return (
+                  <div key={yyyymmdd} className="space-y-4">
+                    {/* Header de Data com divisor */}
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap bg-gray-100 border border-gray-200 px-3 py-1 rounded-lg flex items-center gap-1.5 shadow-sm">
+                        <Calendar size={12} className="text-lunardeli-red" />
+                        {group.formattedDate}
+                      </span>
+                      <div className="flex-1 border-t border-gray-200"></div>
                     </div>
-                  ))
-                : videos.map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => setPlayingVideoUrl(getFileUrl(item.urlS3, item.viewUrl))}
-                      className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm cursor-pointer hover:shadow-md transition-shadow group flex flex-col"
-                    >
-                      <div className="relative aspect-video w-full bg-gray-900 flex items-center justify-center">
-                        <Film className="text-gray-600 group-hover:scale-110 transition-transform" size={32} />
-                        <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-                          <div className="w-10 h-10 rounded-full bg-white/95 flex items-center justify-center shadow-lg group-hover:bg-lunardeli-red group-hover:text-white transition-colors">
-                            <Play size={16} className="ml-0.5" />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="p-3 flex-1 flex flex-col justify-between">
-                        <p className="text-xs font-bold text-gray-800 truncate" title={item.nomeOriginal}>
-                          {item.nomeOriginal}
-                        </p>
-                        <div className="mt-2 space-y-1">
-                          <div className="flex items-center gap-1 text-[10px] text-gray-400 truncate">
-                            <User size={10} className="shrink-0" />
-                            <span>{item.criador?.nome || 'Desconhecido'}</span>
-                          </div>
-                          <div className="flex items-center gap-1 text-[10px] text-gray-400">
-                            <Calendar size={10} className="shrink-0" />
-                            <span>
-                              {format(new Date(item.createdAt), 'dd/MM/yyyy')}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+
+                    {/* Grid de mídias deste dia */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-5">
+                      {group.items.map((item) => {
+                        const isVideo = item.mimeType?.startsWith('video/');
+                        if (isVideo) {
+                          return (
+                            <div
+                              key={item.id}
+                              onClick={() => setPlayingVideoUrl(getFileUrl(item.urlS3, item.viewUrl))}
+                              className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm cursor-pointer hover:shadow-md transition-shadow group flex flex-col"
+                            >
+                              <div className="relative aspect-video w-full bg-gray-900 flex items-center justify-center">
+                                <Film className="text-gray-600 group-hover:scale-110 transition-transform" size={32} />
+                                <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                                  <div className="w-10 h-10 rounded-full bg-white/95 flex items-center justify-center shadow-lg group-hover:bg-lunardeli-red group-hover:text-white transition-colors">
+                                    <Play size={16} className="ml-0.5" />
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="p-3 flex-1 flex flex-col justify-between">
+                                <p className="text-xs font-bold text-gray-800 truncate" title={item.nomeOriginal}>
+                                  {item.nomeOriginal}
+                                </p>
+                                <div className="mt-2 space-y-1">
+                                  <div className="flex items-center gap-1 text-[10px] text-gray-400 truncate">
+                                    <User size={10} className="shrink-0" />
+                                    <span>{item.criador?.nome || 'Desconhecido'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        } else {
+                          const clickIdx = filteredFotos.findIndex((f) => f.id === item.id);
+                          return (
+                            <div
+                              key={item.id}
+                              onClick={() => setLightboxIndex(clickIdx)}
+                              className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm cursor-pointer hover:shadow-md transition-shadow group flex flex-col"
+                            >
+                              <div className="relative aspect-video w-full overflow-hidden bg-gray-100">
+                                <img
+                                  src={getFileUrl(item.urlS3, item.viewUrl)}
+                                  alt={item.nomeOriginal}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                  loading="lazy"
+                                />
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                  <Maximize2 className="text-white" size={20} />
+                                </div>
+                              </div>
+                              <div className="p-3 flex-1 flex flex-col justify-between">
+                                <p className="text-xs font-bold text-gray-800 truncate" title={item.nomeOriginal}>
+                                  {item.nomeOriginal}
+                                </p>
+                                <div className="mt-2 space-y-1">
+                                  <div className="flex items-center gap-1 text-[10px] text-gray-400 truncate">
+                                    <User size={10} className="shrink-0" />
+                                    <span>{item.criador?.nome || 'Desconhecido'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                      })}
                     </div>
-                  ))}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
