@@ -657,10 +657,57 @@ export class RdoService {
     const rdosAprovados = rdos.filter(
       (r) => r.status === RdoStatus.APROVADO,
     ).length;
-    const todasTarefas = rdos.flatMap((r) => r.tarefas);
+
+    const todasTarefas: Array<{
+      descricao: string;
+      statusExecucao: string;
+      motivoNaoExecucao?: string | null;
+    }> = [];
+
+    rdos.forEach((r) => {
+      const d = (r.dadosExtras as any) || {};
+      const atividades = d.atividadesExecutadas || [];
+      if (Array.isArray(atividades) && atividades.length > 0) {
+        atividades.forEach((a: any) => {
+          if (a && a.descricao) {
+            const statusExec = a.status === 'finalizada' ? 'EXECUTADO' : 'NAO_EXECUTADO';
+            let motivo: string | null = null;
+            if (a.status !== 'finalizada') {
+              const textClima = [d.climaManha, d.climaTarde, d.climaNoite, d.clima, d.condicoesClimaticas]
+                .filter(Boolean)
+                .map((c) => c.toLowerCase())
+                .join(' ');
+              if (
+                textClima.includes('chuva') ||
+                textClima.includes('chuvoso') ||
+                textClima.includes('chuvosa')
+              ) {
+                motivo = 'CHUVA';
+              } else {
+                motivo = 'OUTROS';
+              }
+            }
+            todasTarefas.push({
+              descricao: a.descricao,
+              statusExecucao: statusExec,
+              motivoNaoExecucao: motivo,
+            });
+          }
+        });
+      } else {
+        r.tarefas.forEach((t) => {
+          todasTarefas.push({
+            descricao: t.descricao,
+            statusExecucao: t.statusExecucao,
+            motivoNaoExecucao: t.motivoNaoExecucao,
+          });
+        });
+      }
+    });
+
     const totalTarefas = todasTarefas.length;
     const tarefasExecutadas = todasTarefas.filter(
-      (t) => t.statusExecucao === StatusExecucaoTarefa.EXECUTADO,
+      (t) => t.statusExecucao === 'EXECUTADO',
     ).length;
 
     const motivoMap: Record<string, number> = {};
@@ -675,12 +722,24 @@ export class RdoService {
       .sort((a, b) => b.total - a.total);
 
     const funcaoMap: Record<string, number> = {};
-    rdos
-      .flatMap((r) => r.efetivos)
-      .forEach((e) => {
-        funcaoMap[e.funcaoCargo] =
-          (funcaoMap[e.funcaoCargo] ?? 0) + e.quantidade;
-      });
+    rdos.forEach((r) => {
+      const d = (r.dadosExtras as any) || {};
+      const profissionais = d.profissionais || [];
+      if (Array.isArray(profissionais) && profissionais.length > 0) {
+        profissionais.forEach((p: any) => {
+          if (p && p.nome) {
+            const func = String(p.nome).trim();
+            const qtd = Number(p.quantidade) || 1;
+            funcaoMap[func] = (funcaoMap[func] ?? 0) + qtd;
+          }
+        });
+      } else {
+        r.efetivos.forEach((e) => {
+          funcaoMap[e.funcaoCargo] =
+            (funcaoMap[e.funcaoCargo] ?? 0) + e.quantidade;
+        });
+      }
+    });
     const horasPorFuncao = Object.entries(funcaoMap)
       .map(([funcao, horas]) => ({ funcao, horas }))
       .sort((a, b) => b.horas - a.horas)
@@ -694,11 +753,26 @@ export class RdoService {
       const semana = this.getSemanaLabel(r.dataReferencia);
       if (!semanaMap[semana])
         semanaMap[semana] = { executadas: 0, naoExecutadas: 0 };
-      r.tarefas.forEach((t) => {
-        if (t.statusExecucao === StatusExecucaoTarefa.EXECUTADO)
-          semanaMap[semana].executadas += 1;
-        else semanaMap[semana].naoExecutadas += 1;
-      });
+      
+      const d = (r.dadosExtras as any) || {};
+      const atividades = d.atividadesExecutadas || [];
+      if (Array.isArray(atividades) && atividades.length > 0) {
+        atividades.forEach((a: any) => {
+          if (a && a.descricao) {
+            if (a.status === 'finalizada') {
+              semanaMap[semana].executadas += 1;
+            } else {
+              semanaMap[semana].naoExecutadas += 1;
+            }
+          }
+        });
+      } else {
+        r.tarefas.forEach((t) => {
+          if (t.statusExecucao === StatusExecucaoTarefa.EXECUTADO)
+            semanaMap[semana].executadas += 1;
+          else semanaMap[semana].naoExecutadas += 1;
+        });
+      }
     });
     const execucaoPorSemana = Object.entries(semanaMap).map(([semana, v]) => ({
       semana,

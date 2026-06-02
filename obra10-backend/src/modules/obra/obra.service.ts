@@ -261,18 +261,31 @@ export class ObraService {
     let efetivoHoje = 0;
     if (latestRdos.length > 0) {
       const latestRdo = latestRdos[0];
-      efetivoHoje = latestRdo.efetivos.reduce(
-        (sum, item) => sum + (item.quantidade || 0),
-        0,
-      );
+      const d = (latestRdo.dadosExtras as any) || {};
+      const profissionais = d.profissionais || [];
+      if (Array.isArray(profissionais) && profissionais.length > 0) {
+        efetivoHoje = profissionais.reduce(
+          (sum: number, p: any) => sum + Number(p.quantidade || 0),
+          0,
+        );
+      } else {
+        efetivoHoje = latestRdo.efetivos.reduce(
+          (sum, item) => sum + (item.quantidade || 0),
+          0,
+        );
+      }
     }
 
     // Atividades Recentes: mapear últimos 5 RDOs
     const atividadesRecentes = latestRdos.map((rdo) => {
-      const desc =
-        rdo.atividades.length > 0
-          ? rdo.atividades.map((a) => a.descricao).join(', ')
-          : 'Nenhuma atividade registrada.';
+      const d = (rdo.dadosExtras as any) || {};
+      const atividades = d.atividadesExecutadas || [];
+      let desc = 'Nenhuma atividade registrada.';
+      if (Array.isArray(atividades) && atividades.length > 0) {
+        desc = atividades.map((a: any) => a.descricao).join(', ');
+      } else if (rdo.atividades.length > 0) {
+        desc = rdo.atividades.map((a) => a.descricao).join(', ');
+      }
       return {
         id: rdo.id,
         dataReferencia: rdo.dataReferencia,
