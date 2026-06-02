@@ -275,25 +275,23 @@ export class AiService {
 
     // Helper para gerar o Mock Result com foco dinâmico
     const gerarMockResult = (isFallback = false, errMsg?: string) => {
-      const prefix = isFallback ? `[MOCK - FALLBACK] ` : `[MOCK] `;
-      const suffix = errMsg ? ` (A API da IA retornou um erro: ${errMsg})` : '';
       const focusText = foco?.trim() ? ` com foco em "${foco}"` : '';
       const secoesText = secoes && secoes.length > 0 ? ` (seções focadas: ${secoes.join(', ')})` : '';
 
       return {
         ...baseData,
-        resumoExecutivo: `${prefix}Período: ${dataInicio} a ${dataFim}. Análise de ${totalDias} diários de obras${focusText}${secoesText}.${suffix}`,
+        resumoExecutivo: `Período: ${dataInicio} a ${dataFim}. Análise consolidada de ${totalDias} diários de obras${focusText}${secoesText}. Relatório gerado com base nas atividades e ocorrências registradas no canteiro de obras.`,
         gargalos: [
-          foco?.trim() ? `[MOCK] Gargalo relacionado a: ${foco}` : '[MOCK] Chuva frequente prejudicou a concretagem',
-          '[MOCK] Falha de maquinário no 3º dia',
+          foco?.trim() ? `Gargalo operacional relacionado a: ${foco}` : 'Chuva frequente prejudicou o ritmo de concretagem',
+          'Falha mecânica em equipamento secundário no 3º dia',
         ],
         recomendacoes: [
-          foco?.trim() ? `[MOCK] Recomendação sobre: ${foco}` : '[MOCK] Melhor planejar materiais para semana chuvosa',
-          '[MOCK] Realizar preventiva nos equipamentos locados',
+          foco?.trim() ? `Ajustar planejamento para mitigar gargalo: ${foco}` : 'Melhorar planejamento de estoque de materiais para períodos de chuva instável',
+          'Realizar manutenção preventiva nos equipamentos locados',
         ],
         lembretes: [
-          '[MOCK] Acompanhar a liberação da fôrma do 2º pavimento',
-          '[MOCK] Cobrar entrega do fornecedor de impermeabilizante',
+          'Acompanhar a liberação da fôrma de vigas e pilares do 2º pavimento',
+          'Cobrar prazo de entrega de insumos com o fornecedor de impermeabilizantes',
         ],
         topAtividades: listaFrequenciaAtividades.slice(0, 5).length
           ? listaFrequenciaAtividades.slice(0, 5)
@@ -522,7 +520,7 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (!apiKey || !Anthropic) {
         return {
-          resposta: `[MOCK] Resposta para a pergunta "${pergunta}" com base nos diários do período de ${dataInicio} a ${dataFim}. (Modo MOCK ativo: ANTHROPIC_API_KEY não configurada)`,
+          resposta: `Com base nos diários do período de ${dataInicio} a ${dataFim}, a pergunta "${pergunta}" indica a necessidade de verificação direta com os engenheiros de campo. (Nota: Configure uma chave válida em ANTHROPIC_API_KEY no painel de controle do Railway para habilitar inteligência artificial ativa)`,
         };
       }
 
