@@ -141,12 +141,12 @@ export const ObraLayout: React.FC = () => {
                 {/* Logotipo da Empresa com upload direto */}
                 <div className="relative shrink-0">
                   {canEditLogo ? (
-                    <label title="Alterar Logotipo da Empresa" className="relative cursor-pointer group flex items-center justify-center w-10 h-10 rounded overflow-hidden transition-all hover:ring-2 hover:ring-lunardeli-red bg-white/10 border border-white/10 shrink-0">
+                    <label title="Alterar Logotipo da Empresa" className="relative cursor-pointer group flex items-center justify-center w-10 h-10 rounded-full overflow-hidden transition-all hover:ring-2 hover:ring-lunardeli-red bg-white border border-white/20 shrink-0 animate-fade-in">
                       {uploadingLogo ? (
-                        <Loader2 className="animate-spin text-white" size={16} />
+                        <Loader2 className="animate-spin text-lunardeli-red" size={16} />
                       ) : empresa?.logoUrl ? (
                         <>
-                          <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="w-full h-full object-contain" />
+                          <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="w-full h-full object-contain bg-white" />
                           <div className="absolute inset-0 bg-black/60 hidden group-hover:flex items-center justify-center transition-all">
                             <span className="text-[8px] text-white font-bold uppercase tracking-wider">Logo</span>
                           </div>
@@ -162,9 +162,9 @@ export const ObraLayout: React.FC = () => {
                       <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} />
                     </label>
                   ) : empresa?.logoUrl ? (
-                    <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="w-10 h-10 rounded object-contain bg-white/10 border border-white/10 shrink-0" />
+                    <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="w-10 h-10 rounded-full object-contain bg-white border border-white/20 shrink-0" />
                   ) : (
-                    <div className="w-10 h-10 rounded bg-white/5 border border-dashed border-white/20 flex items-center justify-center text-gray-400 shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-white/5 border border-dashed border-white/20 flex items-center justify-center text-gray-400 shrink-0">
                       <Building2 size={18} />
                     </div>
                   )}
@@ -268,12 +268,12 @@ export const ObraLayout: React.FC = () => {
             {/* Logotipo da Empresa com upload direto no Mobile */}
             <div className="relative shrink-0">
               {canEditLogo ? (
-                <label title="Alterar Logotipo da Empresa" className="relative cursor-pointer group flex items-center justify-center w-9 h-9 rounded overflow-hidden transition-all hover:ring-2 hover:ring-lunardeli-red bg-gray-50 border border-gray-200 shrink-0">
+                <label title="Alterar Logotipo da Empresa" className="relative cursor-pointer group flex items-center justify-center w-9 h-9 rounded-full overflow-hidden transition-all hover:ring-2 hover:ring-lunardeli-red bg-white border border-gray-200 shrink-0">
                   {uploadingLogo ? (
                     <Loader2 className="animate-spin text-lunardeli-red" size={14} />
                   ) : empresa?.logoUrl ? (
                     <>
-                      <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="w-full h-full object-contain" />
+                      <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="w-full h-full object-contain bg-white" />
                       <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center transition-all">
                         <span className="text-[7px] text-white font-bold uppercase tracking-wider">Logo</span>
                       </div>
@@ -289,9 +289,9 @@ export const ObraLayout: React.FC = () => {
                   <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} />
                 </label>
               ) : empresa?.logoUrl ? (
-                <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="w-9 h-9 rounded object-contain bg-gray-50 border border-gray-200 shrink-0" />
+                <img src={getImageUrl(empresa.logoUrl)} alt="Logo Empresa" className="w-9 h-9 rounded-full object-contain bg-white border border-gray-200 shrink-0" />
               ) : (
-                <div className="w-9 h-9 rounded bg-gray-50 border border-dashed border-gray-300 flex items-center justify-center text-gray-400 shrink-0">
+                <div className="w-9 h-9 rounded-full bg-gray-50 border border-dashed border-gray-300 flex items-center justify-center text-gray-400 shrink-0">
                   <Building2 size={16} />
                 </div>
               )}
