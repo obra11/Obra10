@@ -13,7 +13,7 @@ setup('authenticate', async ({ page }) => {
 
   await page.goto('/login');
   await page.fill('input[type="email"]', 'tarcisio@lunardeli.com.br');
-  await page.fill('input[type="password"]', 'Senha123');
+  await page.fill('input[type="password"]', 'Lunardeli20011978$');
   await page.click('button[type="submit"]');
 
   // Wait until the page receives the cookies and navigates to either /select-obra or /dashboard

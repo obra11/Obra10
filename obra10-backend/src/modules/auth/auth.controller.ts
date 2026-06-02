@@ -23,7 +23,7 @@ export class AuthController {
     private readonly prisma: PrismaService,
   ) {}
 
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Post('login')
   async login(
     @Body() dto: LoginDto,

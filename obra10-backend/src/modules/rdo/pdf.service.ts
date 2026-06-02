@@ -1,15 +1,27 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, PDFName, PDFString } from 'pdf-lib';
 
-const RED = rgb(0.86, 0.15, 0.15);
-const DARK = rgb(0.06, 0.06, 0.08);
-const GRAY = rgb(0.43, 0.43, 0.43);
-const LIGHT_GRAY = rgb(0.90, 0.90, 0.90);
-const GREEN = rgb(0.09, 0.64, 0.25);
-const ORANGE = rgb(0.85, 0.47, 0.04);
+// Paleta de Cores Lunardeli Oficial
+const LUNARDELI_RED = rgb(0.898, 0.098, 0.173); // #E5192C
+const LUNARDELI_DARK = rgb(0.106, 0.106, 0.106); // #1B1B1B
+const LUNARDELI_GRAY = rgb(0.961, 0.961, 0.961); // #F5F5F5
+const LUNARDELI_LIGHT_GRAY = rgb(0.878, 0.878, 0.878); // #E0E0E0
+
+// Cores auxiliares de status e links
+const STATUS_GREEN = rgb(0.09, 0.64, 0.25);
+const STATUS_ORANGE = rgb(0.85, 0.47, 0.04);
+const COLOR_LINK = rgb(0.06, 0.38, 0.78); // Azul para links
 const WHITE = rgb(1, 1, 1);
-const TABLE_HEADER_BG = rgb(0.96, 0.96, 0.96);
+
+// Mapeamento de compatibilidade para código herdado
+const RED = LUNARDELI_RED;
+const DARK = LUNARDELI_DARK;
+const GRAY = rgb(0.43, 0.43, 0.43); // Cinza para textos secundários
+const LIGHT_GRAY = LUNARDELI_LIGHT_GRAY;
+const TABLE_HEADER_BG = LUNARDELI_GRAY;
+const GREEN = STATUS_GREEN;
+const ORANGE = STATUS_ORANGE;
 
 interface DrawCtx {
   page: PDFPage;
@@ -65,6 +77,7 @@ export class PdfService {
     // Buscar anexos vinculados ao RDO
     const anexos = await this.prisma.anexo.findMany({
       where: { attachableId: rdoId, deletedAt: null },
+      include: { criador: { select: { nome: true } } },
       orderBy: { createdAt: 'asc' },
     });
 
@@ -129,10 +142,17 @@ export class PdfService {
     const CONTENT_W = ctx.w - m.l - m.r;
 
     const drawSectionTitle = (title: string) => {
-      ensureSpace(26);
-      drawText(title, m.l, ctx.y, 8, bold, RED);
-      ctx.y -= 4;
-      drawLine(ctx.y, RED, 0.6);
+      ensureSpace(25);
+      ctx.page.drawRectangle({
+        x: m.l,
+        y: ctx.y - 1,
+        width: 3,
+        height: 10,
+        color: LUNARDELI_RED,
+      });
+      drawText(title, m.l + 8, ctx.y, 9, bold, LUNARDELI_DARK);
+      ctx.y -= 5;
+      drawLine(ctx.y, LUNARDELI_LIGHT_GRAY, 0.4);
       ctx.y -= 10;
     };
 
@@ -145,84 +165,145 @@ export class PdfService {
       }
     };
 
-    // ── CABEÇALHO ────────────────────────────────────────────────────────────────
+    // ── CABEÇALHO (OBRA 10) ──────────────────────────────────────────────────────
     const empresa = rdo.obra.empresa;
     const nomeEmpresa = empresa.nomeFantasia || empresa.razaoSocial || 'Empresa';
     const dataStr = new Date(rdo.dataReferencia).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
-    const pageH = ctx.page.getHeight();
-    ctx.page.drawRectangle({ x: 0, y: pageH - 50, width: ctx.w, height: 50, color: RED });
-    const rdoLabel = `RDO #${sequencial}`;
-    const rdoLabelWidth = bold.widthOfTextAtSize(rdoLabel, 20);
-    ctx.page.drawText(rdoLabel, { x: m.l, y: pageH - 31, size: 20, font: bold, color: WHITE });
-    ctx.page.drawText('Relatorio Diario de Obra', { x: m.l + rdoLabelWidth + 10, y: pageH - 31, size: 11, font: reg, color: rgb(1, 0.80, 0.80) });
+    // Desenha o bloco geométrico de destaque vermelho à esquerda
+    ctx.page.drawRectangle({
+      x: m.l,
+      y: ctx.y - 12,
+      width: 6,
+      height: 20,
+      color: LUNARDELI_RED,
+    });
+    
+    // Marca "OBRA 10" em negrito escuro
+    drawText('OBRA 10', m.l + 12, ctx.y - 2, 16, bold, LUNARDELI_DARK);
+    
+    // Subtítulo descritivo à direita
+    const subtitle = 'RELATORIO DIARIO DE OBRA';
+    const subtitleW = reg.widthOfTextAtSize(subtitle, 9);
+    ctx.page.drawText(subtitle, {
+      x: ctx.w - m.r - subtitleW,
+      y: ctx.y + 1,
+      size: 9,
+      font: reg,
+      color: GRAY,
+    });
+    
+    ctx.y -= 22;
+    drawLine(ctx.y, LUNARDELI_LIGHT_GRAY, 0.5);
+    ctx.y -= 15;
 
-    ctx.y -= 10;
-    drawText(nomeEmpresa.toUpperCase(), m.l, ctx.y, 10, bold, RED);
-    ctx.y -= 13;
-    drawText(`Obra: ${rdo.obra.nome}`, m.l, ctx.y, 9, reg, GRAY);
+    // Header Card agrupando os metadados
+    const cardH = 58;
+    const cardY = ctx.y - cardH;
+    
+    ctx.page.drawRectangle({
+      x: m.l,
+      y: cardY,
+      width: CONTENT_W,
+      height: cardH,
+      color: LUNARDELI_GRAY,
+      borderColor: LUNARDELI_LIGHT_GRAY,
+      borderWidth: 0.8,
+    });
+    
+    const cardTextY1 = cardY + cardH - 14;
+    const cardTextY2 = cardY + cardH - 28;
+    const cardTextY3 = cardY + cardH - 42;
+    
+    // Coluna 1
+    const col1X = m.l + 10;
+    ctx.page.drawText('OBRA:', { x: col1X, y: cardTextY1, size: 8, font: bold, color: LUNARDELI_DARK });
+    ctx.page.drawText(safeStr(rdo.obra.nome), { x: col1X + 35, y: cardTextY1, size: 8, font: reg, color: LUNARDELI_DARK });
+    
+    ctx.page.drawText('EMPRESA:', { x: col1X, y: cardTextY2, size: 8, font: bold, color: LUNARDELI_DARK });
+    ctx.page.drawText(safeStr(nomeEmpresa), { x: col1X + 50, y: cardTextY2, size: 8, font: reg, color: LUNARDELI_DARK });
 
-    // Status alinhado à direita
+    ctx.page.drawText('NUMERO:', { x: col1X, y: cardTextY3, size: 8, font: bold, color: LUNARDELI_DARK });
+    ctx.page.drawText(`RDO #${sequencial}`, { x: col1X + 45, y: cardTextY3, size: 8, font: reg, color: LUNARDELI_DARK });
+
+    // Coluna 2
+    const col2X = m.l + CONTENT_W * 0.55;
+    ctx.page.drawText('DATA:', { x: col2X, y: cardTextY1, size: 8, font: bold, color: LUNARDELI_DARK });
+    ctx.page.drawText(safeStr(dataStr), { x: col2X + 35, y: cardTextY1, size: 8, font: reg, color: LUNARDELI_DARK });
+    
+    ctx.page.drawText('RESPONSAVEL:', { x: col2X, y: cardTextY2, size: 8, font: bold, color: LUNARDELI_DARK });
+    ctx.page.drawText(safeStr(extras.responsavel || '-'), { x: col2X + 75, y: cardTextY2, size: 8, font: reg, color: LUNARDELI_DARK });
+
+    ctx.page.drawText('STATUS:', { x: col2X, y: cardTextY3, size: 8, font: bold, color: LUNARDELI_DARK });
+    
     const statusLabel = rdo.status === 'APROVADO' ? 'APROVADO'
       : rdo.status === 'RASCUNHO' ? 'RASCUNHO'
       : rdo.status === 'SUBMETIDO' ? 'AGUARDANDO APROVACAO'
       : rdo.status === 'REJEITADO' ? 'REJEITADO'
       : rdo.status;
     const statusColor = rdo.status === 'APROVADO' ? GREEN : rdo.status === 'SUBMETIDO' ? ORANGE : RED;
-    const statusW = bold.widthOfTextAtSize(statusLabel, 9);
-    ctx.page.drawText(statusLabel, { x: ctx.w - m.r - statusW, y: ctx.y, size: 9, font: bold, color: statusColor });
+    ctx.page.drawText(statusLabel, { x: col2X + 45, y: cardTextY3, size: 8, font: bold, color: statusColor });
 
-    ctx.y -= 12;
-    drawText(`Data: ${dataStr}`, m.l, ctx.y, 9, reg, DARK);
-    if (extras.responsavel) {
-      const respLabel = `Responsavel: ${extras.responsavel}`;
-      const respW = reg.widthOfTextAtSize(respLabel, 9);
-      ctx.page.drawText(respLabel, { x: ctx.w - m.r - respW, y: ctx.y, size: 9, font: reg, color: GRAY });
-    }
-    ctx.y -= 8;
-    drawLine(ctx.y, RED, 1);
-    ctx.y -= 14;
+    ctx.y = cardY - 15;
 
     // ── CONDICOES DO DIA ─────────────────────────────────────────────────────────
     drawSectionTitle('CONDICOES DO DIA');
-    const COL4 = CONTENT_W / 4;
-
-    const climaCols = [
-      { label: 'Clima Manha', value: safeStr(extras.climaManha) },
-      { label: 'Clima Tarde', value: safeStr(extras.climaTarde) },
-      { label: 'Clima Noite', value: safeStr(extras.climaNoite) },
-      { label: 'Terreno', value: safeStr(extras.condicaoTerreno) },
+    
+    ensureSpace(45);
+    const condCardH = 36;
+    const condCardY = ctx.y - condCardH;
+    
+    ctx.page.drawRectangle({
+      x: m.l,
+      y: condCardY,
+      width: CONTENT_W,
+      height: condCardH,
+      color: LUNARDELI_GRAY,
+      borderColor: LUNARDELI_LIGHT_GRAY,
+      borderWidth: 0.8,
+    });
+    
+    const condCols = [
+      { label: 'MANHA', value: safeStr(extras.climaManha) },
+      { label: 'TARDE', value: safeStr(extras.climaTarde) },
+      { label: 'NOITE', value: safeStr(extras.climaNoite) },
+      { label: 'TERRENO', value: safeStr(extras.condicaoTerreno) },
+      { label: 'TEMP. MIN', value: extras.tempMin ? `${extras.tempMin}°C` : '-' },
+      { label: 'TEMP. MAX', value: extras.tempMax ? `${extras.tempMax}°C` : '-' },
     ];
-    for (let i = 0; i < climaCols.length; i++) {
-      const cx = m.l + i * COL4;
-      drawText(climaCols[i].label.toUpperCase(), cx, ctx.y, 7, bold, GRAY);
-    }
-    ctx.y -= 11;
-    for (let i = 0; i < climaCols.length; i++) {
-      const cx = m.l + i * COL4;
-      drawText(climaCols[i].value, cx, ctx.y, 9, reg, DARK);
-    }
-    ctx.y -= 14;
-
-    // Temperatura e Wind
-    const tempCols = [
-      { label: 'Temp. Min', value: extras.tempMin ? `${extras.tempMin}C` : '-' },
-      { label: 'Temp. Max', value: extras.tempMax ? `${extras.tempMax}C` : '-' },
-    ];
-    if (tempCols.some(c => c.value !== '-')) {
-      for (let i = 0; i < tempCols.length; i++) {
-        const cx = m.l + i * COL4;
-        drawText(tempCols[i].label.toUpperCase(), cx, ctx.y, 7, bold, GRAY);
+    
+    const colW = CONTENT_W / 6;
+    const labelY = condCardY + condCardH - 12;
+    const valY = condCardY + 8;
+    
+    for (let i = 0; i < condCols.length; i++) {
+      const cx = m.l + i * colW + 6;
+      ctx.page.drawText(condCols[i].label, {
+        x: cx,
+        y: labelY,
+        size: 7,
+        font: bold,
+        color: GRAY,
+      });
+      ctx.page.drawText(condCols[i].value, {
+        x: cx,
+        y: valY,
+        size: 8,
+        font: reg,
+        color: LUNARDELI_DARK,
+      });
+      
+      if (i < condCols.length - 1) {
+        ctx.page.drawLine({
+          start: { x: m.l + (i + 1) * colW, y: condCardY + 4 },
+          end: { x: m.l + (i + 1) * colW, y: condCardY + condCardH - 4 },
+          thickness: 0.5,
+          color: LUNARDELI_LIGHT_GRAY,
+        });
       }
-      ctx.y -= 11;
-      for (let i = 0; i < tempCols.length; i++) {
-        const cx = m.l + i * COL4;
-        drawText(tempCols[i].value, cx, ctx.y, 9, reg, DARK);
-      }
-      ctx.y -= 16;
-    } else {
-      ctx.y -= 2;
     }
+    
+    ctx.y = condCardY - 15;
 
     // ── PRESENTES NA VISTORIA ────────────────────────────────────────────────────
     const pessoas: any[] = extras.pessoas || [];
@@ -442,17 +523,64 @@ export class PdfService {
 
     // ── LISTA DE ANEXOS ──────────────────────────────────────────────────────────
     if (anexos.length > 0) {
-      drawSectionTitle(`ANEXOS (${anexos.length})`);
+      drawSectionTitle('ANEXOS E MIDIAS');
       for (const a of anexos) {
-        ensureSpace(13);
+        ensureSpace(16);
+        
+        let badge = '[ARQUIVO]';
+        if (a.mimeType?.startsWith('image/')) badge = '[FOTO]';
+        else if (a.mimeType?.startsWith('video/')) badge = '[VIDEO]';
+        
+        const badgeW = bold.widthOfTextAtSize(badge + ' ', 8);
         const tamanhoKb = (a.tamanhoBytes / 1024).toFixed(0);
-        const linha = `${a.nomeOriginal || 'Arquivo'} — ${a.mimeType} — ${tamanhoKb} KB`;
-        const lines = wrapText(linha, CONTENT_W - 8, 7, reg);
-        for (const l of lines) {
-          ensureSpace(11);
-          drawText(l, m.l + 4, ctx.y, 7, reg, GRAY);
-          ctx.y -= 11;
+        const sizeStr = ` (${tamanhoKb} KB)`;
+        const linkText = a.nomeOriginal || 'Arquivo';
+        
+        const maxLinkW = CONTENT_W - badgeW - reg.widthOfTextAtSize(sizeStr, 8) - 15;
+        let displayedLink = linkText;
+        if (reg.widthOfTextAtSize(displayedLink, 8) > maxLinkW) {
+          while (displayedLink.length > 5 && reg.widthOfTextAtSize(displayedLink + '...', 8) > maxLinkW) {
+            displayedLink = displayedLink.substring(0, displayedLink.length - 1);
+          }
+          displayedLink += '...';
         }
+        
+        drawText(badge, m.l + 4, ctx.y, 8, bold, LUNARDELI_DARK);
+        
+        const linkX = m.l + 4 + badgeW;
+        ctx.page.drawText(displayedLink, {
+          x: linkX,
+          y: ctx.y,
+          size: 8,
+          font: bold,
+          color: COLOR_LINK,
+        });
+        
+        const linkW = bold.widthOfTextAtSize(displayedLink, 8);
+        ctx.page.drawLine({
+          start: { x: linkX, y: ctx.y - 1.5 },
+          end: { x: linkX + linkW, y: ctx.y - 1.5 },
+          thickness: 0.8,
+          color: COLOR_LINK,
+        });
+        
+        this.addLinkAnnotation(pdfDoc, ctx.page, a.urlS3, [
+          linkX,
+          ctx.y - 3,
+          linkX + linkW,
+          ctx.y + 9,
+        ]);
+        
+        const sizeX = linkX + linkW;
+        ctx.page.drawText(sizeStr, {
+          x: sizeX,
+          y: ctx.y,
+          size: 8,
+          font: reg,
+          color: GRAY,
+        });
+        
+        ctx.y -= 14;
       }
       ctx.y -= 6;
     }
@@ -489,7 +617,6 @@ export class PdfService {
 
       for (const img of imagens) {
         try {
-          // Buscar imagem via fetch (Node 18+)
           const response = await fetch(img.urlS3);
           if (!response.ok) continue;
           const arrayBuf = await response.arrayBuffer();
@@ -506,6 +633,39 @@ export class PdfService {
           const FW = fotoPage.getWidth();
           const FH = fotoPage.getHeight();
 
+          // Cabeçalho simplificado da página de fotos
+          fotoPage.drawRectangle({
+            x: m.l,
+            y: FH - m.t - 2,
+            width: 5,
+            height: 12,
+            color: LUNARDELI_RED,
+          });
+          fotoPage.drawText('OBRA 10', {
+            x: m.l + 10,
+            y: FH - m.t,
+            size: 11,
+            font: bold,
+            color: LUNARDELI_DARK,
+          });
+          
+          const sub = `GALERIA DE FOTOS — RDO #${sequencial}`;
+          const subW = reg.widthOfTextAtSize(sub, 8);
+          fotoPage.drawText(sub, {
+            x: FW - m.r - subW,
+            y: FH - m.t,
+            size: 8,
+            font: reg,
+            color: GRAY,
+          });
+          
+          fotoPage.drawLine({
+            start: { x: m.l, y: FH - m.t - 8 },
+            end: { x: FW - m.r, y: FH - m.t - 8 },
+            thickness: 0.5,
+            color: LUNARDELI_LIGHT_GRAY,
+          });
+
           // Redimensionar mantendo aspect ratio
           const maxW = FW - m.l - m.r;
           const maxH = FH - m.t - m.b - 40;
@@ -513,17 +673,39 @@ export class PdfService {
           const dW = embeddedImg.width * scale;
           const dH = embeddedImg.height * scale;
           const imgX = m.l + (maxW - dW) / 2;
-          const imgY = FH - m.t - dH;
+          const imgY = FH - m.t - dH - 18;
 
+          // Borda fina ao redor da foto
+          fotoPage.drawRectangle({
+            x: imgX - 1,
+            y: imgY - 1,
+            width: dW + 2,
+            height: dH + 2,
+            borderColor: LUNARDELI_LIGHT_GRAY,
+            borderWidth: 0.8,
+          });
+
+          // Desenhar a foto
           fotoPage.drawImage(embeddedImg, { x: imgX, y: imgY, width: dW, height: dH });
 
-          // Rodapé da foto
-          const caption = img.nomeOriginal || 'Foto';
+          // Link clicável sobre a foto inteira
+          this.addLinkAnnotation(pdfDoc, fotoPage, img.urlS3, [
+            imgX,
+            imgY,
+            imgX + dW,
+            imgY + dH,
+          ]);
+
+          // Rodapé e legenda da foto
+          const dataUpload = img.createdAt ? new Date(img.createdAt).toLocaleDateString('pt-BR') : '-';
+          const caption = `${img.nomeOriginal || 'Foto'} (por: ${img.criador?.nome || '-'} em ${dataUpload})`;
           const capW = reg.widthOfTextAtSize(caption, 8);
           fotoPage.drawText(caption, {
             x: FW / 2 - capW / 2,
             y: m.b,
-            size: 8, font: reg, color: GRAY,
+            size: 8,
+            font: reg,
+            color: LUNARDELI_DARK,
           });
         } catch (_err) {
           // ignorar falha na imagem individual
@@ -551,5 +733,42 @@ export class PdfService {
     const w = page.getWidth();
     const y = page.getHeight() - m.t;
     return { page, y, w, m, bold, reg, pdfDoc };
+  }
+
+  /** Adiciona um link clicável (Link Annotation) em uma coordenada específica da página. */
+  private addLinkAnnotation(
+    pdfDoc: PDFDocument,
+    page: PDFPage,
+    url: string,
+    rect: [number, number, number, number]
+  ) {
+    try {
+      const uriAction = pdfDoc.context.obj({
+        Type: 'Action',
+        S: 'URI',
+        URI: PDFString.of(url),
+      });
+
+      const linkAnnotation = pdfDoc.context.register(
+        pdfDoc.context.obj({
+          Type: 'Annot',
+          Subtype: 'Link',
+          Rect: rect, // [xMin, yMin, xMax, yMax]
+          Border: [0, 0, 0],
+          A: uriAction,
+        })
+      );
+
+      const pageNode = page.node;
+      if (!pageNode.has(PDFName.of('Annots'))) {
+        pageNode.set(PDFName.of('Annots'), pdfDoc.context.obj([]));
+      }
+      const annots = pageNode.lookup(PDFName.of('Annots'));
+      if (annots) {
+        (annots as any).push(linkAnnotation);
+      }
+    } catch (err) {
+      console.error('[PdfService] Erro ao adicionar link no PDF:', err);
+    }
   }
 }
