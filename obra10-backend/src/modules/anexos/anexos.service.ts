@@ -192,5 +192,20 @@ export class AnexosService {
       data: { deletedAt: new Date() },
     });
   }
+
+  async atualizarLegenda(anexoId: string, obraId: string, legenda: string) {
+    const anexo = await this.prisma.anexo.findFirst({
+      where: { id: anexoId, obraId, deletedAt: null },
+    });
+    if (!anexo) {
+      throw new NotFoundException(
+        'Anexo não encontrado ou não pertence a esta obra.',
+      );
+    }
+    return this.prisma.anexo.update({
+      where: { id: anexoId },
+      data: { nomeOriginal: legenda },
+    });
+  }
 }
 

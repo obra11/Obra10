@@ -63,6 +63,8 @@ export class AiService {
     empresaId: string,
     dataInicio: string,
     dataFim: string,
+    foco?: string,
+    secoes?: string[],
   ) {
     const inicio = new Date(dataInicio);
     const fim = new Date(dataFim);
@@ -271,18 +273,22 @@ export class AiService {
       servicosExecutados,
     };
 
-    // 5. Stub se Anthropic não configurado
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey || !Anthropic) {
-      const mockResult = {
+    // Helper para gerar o Mock Result com foco dinâmico
+    const gerarMockResult = (isFallback = false, errMsg?: string) => {
+      const prefix = isFallback ? `[MOCK - FALLBACK] ` : `[MOCK] `;
+      const suffix = errMsg ? ` (A API da IA retornou um erro: ${errMsg})` : '';
+      const focusText = foco?.trim() ? ` com foco em "${foco}"` : '';
+      const secoesText = secoes && secoes.length > 0 ? ` (seções focadas: ${secoes.join(', ')})` : '';
+
+      return {
         ...baseData,
-        resumoExecutivo: `[MOCK] Período: ${dataInicio} a ${dataFim}. Análise de ${totalDias} diários de obras com foco nos serviços e clima registrados.`,
+        resumoExecutivo: `${prefix}Período: ${dataInicio} a ${dataFim}. Análise de ${totalDias} diários de obras${focusText}${secoesText}.${suffix}`,
         gargalos: [
-          '[MOCK] Chuva frequente prejudicou a concretagem',
+          foco?.trim() ? `[MOCK] Gargalo relacionado a: ${foco}` : '[MOCK] Chuva frequente prejudicou a concretagem',
           '[MOCK] Falha de maquinário no 3º dia',
         ],
         recomendacoes: [
-          '[MOCK] Melhor planejar materiais para semana chuvosa',
+          foco?.trim() ? `[MOCK] Recomendação sobre: ${foco}` : '[MOCK] Melhor planejar materiais para semana chuvosa',
           '[MOCK] Realizar preventiva nos equipamentos locados',
         ],
         lembretes: [
@@ -301,10 +307,15 @@ export class AiService {
               { item: 'Cobrança de entrega do cimento', count: 1 },
               { item: 'Ajuste de nível da sapata', count: 1 },
             ],
-        modelo: 'MOCK',
+        modelo: isFallback ? 'MOCK-FALLBACK' : 'MOCK',
         cached: false,
       };
+    };
 
+    // 5. Stub se Anthropic não configurado
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey || !Anthropic) {
+      const mockResult = gerarMockResult();
       await this.prisma.relatorioIA.create({
         data: {
           obraId,
@@ -319,9 +330,19 @@ export class AiService {
 
     // 6. Chamar Claude Sonnet
     const client = new Anthropic.default({ apiKey });
+    
+    let promptFocus = '';
+    if (foco?.trim()) {
+      promptFocus += `\nINSTRUÇÃO DE FOCO DO USUÁRIO: O usuário solicitou prioridade na análise sobre: "${foco}". Direcione a análise, resumo executivo, recomendações e gargalos para cobrir este assunto com destaque.\n`;
+    }
+    if (secoes && Array.isArray(secoes) && secoes.length > 0) {
+      promptFocus += `\nÁREAS DE INTERESSE: O usuário selecionou foco especial nas seguintes seções: ${secoes.join(', ')}. Certifique-se de preencher e refinar essas seções com o máximo de detalhes possível.\n`;
+    }
+
     const prompt = `Você é um assistente especializado em gestão de obras de construção civil.
 
 Analise as atividades, pendências, gargalos e observações de ${totalDias} Relatórios Diários de Obra do período ${dataInicio} a ${dataFim}.
+${promptFocus}
 Gere um JSON estruturado com os insights. NÃO gere markdown, introduções ou explicações. Responda APENAS com o objeto JSON.
 
 O JSON deve seguir exatamente este formato:
@@ -361,12 +382,10 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
             ? response.content[0].text
             : '{}';
         
-        // Extração robusta do objeto JSON usando regex
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         const cleanJsonStr = jsonMatch ? jsonMatch[0] : '{}';
 
         conteudo = JSON.parse(cleanJsonStr);
-        // Fazer merge dos dados base com a IA
         conteudo = { ...baseData, ...conteudo };
       } catch (err) {
         this.logger.error(
@@ -386,18 +405,31 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
         };
       }
     } catch (err: any) {
-      const msg = err?.message ?? '';
+      this.logger.error(`[AiService] Erro ao chamar a API do Claude: ${err?.message}`);
       const isCreditsError =
-        msg.includes('Plans & Billing') ||
-        msg.includes('credit') ||
+        err?.message?.includes('Plans & Billing') ||
+        err?.message?.includes('credit') ||
         err?.status === 402 ||
         err?.error?.type === 'insufficient_quota';
+      
       if (isCreditsError) {
         throw new BadRequestException(
           'Saldo insuficiente na conta Anthropic. Adicione créditos em console.anthropic.com → Plans & Billing, ou deixe ANTHROPIC_API_KEY vazia para usar modo MOCK.',
         );
       }
-      throw err;
+      
+      // Fallback robusto para o modo Mock se for qualquer outro erro de API/Rede
+      const fallbackResult = gerarMockResult(true, err?.message);
+      await this.prisma.relatorioIA.create({
+        data: {
+          obraId,
+          dataInicio: inicio,
+          dataFim: fim,
+          conteudo: fallbackResult as any,
+          modelo: 'MOCK-FALLBACK',
+        },
+      });
+      return { ...fallbackResult, cached: false };
     }
 
     // 7. Salvar no cache

@@ -8,9 +8,10 @@ import { AdminCuponsController } from './admin-cupons.controller';
 import { AdminMetricasController } from './admin-metricas.controller';
 import { AdminModulosController } from './admin-modulos.controller';
 import { AdminMetricasService } from './admin-metricas.service';
+import { CobrancaModule } from '../cobranca/cobranca.module';
 
 @Module({
-  imports: [PrismaModule, CryptoModule, EmailModule],
+  imports: [PrismaModule, CryptoModule, EmailModule, CobrancaModule],
   controllers: [
     AdminEmpresasController,
     AdminUsuariosController,

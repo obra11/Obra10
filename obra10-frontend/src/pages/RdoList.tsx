@@ -78,13 +78,17 @@ export const RdoList: React.FC = () => {
   const navigate = useNavigate();
   const [rdos, setRdos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busca, setBusca] = useState('');
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
 
   // Relatório IA
   const [showIAModal, setShowIAModal] = useState(false);
   const [iaDataInicio, setIaDataInicio] = useState('');
   const [iaDataFim, setIaDataFim] = useState('');
+  const [busca, setBusca] = useState('');
+  const [filtroStatus, setFiltroStatus] = useState('TODOS');
+  const [ordenacao, setOrdenacao] = useState('DATA_DESC');
+  const [iaFoco, setIaFoco] = useState('');
+  const [iaSecoes, setIaSecoes] = useState<string[]>([]);
   const [iaLoading, setIaLoading] = useState(false);
   const [iaResultado, setIaResultado] = useState<any>(null);
   const [iaError, setIaError] = useState('');
@@ -124,7 +128,7 @@ export const RdoList: React.FC = () => {
     try {
       const r = await api.post(
         `/obras/${obraAtiva?.id}/relatorio-ia`,
-        { dataInicio: iaDataInicio, dataFim: iaDataFim },
+        { dataInicio: iaDataInicio, dataFim: iaDataFim, foco: iaFoco, secoes: iaSecoes },
         { headers: { 'x-obra-id': obraAtiva?.id } },
       );
       setIaResultado(r.data);
@@ -175,60 +179,85 @@ export const RdoList: React.FC = () => {
     setIaPergunta('');
     setIaResposta('');
     setIaPerguntaError('');
+    setIaFoco('');
+    setIaSecoes([]);
   };
 
-  const rdosFiltrados = rdos.filter((r) => {
-    if (!busca.trim()) return true;
+  const rdosFiltrados = rdos
+    .filter((r) => {
+      // 1. Filtrar por status
+      if (filtroStatus !== 'TODOS' && r.status !== filtroStatus) {
+        return false;
+      }
 
-    const queryNormalized = busca
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .trim();
+      // 2. Filtrar por texto de busca
+      if (!busca.trim()) return true;
 
-    const stConfig = STATUS_CONFIG[r.status as RdoStatus] || STATUS_CONFIG.RASCUNHO;
-    const statusLabel = stConfig.label
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
+      const queryNormalized = busca
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
 
-    const dateStr = format(new Date(r.dataReferencia), 'dd/MM/yyyy');
-    const climaManha = (r.dadosExtras?.climaManha || '')
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-    const climaTarde = (r.dadosExtras?.climaTarde || '')
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-    const climaNoite = (r.dadosExtras?.climaNoite || '')
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-    const terreno = (r.dadosExtras?.condicaoTerreno || '')
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
+      const stConfig = STATUS_CONFIG[r.status as RdoStatus] || STATUS_CONFIG.RASCUNHO;
+      const statusLabel = stConfig.label
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
 
-    const searchableText = [
-      dateStr,
-      `rdo #${r.sequencial}`,
-      `rdo ${r.sequencial}`,
-      `#${r.sequencial}`,
-      String(r.sequencial || ''),
-      statusLabel,
-      climaManha,
-      climaTarde,
-      climaNoite,
-      terreno,
-      r.id,
-    ]
-      .join(' ')
-      .toLowerCase();
+      const dateStr = format(new Date(r.dataReferencia), 'dd/MM/yyyy');
+      const climaManha = (r.dadosExtras?.climaManha || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      const climaTarde = (r.dadosExtras?.climaTarde || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      const climaNoite = (r.dadosExtras?.climaNoite || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      const terreno = (r.dadosExtras?.condicaoTerreno || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
 
-    const terms = queryNormalized.split(/\s+/);
-    return terms.every((term) => searchableText.includes(term));
-  });
+      const searchableText = [
+        dateStr,
+        `rdo #${r.sequencial}`,
+        `rdo ${r.sequencial}`,
+        `#${r.sequencial}`,
+        String(r.sequencial || ''),
+        statusLabel,
+        climaManha,
+        climaTarde,
+        climaNoite,
+        terreno,
+        r.id,
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      const terms = queryNormalized.split(/\s+/);
+      return terms.every((term) => searchableText.includes(term));
+    })
+    // 3. Ordenar os resultados
+    .sort((a, b) => {
+      if (ordenacao === 'DATA_DESC') {
+        return new Date(b.dataReferencia).getTime() - new Date(a.dataReferencia).getTime();
+      }
+      if (ordenacao === 'DATA_ASC') {
+        return new Date(a.dataReferencia).getTime() - new Date(b.dataReferencia).getTime();
+      }
+      if (ordenacao === 'NUMERO_DESC') {
+        return (b.sequencial || 0) - (a.sequencial || 0);
+      }
+      if (ordenacao === 'NUMERO_ASC') {
+        return (a.sequencial || 0) - (b.sequencial || 0);
+      }
+      return 0;
+    });
 
   return (
     <div className="p-4 md:p-8">
@@ -310,6 +339,58 @@ export const RdoList: React.FC = () => {
                     onChange={(e) => setIaDataFim(e.target.value)}
                     className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-red-500"
                   />
+                </div>
+              </div>
+
+              {/* Opções de Customização do Relatório IA */}
+              <div className="space-y-3 border-t border-gray-100 pt-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Foco da Análise / Diretriz Especial (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={iaFoco}
+                    onChange={(e) => setIaFoco(e.target.value)}
+                    placeholder="Ex: Focar na escassez de materiais ou atrasos no reboco..."
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                    Seções de Interesse
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { id: 'resumo', label: 'Resumo Geral' },
+                      { id: 'efetivo', label: 'Efetivo / Funcionários' },
+                      { id: 'clima', label: 'Clima e Terreno' },
+                      { id: 'tarefas', label: 'Tarefas Pendentes' },
+                      { id: 'gargalos', label: 'Gargalos e Ocorrências' },
+                    ].map((sec) => {
+                      const isSelected = iaSecoes.includes(sec.id);
+                      return (
+                        <button
+                          key={sec.id}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setIaSecoes(iaSecoes.filter((s) => s !== sec.id));
+                            } else {
+                              setIaSecoes([...iaSecoes, sec.id]);
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                            isSelected
+                              ? 'bg-red-50 border-red-200 text-red-700 font-semibold'
+                              : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          {sec.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
@@ -717,9 +798,9 @@ export const RdoList: React.FC = () => {
         </div>
       )}
 
-      {/* Search */}
+      {/* Search and Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-3 md:p-4 border-b border-gray-100 flex items-center bg-gray-50/50">
+        <div className="p-3 md:p-4 border-b border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between bg-gray-50/50 gap-3">
           <div className="relative w-full max-w-md">
             <Search
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -729,9 +810,32 @@ export const RdoList: React.FC = () => {
               type="text"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por data ou status..."
+              placeholder="Buscar no diário de obra..."
               className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-lunardeli-red/20 focus:border-lunardeli-red text-sm"
             />
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={filtroStatus}
+              onChange={(e) => setFiltroStatus(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-xs md:text-sm bg-white focus:ring-2 focus:ring-lunardeli-red/20"
+            >
+              <option value="TODOS">Todos os Status</option>
+              <option value="RASCUNHO">Rascunho</option>
+              <option value="SUBMETIDO">Aguardando Aprovação</option>
+              <option value="APROVADO">Aprovado</option>
+              <option value="REJEITADO">Rejeitado</option>
+            </select>
+            <select
+              value={ordenacao}
+              onChange={(e) => setOrdenacao(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-xs md:text-sm bg-white focus:ring-2 focus:ring-lunardeli-red/20"
+            >
+              <option value="DATA_DESC">Mais recentes primeiro</option>
+              <option value="DATA_ASC">Mais antigos primeiro</option>
+              <option value="NUMERO_DESC">Nº RDO: Maior primeiro</option>
+              <option value="NUMERO_ASC">Nº RDO: Menor primeiro</option>
+            </select>
           </div>
         </div>
 
@@ -762,7 +866,7 @@ export const RdoList: React.FC = () => {
                       size={40}
                     />
                     <p className="text-gray-500 font-medium">
-                      {busca ? 'Nenhum resultado' : 'Comece criando o primeiro RDO'}
+                      {(busca || filtroStatus !== 'TODOS') ? 'Nenhum resultado encontrado' : 'Comece criando o primeiro RDO'}
                     </p>
                   </td>
                 </tr>
@@ -857,7 +961,7 @@ export const RdoList: React.FC = () => {
             <div className="p-10 text-center">
               <FileText className="mx-auto text-gray-300 mb-3" size={36} />
               <p className="text-gray-500 font-medium text-sm">
-                {busca ? 'Nenhum resultado' : 'Comece criando o primeiro RDO'}
+                {(busca || filtroStatus !== 'TODOS') ? 'Nenhum resultado encontrado' : 'Comece criando o primeiro RDO'}
               </p>
             </div>
           ) : (

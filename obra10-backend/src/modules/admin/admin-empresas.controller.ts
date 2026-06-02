@@ -1,11 +1,12 @@
-import { Controller, Get, Patch, Post, Delete, Param, Body, UseGuards, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Delete, Param, Body, UseGuards, NotFoundException, BadRequestException, ConflictException, ForbiddenException, Req } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CryptoService } from '../../core/services/crypto.service';
 import { SuperAdminGuard } from '../../core/guards/super-admin.guard';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
-import { AtualizarEmpresaAdminDto, ModulosEmpresaAdminDto, CriarEmpresaAdminDto } from './dto/admin.dto';
+import { AtualizarEmpresaAdminDto, ModulosEmpresaAdminDto, CriarEmpresaAdminDto, ConfirmarPagamentoManualAdminDto } from './dto/admin.dto';
 import * as bcrypt from 'bcrypt';
 import { EmailService } from '../email/email.service';
+import { CobrancaService } from '../cobranca/cobranca.service';
 
 @Controller('admin/empresas')
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
@@ -13,7 +14,8 @@ export class AdminEmpresasController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cryptoService: CryptoService,
-    private readonly emailService: EmailService
+    private readonly emailService: EmailService,
+    private readonly cobrancaService: CobrancaService,
   ) {}
 
   @Get()
@@ -368,5 +370,33 @@ export class AdminEmpresasController {
       message: `Avisos enviados! ${result.count} cobrança(s) de todas as empresas foram marcadas.`,
       total: result.count
     };
+  }
+
+  @Post(':id/cobrancas/:cobrancaId/confirmar-manual')
+  async confirmarPagamentoManual(
+    @Param('id') empresaId: string,
+    @Param('cobrancaId') cobrancaId: string,
+    @Body() dto: ConfirmarPagamentoManualAdminDto,
+    @Req() req: any
+  ) {
+    const adminUser = req.user;
+    if (!adminUser) throw new ForbiddenException('Usuário não autenticado.');
+
+    // Validar senha do Super Admin
+    const senhaOk = await bcrypt.compare(dto.senha, adminUser.senhaHash);
+    if (!senhaOk) {
+      throw new ForbiddenException('Senha de administrador incorreta.');
+    }
+
+    // Validar se cobrança pertence à empresa
+    const cobranca = await this.prisma.cobranca.findUnique({
+      where: { id: cobrancaId }
+    });
+    if (!cobranca) throw new NotFoundException('Cobrança não encontrada.');
+    if (cobranca.empresaId !== empresaId) {
+      throw new BadRequestException('A cobrança não pertence à empresa informada.');
+    }
+
+    return this.cobrancaService.confirmarPagamentoManualAdmin(cobrancaId, adminUser.id);
   }
 }

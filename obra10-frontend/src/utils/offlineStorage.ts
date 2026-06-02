@@ -8,6 +8,7 @@ export interface OfflineAttachment {
   previewUrl?: string;     // blob URL para exibição local
   tentativas: number;      // contador de tentativas de upload
   criadoEm: string;        // ISO timestamp
+  legenda?: string;        // legenda/descrição opcional
 }
 
 const DB_NAME = 'Obra10OfflineDB';
@@ -134,3 +135,22 @@ export async function incrementarTentativa(id: string): Promise<void> {
     request.onerror = () => reject(request.error);
   });
 }
+
+export async function updateOfflineAttachmentLegenda(id: string, legenda: string): Promise<void> {
+  const db = await initOfflineDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.get(id);
+    request.onsuccess = () => {
+      const item = request.result as OfflineAttachment;
+      if (item) {
+        item.legenda = legenda;
+        store.put(item);
+      }
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+

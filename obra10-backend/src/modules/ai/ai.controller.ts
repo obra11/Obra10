@@ -18,7 +18,7 @@ export class AiController {
   @Post('relatorio-ia')
   async gerarRelatorio(
     @Param('obraId') obraId: string,
-    @Body() body: { dataInicio: string; dataFim: string },
+    @Body() body: { dataInicio: string; dataFim: string; foco?: string; secoes?: string[] },
     @Req() req: any,
   ) {
     const empresaId = req.user.empresaId;
@@ -27,6 +27,8 @@ export class AiController {
       empresaId,
       body.dataInicio,
       body.dataFim,
+      body.foco,
+      body.secoes,
     );
   }
 

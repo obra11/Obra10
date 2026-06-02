@@ -11,6 +11,7 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
+  Body,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -240,6 +241,7 @@ export class UploadController {
       }),
     )
     file: Express.Multer.File,
+    @Body('legenda') legenda: string,
     @Req() req: any,
   ) {
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
@@ -255,6 +257,7 @@ export class UploadController {
         mimeType: file.mimetype,
         tamanhoBytes: file.size,
         urlS3: url,
+        nomeOriginal: legenda || file.originalname,
       },
     });
 

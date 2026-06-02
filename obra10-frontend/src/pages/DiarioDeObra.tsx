@@ -14,7 +14,8 @@ import {
   getOfflineAttachments,
   deleteOfflineAttachment,
   updateRdoId,
-  incrementarTentativa
+  incrementarTentativa,
+  updateOfflineAttachmentLegenda
 } from '../utils/offlineStorage';
 
 /* ═══════════════════════════════════════════════════════════════
@@ -390,6 +391,9 @@ export const DiarioDeObra: React.FC = () => {
         const file = new File([item.dados], item.nomeArquivo, { type: item.mimeType });
         const formData = new FormData();
         formData.append('file', file);
+        if (item.legenda) {
+          formData.append('legenda', item.legenda);
+        }
 
         try {
           const res = await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
@@ -412,6 +416,20 @@ export const DiarioDeObra: React.FC = () => {
       }
     } catch (e) {
       console.error('Erro ao ler do IndexedDB para sincronização:', e);
+    }
+  };
+
+  const handleSaveSavedFileLegenda = async (anexoId: string, value: string) => {
+    if (!navigator.onLine) {
+      showToast('⚠️ Sem conexão para salvar a legenda agora.');
+      return;
+    }
+    try {
+      await api.patch(`/anexos/${anexoId}`, { legenda: value });
+      showToast('✏️ Legenda atualizada.');
+    } catch (err) {
+      console.error('Erro ao salvar legenda no servidor:', err);
+      showToast('❌ Erro ao salvar legenda.');
     }
   };
 
@@ -671,22 +689,22 @@ export const DiarioDeObra: React.FC = () => {
   });
   const uploadMidas = async (rdoIdAlvo: string) => {
     if (!obraId) return;
-    const todosArquivos = [
-      ...fotos.map(f => f.file),
-      ...videos.map(v => v.file),
-      ...anexos.map(a => a.file)
-    ];
-
-    if (todosArquivos.length === 0) return;
 
     let successCount = 0;
     const novosAnexos: SavedFile[] = [];
-    for (let i = 0; i < todosArquivos.length; i++) {
-      const file = todosArquivos[i];
+    const totalFiles = fotos.length + videos.length + anexos.length;
+    let fileIndex = 0;
+
+    // 1. Fotos
+    for (const f of fotos) {
+      fileIndex++;
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', f.file);
+      if (f.legenda) {
+        formData.append('legenda', f.legenda);
+      }
       try {
-        setToast(`⏳ Fazendo upload das mídias... (${i + 1}/${todosArquivos.length})`);
+        setToast(`⏳ Fazendo upload das mídias... (${fileIndex}/${totalFiles})`);
         const res = await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
@@ -695,7 +713,51 @@ export const DiarioDeObra: React.FC = () => {
         }
         successCount++;
       } catch (err: any) {
-        console.error('Erro ao subir arquivo:', file.name, err);
+        console.error('Erro ao subir foto:', f.file.name, err);
+      }
+    }
+
+    // 2. Vídeos
+    for (const v of videos) {
+      fileIndex++;
+      const formData = new FormData();
+      formData.append('file', v.file);
+      if (v.legenda) {
+        formData.append('legenda', v.legenda);
+      }
+      try {
+        setToast(`⏳ Fazendo upload das mídias... (${fileIndex}/${totalFiles})`);
+        const res = await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        if (res.data?.anexo) {
+          novosAnexos.push(res.data.anexo);
+        }
+        successCount++;
+      } catch (err: any) {
+        console.error('Erro ao subir vídeo:', v.file.name, err);
+      }
+    }
+
+    // 3. Anexos
+    for (const a of anexos) {
+      fileIndex++;
+      const formData = new FormData();
+      formData.append('file', a.file);
+      if (a.descricao) {
+        formData.append('legenda', a.descricao);
+      }
+      try {
+        setToast(`⏳ Fazendo upload das mídias... (${fileIndex}/${totalFiles})`);
+        const res = await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        if (res.data?.anexo) {
+          novosAnexos.push(res.data.anexo);
+        }
+        successCount++;
+      } catch (err: any) {
+        console.error('Erro ao subir anexo:', a.file.name, err);
       }
     }
     
@@ -1161,11 +1223,26 @@ export const DiarioDeObra: React.FC = () => {
                            <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer">
                               <img src={getFileUrl(sf.urlS3)} alt={sf.nomeOriginal || 'Foto'} className="w-full h-24 object-cover hover:opacity-90 transition-opacity" />
                            </a>
-                           <div className="p-2 flex justify-between items-center bg-green-50 border-t border-gray-100">
-                              <span className="text-[10px] font-bold text-green-700 truncate max-w-[70%]" title={sf.nomeOriginal || 'Salvo'}>
-                                 {sf.nomeOriginal || 'Salvo'}
-                              </span>
-                              <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors disabled:opacity-50" title="Excluir do RDO" disabled={isReadOnly}><Trash2 size={14}/></button>
+                           <div className="p-2 flex flex-col gap-1.5 bg-green-50 border-t border-gray-100">
+                              <div className="flex items-center gap-1.5 w-full">
+                                 <input 
+                                    className="flex-1 text-xs px-2 py-1 border rounded bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-lunardeli-red" 
+                                    placeholder="Legenda..." 
+                                    value={sf.nomeOriginal || ''} 
+                                    onChange={e => {
+                                       const newVal = e.target.value;
+                                       setSavedFiles(prev => prev.map(item => item.id === sf.id ? { ...item, nomeOriginal: newVal } : item));
+                                    }}
+                                    onBlur={() => handleSaveSavedFileLegenda(sf.id, sf.nomeOriginal)}
+                                    onKeyDown={e => {
+                                       if (e.key === 'Enter') {
+                                          (e.target as HTMLInputElement).blur();
+                                       }
+                                    }}
+                                    disabled={isReadOnly} 
+                                 />
+                                 <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors disabled:opacity-50" title="Excluir do RDO" disabled={isReadOnly}><Trash2 size={14}/></button>
+                              </div>
                            </div>
                         </div>
                      ))}
@@ -1205,7 +1282,13 @@ export const DiarioDeObra: React.FC = () => {
                               </div>
                            )}
                            <div className="p-2 flex gap-1 items-center bg-gray-50">
-                              <input className="flex-1 text-xs px-2 py-1 border rounded" placeholder="Legenda..." value={f.legenda} onChange={e => setFotos(prev => prev.map((item, idx) => idx === i ? { ...item, legenda: e.target.value } : item))} disabled={isReadOnly} />
+                              <input className="flex-1 text-xs px-2 py-1 border rounded" placeholder="Legenda..." value={f.legenda} onChange={async e => {
+                                  const newVal = e.target.value;
+                                  setFotos(prev => prev.map((item, idx) => idx === i ? { ...item, legenda: newVal } : item));
+                                  if (f.offlineId) {
+                                     await updateOfflineAttachmentLegenda(f.offlineId, newVal);
+                                  }
+                               }} disabled={isReadOnly} />
                               <button onClick={() => handleDeletePendingFoto(i, f.offlineId)} className="text-red-500 p-1 disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
                            </div>
                         </div>
@@ -1230,13 +1313,31 @@ export const DiarioDeObra: React.FC = () => {
                   <div className="space-y-2">
                      {/* Saved Videos */}
                      {savedFiles.filter(a => a.mimeType?.startsWith('video/')).map((sf) => (
-                        <div key={sf.id} className="bg-white border border-gray-200 p-2 rounded-lg flex items-center justify-between gap-2 bg-green-50/40">
-                           <div className="flex-1 min-w-0">
-                              <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-blue-600 hover:underline truncate block">
-                                 🎥 {sf.nomeOriginal || 'Vídeo Salvo'}
-                              </a>
+                        <div key={sf.id} className="bg-white border border-gray-200 p-2 rounded-lg flex flex-col gap-2 bg-green-50/40">
+                           <div className="flex items-center justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                 <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-blue-600 hover:underline truncate block">
+                                    🎥 Visualizar Vídeo
+                                 </a>
+                              </div>
+                              <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
                            </div>
-                           <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
+                           <input 
+                              className="w-full text-xs px-2 py-1 border border-gray-200 rounded bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-lunardeli-red" 
+                              placeholder="Legenda..." 
+                              value={sf.nomeOriginal || ''} 
+                              onChange={e => {
+                                 const newVal = e.target.value;
+                                 setSavedFiles(prev => prev.map(item => item.id === sf.id ? { ...item, nomeOriginal: newVal } : item));
+                              }}
+                              onBlur={() => handleSaveSavedFileLegenda(sf.id, sf.nomeOriginal)}
+                              onKeyDown={e => {
+                                 if (e.key === 'Enter') {
+                                    (e.target as HTMLInputElement).blur();
+                                 }
+                              }}
+                              disabled={isReadOnly} 
+                           />
                         </div>
                      ))}
                      {/* Pending Videos */}
@@ -1245,7 +1346,13 @@ export const DiarioDeObra: React.FC = () => {
                            <div className="flex items-center justify-between gap-2">
                               <div className="flex-1 min-w-0">
                                  <p className="text-xs font-medium truncate">{v.file.name}</p>
-                                 <input className="w-full text-xs px-1.5 py-1 border border-gray-100 rounded mt-1 bg-gray-50" placeholder="Legenda..." value={v.legenda} onChange={e => setVideos(prev => prev.map((item, idx) => idx === i ? { ...item, legenda: e.target.value } : item))} disabled={isReadOnly} />
+                                 <input className="w-full text-xs px-1.5 py-1 border border-gray-100 rounded mt-1 bg-gray-50" placeholder="Legenda..." value={v.legenda} onChange={async e => {
+                                  const newVal = e.target.value;
+                                  setVideos(prev => prev.map((item, idx) => idx === i ? { ...item, legenda: newVal } : item));
+                                  if (v.offlineId) {
+                                     await updateOfflineAttachmentLegenda(v.offlineId, newVal);
+                                  }
+                               }} disabled={isReadOnly} />
                               </div>
                               <button onClick={() => handleDeletePendingVideo(i, v.offlineId)} className="text-red-500 p-1 disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
                            </div>
@@ -1300,16 +1407,34 @@ export const DiarioDeObra: React.FC = () => {
                   <div className="space-y-2">
                      {/* Saved Documentos */}
                      {savedFiles.filter(a => !a.mimeType?.startsWith('image/') && !a.mimeType?.startsWith('video/')).map((sf) => (
-                        <div key={sf.id} className="bg-white border border-gray-200 p-2 rounded-lg flex items-center justify-between gap-2 bg-green-50/40">
-                           <span className="shrink-0 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                              {getFileExt(sf.nomeOriginal || 'FILE')}
-                           </span>
-                           <div className="flex-1 min-w-0">
-                              <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-blue-600 hover:underline truncate block">
-                                 {sf.nomeOriginal || 'Documento'}
-                              </a>
+                        <div key={sf.id} className="bg-white border border-gray-200 p-2 rounded-lg flex flex-col gap-2 bg-green-50/40">
+                           <div className="flex items-center justify-between gap-2">
+                              <span className="shrink-0 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                 {getFileExt(sf.urlS3 || sf.nomeOriginal || 'FILE')}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                 <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-blue-600 hover:underline truncate block">
+                                    Ver Documento
+                                 </a>
+                              </div>
+                              <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
                            </div>
-                           <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
+                           <input 
+                              className="w-full text-xs px-2 py-1 border border-gray-200 rounded bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-lunardeli-red" 
+                              placeholder="Legenda..." 
+                              value={sf.nomeOriginal || ''} 
+                              onChange={e => {
+                                 const newVal = e.target.value;
+                                 setSavedFiles(prev => prev.map(item => item.id === sf.id ? { ...item, nomeOriginal: newVal } : item));
+                              }}
+                              onBlur={() => handleSaveSavedFileLegenda(sf.id, sf.nomeOriginal)}
+                              onKeyDown={e => {
+                                 if (e.key === 'Enter') {
+                                    (e.target as HTMLInputElement).blur();
+                                 }
+                              }}
+                              disabled={isReadOnly} 
+                           />
                         </div>
                      ))}
                      {/* Pending Documentos */}
@@ -1319,7 +1444,13 @@ export const DiarioDeObra: React.FC = () => {
                               <span className="shrink-0 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">{getFileExt(a.file.name)}</span>
                               <div className="flex-1 min-w-0">
                                  <p className="text-xs font-medium truncate">{a.file.name}</p>
-                                 <input className="w-full text-xs px-1.5 py-1 border border-gray-100 rounded mt-1 bg-gray-50" placeholder="Info..." value={a.descricao} onChange={e => setAnexos(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: e.target.value } : item))} disabled={isReadOnly} />
+                                 <input className="w-full text-xs px-1.5 py-1 border border-gray-100 rounded mt-1 bg-gray-50" placeholder="Info..." value={a.descricao} onChange={async e => {
+                                  const newVal = e.target.value;
+                                  setAnexos(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: newVal } : item));
+                                  if (a.offlineId) {
+                                     await updateOfflineAttachmentLegenda(a.offlineId, newVal);
+                                  }
+                               }} disabled={isReadOnly} />
                               </div>
                               <button onClick={() => handleDeletePendingAnexo(i, a.offlineId)} className="text-red-500 p-1 disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
                            </div>

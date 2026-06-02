@@ -234,3 +234,8 @@ export class CriarEmpresaAdminDto {
   @IsOptional()
   gestorTelefone?: string;
 }
+
+export class ConfirmarPagamentoManualAdminDto {
+  @IsString()
+  senha: string;
+}

@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, PDFName, PDFString } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, PDFName, PDFString, degrees } from 'pdf-lib';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Paleta de Cores Lunardeli Oficial
 const LUNARDELI_RED = rgb(0.898, 0.098, 0.173); // #E5192C
@@ -563,7 +565,6 @@ export class PdfService {
           thickness: 0.8,
           color: COLOR_LINK,
         });
-        
         this.addLinkAnnotation(pdfDoc, ctx.page, a.urlS3, [
           linkX,
           ctx.y - 3,
@@ -608,40 +609,41 @@ export class PdfService {
     const rodapeTs = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     drawText(`Gerado pelo OBRA 10 em ${rodapeTs}`, m.l, ctx.y, 7, reg, LIGHT_GRAY);
 
-    // ── FOTOS (páginas adicionais) ───────────────────────────────────────────────
+    // ── FOTOS (páginas adicionais em grade 2x4) ───────────────────────────────────────────────
     if (incluirFotos) {
       const imagens = anexos.filter(a =>
         a.mimeType?.startsWith('image/') &&
         (a.mimeType === 'image/jpeg' || a.mimeType === 'image/png')
-      ).slice(0, 12); // máximo 12 fotos
+      );
 
-      for (const img of imagens) {
-        try {
-          const response = await fetch(img.urlS3);
-          if (!response.ok) continue;
-          const arrayBuf = await response.arrayBuffer();
-          const imgBytes = new Uint8Array(arrayBuf);
+      const colW = 245;
+      const cellH = 170;
+      const gapX = 15;
+      const gapY = 8;
+      const maxRowsPerPage = 4;
+      const maxColsPerPage = 2;
+      const itemsPerPage = maxRowsPerPage * maxColsPerPage; // 8
 
-          let embeddedImg;
-          if (img.mimeType === 'image/jpeg') {
-            embeddedImg = await pdfDoc.embedJpg(imgBytes);
-          } else {
-            embeddedImg = await pdfDoc.embedPng(imgBytes);
-          }
+      let currentFotoPage!: PDFPage;
 
-          const fotoPage = pdfDoc.addPage([595.28, 841.89]);
-          const FW = fotoPage.getWidth();
-          const FH = fotoPage.getHeight();
+      for (let idx = 0; idx < imagens.length; idx++) {
+        const pageIdx = idx % itemsPerPage;
+        const isNewPage = pageIdx === 0;
 
-          // Cabeçalho simplificado da página de fotos
-          fotoPage.drawRectangle({
+        if (isNewPage) {
+          currentFotoPage = pdfDoc.addPage([595.28, 841.89]);
+          const FW = currentFotoPage.getWidth();
+          const FH = currentFotoPage.getHeight();
+
+          // Cabeçalho da página de fotos
+          currentFotoPage.drawRectangle({
             x: m.l,
             y: FH - m.t - 2,
             width: 5,
             height: 12,
             color: LUNARDELI_RED,
           });
-          fotoPage.drawText('OBRA 10', {
+          currentFotoPage.drawText('OBRA 10', {
             x: m.l + 10,
             y: FH - m.t,
             size: 11,
@@ -649,9 +651,10 @@ export class PdfService {
             color: LUNARDELI_DARK,
           });
           
-          const sub = `GALERIA DE FOTOS — RDO #${sequencial}`;
+          const pagNum = Math.floor(idx / itemsPerPage) + 1;
+          const sub = `GALERIA DE FOTOS — PÁGINA ${pagNum}`;
           const subW = reg.widthOfTextAtSize(sub, 8);
-          fotoPage.drawText(sub, {
+          currentFotoPage.drawText(sub, {
             x: FW - m.r - subW,
             y: FH - m.t,
             size: 8,
@@ -659,56 +662,149 @@ export class PdfService {
             color: GRAY,
           });
           
-          fotoPage.drawLine({
+          currentFotoPage.drawLine({
             start: { x: m.l, y: FH - m.t - 8 },
             end: { x: FW - m.r, y: FH - m.t - 8 },
             thickness: 0.5,
             color: LUNARDELI_LIGHT_GRAY,
           });
+        }
 
-          // Redimensionar mantendo aspect ratio
-          const maxW = FW - m.l - m.r;
-          const maxH = FH - m.t - m.b - 40;
-          const scale = Math.min(maxW / embeddedImg.width, maxH / embeddedImg.height);
+        const img = imagens[idx];
+        const col = pageIdx % maxColsPerPage;
+        const row = Math.floor(pageIdx / maxColsPerPage);
+
+        // Calcular coordenadas da célula
+        const cellX = m.l + col * (colW + gapX);
+        const cellY = (841.89 - m.t - 15) - (row + 1) * cellH - row * gapY;
+
+        try {
+          // 1. Carregar bytes da imagem (local ou remoto)
+          let imgBytes: Uint8Array;
+          if (img.urlS3.startsWith('/uploads/') || img.urlS3.startsWith('uploads/')) {
+            const cleanPath = img.urlS3.startsWith('/') ? img.urlS3 : `/${img.urlS3}`;
+            const filePath = path.join(process.cwd(), cleanPath);
+            imgBytes = new Uint8Array(fs.readFileSync(filePath));
+          } else {
+            const response = await fetch(img.urlS3);
+            if (!response.ok) continue;
+            const arrayBuf = await response.arrayBuffer();
+            imgBytes = new Uint8Array(arrayBuf);
+          }
+
+          // 2. Detectar orientação EXIF
+          const orientation = this.getExifOrientation(imgBytes);
+
+          // 3. Incorporar no PDF
+          let embeddedImg;
+          if (img.mimeType === 'image/jpeg') {
+            embeddedImg = await pdfDoc.embedJpg(imgBytes);
+          } else {
+            embeddedImg = await pdfDoc.embedPng(imgBytes);
+          }
+
+          // 4. Calcular redimensionamento mantendo aspect ratio
+          const maxW = 245;
+          const maxH = 120;
+          const isRotated = orientation === 6 || orientation === 8;
+          const imgW = isRotated ? embeddedImg.height : embeddedImg.width;
+          const imgH = isRotated ? embeddedImg.width : embeddedImg.height;
+
+          const scale = Math.min(maxW / imgW, maxH / imgH);
           const dW = embeddedImg.width * scale;
           const dH = embeddedImg.height * scale;
-          const imgX = m.l + (maxW - dW) / 2;
-          const imgY = FH - m.t - dH - 18;
 
-          // Borda fina ao redor da foto
-          fotoPage.drawRectangle({
-            x: imgX - 1,
-            y: imgY - 1,
-            width: dW + 2,
-            height: dH + 2,
+          const visW = isRotated ? dH : dW;
+          const visH = isRotated ? dW : dH;
+
+          // Centralizar imagem na área reservada da célula (245x120)
+          const imgX = cellX + (maxW - visW) / 2;
+          const imgY = (cellY + 50) + (maxH - visH) / 2;
+
+          // 5. Desenhar imagem com correção de rotação
+          if (orientation === 6) {
+            currentFotoPage.drawImage(embeddedImg, {
+              x: imgX,
+              y: imgY + dW,
+              width: dW,
+              height: dH,
+              rotate: degrees(270),
+            });
+          } else if (orientation === 8) {
+            currentFotoPage.drawImage(embeddedImg, {
+              x: imgX + dH,
+              y: imgY,
+              width: dW,
+              height: dH,
+              rotate: degrees(90),
+            });
+          } else if (orientation === 3) {
+            currentFotoPage.drawImage(embeddedImg, {
+              x: imgX + dW,
+              y: imgY + dH,
+              width: dW,
+              height: dH,
+              rotate: degrees(180),
+            });
+          } else {
+            currentFotoPage.drawImage(embeddedImg, {
+              x: imgX,
+              y: imgY,
+              width: dW,
+              height: dH,
+            });
+          }
+
+          // 6. Desenhar borda cinza fina ao redor da foto
+          currentFotoPage.drawRectangle({
+            x: imgX - 0.5,
+            y: imgY - 0.5,
+            width: visW + 1,
+            height: visH + 1,
             borderColor: LUNARDELI_LIGHT_GRAY,
-            borderWidth: 0.8,
+            borderWidth: 0.5,
           });
 
-          // Desenhar a foto
-          fotoPage.drawImage(embeddedImg, { x: imgX, y: imgY, width: dW, height: dH });
-
-          // Link clicável sobre a foto inteira
-          this.addLinkAnnotation(pdfDoc, fotoPage, img.urlS3, [
+          // 7. Link clicável
+          this.addLinkAnnotation(pdfDoc, currentFotoPage, img.urlS3, [
             imgX,
             imgY,
-            imgX + dW,
-            imgY + dH,
+            imgX + visW,
+            imgY + visH,
           ]);
 
-          // Rodapé e legenda da foto
+          // 8. Desenhar legenda e metadados
+          const legendaText = img.nomeOriginal || 'Foto sem legenda';
+          const lines = wrapText(legendaText, colW - 6, 7, reg);
+          let textY = cellY + 40;
+          const linesToDraw = lines.slice(0, 3); // máximo 3 linhas
+          for (const line of linesToDraw) {
+            const textW = reg.widthOfTextAtSize(line, 7);
+            const textX = cellX + (colW - textW) / 2;
+            currentFotoPage.drawText(line, {
+              x: textX,
+              y: textY,
+              size: 7,
+              font: reg,
+              color: LUNARDELI_DARK,
+            });
+            textY -= 9;
+          }
+
           const dataUpload = img.createdAt ? new Date(img.createdAt).toLocaleDateString('pt-BR') : '-';
-          const caption = `${img.nomeOriginal || 'Foto'} (por: ${img.criador?.nome || '-'} em ${dataUpload})`;
-          const capW = reg.widthOfTextAtSize(caption, 8);
-          fotoPage.drawText(caption, {
-            x: FW / 2 - capW / 2,
-            y: m.b,
-            size: 8,
+          const metaText = `Por: ${img.criador?.nome || '-'} em ${dataUpload}`;
+          const metaW = reg.widthOfTextAtSize(metaText, 6);
+          const metaX = cellX + (colW - metaW) / 2;
+          currentFotoPage.drawText(metaText, {
+            x: metaX,
+            y: cellY + 5,
+            size: 6,
             font: reg,
-            color: LUNARDELI_DARK,
+            color: GRAY,
           });
-        } catch (_err) {
-          // ignorar falha na imagem individual
+
+        } catch (err) {
+          console.error('[PdfService] Erro ao embutir foto em grade:', err);
         }
       }
     }
@@ -718,16 +814,22 @@ export class PdfService {
     const total = pages.length;
     for (let i = 0; i < total; i++) {
       const p = pages[i];
-      const txt = `${i + 1} / ${total}`;
-      const txtW = reg.widthOfTextAtSize(txt, 7);
-      p.drawText(txt, { x: p.getWidth() - m.r - txtW, y: m.b - 18, size: 7, font: reg, color: GRAY });
+      const text = `${i + 1}/${total}`;
+      const size = 7;
+      const textW = reg.widthOfTextAtSize(text, size);
+      p.drawText(text, {
+        x: p.getWidth() - m.r - textW,
+        y: m.b - 15,
+        size,
+        font: reg,
+        color: GRAY,
+      });
     }
 
     const pdfBytes = await pdfDoc.save();
     return Buffer.from(pdfBytes);
   }
 
-  /** Cria nova página A4 e retorna o contexto de desenho. */
   private addPage(pdfDoc: PDFDocument, bold: PDFFont, reg: PDFFont, m: { l: number; r: number; t: number; b: number }): DrawCtx {
     const page = pdfDoc.addPage([595.28, 841.89]);
     const w = page.getWidth();
@@ -735,7 +837,6 @@ export class PdfService {
     return { page, y, w, m, bold, reg, pdfDoc };
   }
 
-  /** Adiciona um link clicável (Link Annotation) em uma coordenada específica da página. */
   private addLinkAnnotation(
     pdfDoc: PDFDocument,
     page: PDFPage,
@@ -753,7 +854,7 @@ export class PdfService {
         pdfDoc.context.obj({
           Type: 'Annot',
           Subtype: 'Link',
-          Rect: rect, // [xMin, yMin, xMax, yMax]
+          Rect: rect,
           Border: [0, 0, 0],
           A: uriAction,
         })
@@ -770,5 +871,91 @@ export class PdfService {
     } catch (err) {
       console.error('[PdfService] Erro ao adicionar link no PDF:', err);
     }
+  }
+
+  private getExifOrientation(bytes: Uint8Array): number {
+    try {
+      let offset = 0;
+      if (bytes[offset] !== 0xff || bytes[offset + 1] !== 0xd8) {
+        return 1;
+      }
+      offset += 2;
+      const length = bytes.length;
+      while (offset < length - 2) {
+        if (bytes[offset] === 0xff && bytes[offset + 1] === 0xe1) {
+          const exifOffset = offset + 4;
+          if (
+            bytes[exifOffset] === 0x45 &&
+            bytes[exifOffset + 1] === 0x78 &&
+            bytes[exifOffset + 2] === 0x69 &&
+            bytes[exifOffset + 3] === 0x66 &&
+            bytes[exifOffset + 4] === 0 &&
+            bytes[exifOffset + 5] === 0
+          ) {
+            const tiffOffset = exifOffset + 6;
+            let bigEndian = true;
+            if (bytes[tiffOffset] === 0x49 && bytes[tiffOffset + 1] === 0x49) {
+              bigEndian = false;
+            } else if (bytes[tiffOffset] === 0x4d && bytes[tiffOffset + 1] === 0x4d) {
+              bigEndian = true;
+            } else {
+              return 1;
+            }
+
+            const readUInt16 = (idx: number) => {
+              if (bigEndian) {
+                return (bytes[idx] << 8) + bytes[idx + 1];
+              } else {
+                return (bytes[idx + 1] << 8) + bytes[idx];
+              }
+            };
+
+            const readUInt32 = (idx: number) => {
+              if (bigEndian) {
+                return (
+                  (bytes[idx] << 24) +
+                  (bytes[idx + 1] << 16) +
+                  (bytes[idx + 2] << 8) +
+                  bytes[idx + 3]
+                );
+              } else {
+                return (
+                  (bytes[idx + 3] << 24) +
+                  (bytes[idx + 2] << 16) +
+                  (bytes[idx + 1] << 8) +
+                  bytes[idx]
+                );
+              }
+            };
+
+            const magic = readUInt16(tiffOffset + 2);
+            if (magic !== 0x2a && magic !== 0x2a00 && magic !== 42) {
+              return 1;
+            }
+
+            const ifdOffset = readUInt32(tiffOffset + 4);
+            let curOffset = tiffOffset + ifdOffset;
+            const numEntries = readUInt16(curOffset);
+            curOffset += 2;
+
+            for (let i = 0; i < numEntries; i++) {
+              const tag = readUInt16(curOffset);
+              if (tag === 0x0112) {
+                const type = readUInt16(curOffset + 2);
+                if (type === 3) {
+                  return readUInt16(curOffset + 8);
+                }
+              }
+              curOffset += 12;
+            }
+          }
+          break;
+        }
+        offset++;
+      }
+    } catch (_e) {
+      // Ignorar erros de parse EXIF
+    }
+    return 1;
   }
 }

@@ -467,4 +467,76 @@ export class CobrancaService {
       };
     }
   }
+
+  async confirmarPagamentoManualAdmin(cobrancaId: string, adminUsuarioId: string) {
+    const cobranca = await this.prisma.cobranca.findUnique({
+      where: { id: cobrancaId },
+      include: {
+        empresa: { include: { tenantModulos: { include: { modulo: true } } } },
+      },
+    });
+    if (!cobranca) throw new NotFoundException('Cobrança não encontrada.');
+    if (cobranca.status === 'PAGO') return { success: true };
+
+    // Set status to PAGO, dataPagamento to new Date() and formaPagamento to MANUAL
+    await this.prisma.cobranca.update({
+      where: { id: cobrancaId },
+      data: {
+        status: 'PAGO',
+        dataPagamento: new Date(),
+        formaPagamento: 'MANUAL',
+      },
+    });
+
+    // Reactivate if suspended + reset delinquency
+    await this.prisma.empresa.update({
+      where: { id: cobranca.empresaId },
+      data: { suspensa: false, diasInadimplente: 0 },
+    });
+
+    // Activate all tenant modules
+    const slugsAtivos = cobranca.empresa.tenantModulos
+      .filter((tm) => tm.ativo)
+      .map((tm) => tm.modulo.slug);
+    if (slugsAtivos.length > 0) {
+      await this.ativarModulos(cobranca.empresaId, slugsAtivos);
+    }
+
+    // AuditLog
+    await this.prisma.auditLog.create({
+      data: {
+        empresaId: cobranca.empresaId,
+        usuarioId: adminUsuarioId,
+        tabelaAfetada: 'cobrancas',
+        registroId: cobranca.id,
+        acao: 'PAGAMENTO_CONFIRMADO_MANUAL',
+        cargaAntiga: JSON.stringify({ status: cobranca.status }),
+        cargaNova: JSON.stringify({
+          status: 'PAGO',
+          formaPagamento: 'MANUAL',
+          suspensa: false,
+          diasInadimplente: 0,
+        }),
+      },
+    });
+
+    // Email
+    const empresa = cobranca.empresa;
+    if (empresa.email) {
+      try {
+        await this.email.enviarConfirmacaoPagamento(
+          empresa.email,
+          empresa.razaoSocial || empresa.nomeCompleto || 'Empresa',
+          Number(cobranca.valor),
+        );
+      } catch (err: any) {
+        this.logger.error(`Falha ao enviar e-mail de confirmação: ${err.message}`);
+      }
+    }
+    this.logger.log(
+      `✅ Pagamento manual confirmado por admin (${adminUsuarioId}) para empresa ${cobranca.empresaId}`,
+    );
+
+    return { success: true };
+  }
 }

@@ -21,6 +21,12 @@ export const AdminEmpresaDetalhe: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadingForm, setLoadingForm] = useState(false);
   
+  // States for manual payment override
+  const [cobrancaSelecionada, setCobrancaSelecionada] = useState<any>(null);
+  const [showConfirmManualModal, setShowConfirmManualModal] = useState(false);
+  const [senhaConfirmacao, setSenhaConfirmacao] = useState('');
+  const [loadingConfirmarManual, setLoadingConfirmarManual] = useState(false);
+  
   // States for Modulos and Cupons
   const [cuponsDisponiveis, setCuponsDisponiveis] = useState<any[]>([]);
   const [cupomSelecionado, setCupomSelecionado] = useState('');
@@ -119,6 +125,27 @@ export const AdminEmpresaDetalhe: React.FC = () => {
     if (!window.confirm(`Deseja ${empresa.ativo ? 'bloquear' : 'desbloquear'} a empresa?`)) return;
     await api.patch(`/admin/empresas/${id}/bloquear`);
     fetchEmpresa();
+  };
+
+  const handleConfirmarPagamentoManual = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cobrancaSelecionada || !senhaConfirmacao) return;
+    setLoadingConfirmarManual(true);
+    try {
+      await api.post(`/admin/empresas/${id}/cobrancas/${cobrancaSelecionada.id}/confirmar-manual`, {
+        senha: senhaConfirmacao
+      });
+      alert('Pagamento manual confirmado com sucesso!');
+      setShowConfirmManualModal(false);
+      setSenhaConfirmacao('');
+      setCobrancaSelecionada(null);
+      fetchCobrancas();
+      fetchEmpresa();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Erro ao confirmar pagamento manual.');
+    } finally {
+      setLoadingConfirmarManual(false);
+    }
   };
 
   const handleResetSenha = async (userId: string) => {
@@ -511,11 +538,12 @@ export const AdminEmpresaDetalhe: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Link</th>
                   <th className="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Aviso</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white">
                 {cobrancas.length === 0 && (
-                  <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm">Não há histórico de cobranças para esta conta.</td></tr>
+                  <tr><td colSpan={8} className="px-6 py-8 text-center text-gray-500 text-sm">Não há histórico de cobranças para esta conta.</td></tr>
                 )}
                 {cobrancas.map((cob) => (
                   <tr key={cob.id} className="hover:bg-gray-50">
@@ -552,6 +580,20 @@ export const AdminEmpresaDetalhe: React.FC = () => {
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400">
                           Pendente
                         </span>
+                      ) : '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      {!['PAGO', 'RECEIVED'].includes(cob.status) ? (
+                        <button
+                          onClick={() => {
+                            setCobrancaSelecionada(cob);
+                            setShowConfirmManualModal(true);
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100 border border-green-200 hover:border-green-300 rounded px-2.5 py-1.5 transition-colors"
+                          title="Confirmar Pagamento Manualmente"
+                        >
+                          <CheckCircle2 size={14} /> Pagar
+                        </button>
                       ) : '-'}
                     </td>
                   </tr>
@@ -604,6 +646,77 @@ export const AdminEmpresaDetalhe: React.FC = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMAÇÃO PAGAMENTO MANUAL */}
+      {showConfirmManualModal && cobrancaSelecionada && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl max-w-md w-full border border-gray-100 shadow-2xl p-6 relative animate-fade-in">
+            <h3 className="text-xl font-bold text-gray-900 mb-2 flex items-center gap-2">
+              <DollarSign className="text-green-600" size={24} /> Confirmar Pagamento Manual
+            </h3>
+            
+            <p className="text-gray-600 text-sm mb-4 leading-relaxed">
+              Você está registrando manualmente o pagamento da cobrança referente ao mês de{' '}
+              <strong className="text-gray-900">
+                {format(new Date(cobrancaSelecionada.mesReferencia), "MMMM / yyyy", { locale: ptBR })}
+              </strong>{' '}
+              no valor de{' '}
+              <strong className="text-gray-900">
+                R$ {Number(cobrancaSelecionada.valor).toFixed(2).replace('.', ',')}
+              </strong>.
+              <br />
+              <span className="text-red-600 font-semibold block mt-2">
+                * Esta ação reativará o acesso da empresa e todos os seus módulos contratados.
+              </span>
+            </p>
+
+            <form onSubmit={handleConfirmarPagamentoManual} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+                  Senha do Super Admin
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={senhaConfirmacao}
+                  onChange={(e) => setSenhaConfirmacao(e.target.value)}
+                  placeholder="Digite sua senha para autorizar"
+                  className="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-red-600 outline-none text-sm"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowConfirmManualModal(false);
+                    setSenhaConfirmacao('');
+                    setCobrancaSelecionada(null);
+                  }}
+                  disabled={loadingConfirmarManual}
+                  className="px-4 py-2 border rounded-lg text-sm font-semibold hover:bg-gray-50 text-gray-500 transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loadingConfirmarManual || !senhaConfirmacao}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {loadingConfirmarManual ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" /> Processando...
+                    </>
+                  ) : (
+                    'Confirmar Pagamento'
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
