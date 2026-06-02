@@ -130,7 +130,10 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
     if (shareLoading) return;
     setShareLoading(true);
     try {
-      const backendBase = (import.meta as any).env?.VITE_API_URL || window.location.origin;
+      let backendBase = import.meta.env.VITE_API_URL || window.location.origin;
+      if (backendBase.startsWith('/')) {
+        backendBase = `${window.location.origin}${backendBase}`;
+      }
       const pdfUrl = `${backendBase}/rdos/${rdoId}/pdf`;
 
       if (navigator.share) {
@@ -157,9 +160,13 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
           });
         }
       } else {
-        await navigator.clipboard.writeText(pdfUrl);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2500);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(pdfUrl);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2500);
+        } else {
+          console.error('[RdoShareBar] Clipboard API não disponível.');
+        }
       }
     } catch (e: any) {
       if (e?.name !== 'AbortError') {

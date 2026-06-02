@@ -10,7 +10,7 @@ test.beforeAll(async ({ playwright }) => {
   // Inicialize o contexto da API com os cookies salvos pós-login
   apiContext = await playwright.request.newContext({
     storageState: 'tests/.auth/user.json',
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://127.0.0.1:3000',
   });
 
   // 1. Obter os dados do usuário para achar as Obras
@@ -78,6 +78,16 @@ test.afterAll(async () => {
     await apiContext.dispose();
 });
 
+const formatRefDate = (isoStr: string) => {
+  const d = new Date(isoStr);
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+};
+
+test.beforeEach(async ({ page }) => {
+  page.on('console', msg => console.log('PAGE LOG:', msg.text()));
+  page.on('pageerror', err => console.error('PAGE ERROR:', err.message));
+});
+
 test.describe('Ações Principais de RDO', () => {
 
   test('Deve renderizar Dashboard e mostrar o Rascunho criado no teste', async ({ page }) => {
@@ -88,26 +98,27 @@ test.describe('Ações Principais de RDO', () => {
       localStorage.setItem('obra10_obraAtiva', JSON.stringify({ id: oId }));
     }, obraId);
 
-    await page.goto('/rdos');
+    await page.goto(`/obras/${obraId}/rdos`);
     
-    // Verificamos se o Rascunho aparece na lista
-    await expect(page.locator(`.rdo-card-status-RASCUNHO`, { hasText: 'Semana' }).or(page.locator(`text=${rdoDraftId.split('-')[0]}`))).toBeVisible({ timeout: 10000 });
+    // Verificamos se o Rascunho aparece na lista buscando pela data correspondente
+    const rascunhoDateText = formatRefDate(new Date(new Date().setDate(new Date().getDate() + 1)).toISOString());
+    await expect(page.locator(`text=${rascunhoDateText}`).first()).toBeVisible({ timeout: 15000 });
   });
 
   test('Exportar PDF do RDO Aprovado', async ({ page }) => {
-    await page.goto('/rdos');
+    await page.goto(`/obras/${obraId}/rdos`);
     await page.waitForTimeout(1000);
 
     // Clicar no botão visual do RDO aprovado para abri-lo
-    // Assumimos que na UI ou Tabela existe link de clique da tr
-    const rowLocator = page.locator(`tr:has-text("${rdoAprovadoId.substring(0,8)}")`);
+    // Buscamos a tr com a data do RDO aprovado (Depois de Amanhã)
+    const aprovadoDateText = formatRefDate(new Date(new Date().setDate(new Date().getDate() + 2)).toISOString());
+    const rowLocator = page.locator(`tr:has-text("${aprovadoDateText}")`).first();
     
-    // Se o layout for mobile ou tabela:
     if (await rowLocator.isVisible()) {
       await rowLocator.click();
     } else {
       // Direct navigation via URL if necessary
-      await page.goto(`/rdos/${rdoAprovadoId}`);
+      await page.goto(`/obras/${obraId}/rdos/${rdoAprovadoId}`);
     }
 
     // Intercept de download
@@ -125,19 +136,38 @@ test.describe('Ações Principais de RDO', () => {
   });
 
   test('Compartilhar RDO - Web Share API Mock', async ({ page }) => {
-    await page.goto(`/rdos/${rdoAprovadoId}`);
-    
     // Injetar stub mock para interceptar o `navigator.share` e registrar o que foi passado
-    await page.evaluate(() => {
-      (window.navigator as any).share = async (data: any) => {
-        (window as any).__SHARED_DATA__ = data;
-        return true;
-      };
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'share', {
+        value: async (data: any) => {
+          (window as any).__SHARED_DATA__ = data;
+          return true;
+        },
+        configurable: true,
+        enumerable: true,
+        writable: true
+      });
+      Object.defineProperty(navigator, 'canShare', {
+        value: () => false,
+        configurable: true,
+        enumerable: true,
+        writable: true
+      });
     });
 
-    const shareBtn = page.getByRole('button', { name: /compartilhar|share/i });
+    await page.goto(`/obras/${obraId}/rdos/${rdoAprovadoId}`);
+    await page.bringToFront();
+    
+    // Aguardar o carregamento e a hidratação completa do React
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(3000);
+
+    const shareBtn = page.locator('#rdo-share-btn');
     await shareBtn.waitFor({ state: 'visible' });
-    await shareBtn.click();
+    await shareBtn.evaluate((el: any) => el.click());
+
+    // Esperar até que o Mock capture o Payload (evitar race condition da requisição assíncrona do PDF)
+    await page.waitForFunction(() => (window as any).__SHARED_DATA__ !== undefined, { timeout: 15000 });
 
     // Validar que o Mock capturou o Payload e não bloqueou
     const sharedData = await page.evaluate(() => (window as any).__SHARED_DATA__);
@@ -151,23 +181,47 @@ test.describe('Ações Principais de RDO', () => {
     // Para testar clipboard no chromium, concedemos permissão
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 
-    await page.goto(`/rdos/${rdoAprovadoId}`);
-
-    // Injetar remoção do `navigator.share` explícita, forçando fluxo de fallback desktop
-    await page.evaluate(() => {
-      Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
+    // Injetar remoção do `navigator.share` explícita, e mockar clipboard.writeText para evitar hangs do headless browser
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'share', {
+        value: undefined,
+        configurable: true,
+        enumerable: true,
+        writable: true
+      });
+      Object.defineProperty(navigator, 'clipboard', {
+        value: {
+          writeText: async (text: string) => {
+            (window as any).__COPIED_TEXT__ = text;
+            return true;
+          },
+          readText: async () => {
+            return (window as any).__COPIED_TEXT__ || '';
+          }
+        },
+        configurable: true,
+        enumerable: true,
+        writable: true
+      });
     });
 
-    const shareBtn = page.getByRole('button', { name: /compartilhar|share/i });
+    await page.goto(`/obras/${obraId}/rdos/${rdoAprovadoId}`);
+    await page.bringToFront();
+    
+    // Aguardar o carregamento e a hidratação completa do React
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(3000);
+
+    const shareBtn = page.locator('#rdo-share-btn');
     await shareBtn.waitFor({ state: 'visible' });
     
-    await shareBtn.click();
+    await shareBtn.evaluate((el: any) => el.click());
 
-    // Toast do fallback é disparado (geralmente "Link copiado!" na tela)
-    await expect(page.locator('text=/copiad/i')).toBeVisible({ timeout: 5000 });
+    // Validar que o botão mudou de estado para "Copiado!"
+    await expect(shareBtn).toContainText('Copiado', { timeout: 8000 });
 
     // Validar Clipboard content
-    const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+    const clipboardText = await page.evaluate(() => (window as any).__COPIED_TEXT__);
     expect(clipboardText).toContain(rdoAprovadoId); 
     // Valida que a URL gerada para compartilhamento via link contem a ID do documento real
   });

@@ -77,7 +77,7 @@ async function bootstrap() {
   const allowedOrigins = (
     process.env.CORS_ORIGINS ||
     process.env.FRONTEND_URL ||
-    'http://localhost:5173'
+    'http://localhost:5173,http://localhost:5183'
   )
     .split(',')
     .map((o: string) => o.trim());
