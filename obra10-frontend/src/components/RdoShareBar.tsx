@@ -10,6 +10,8 @@ interface RdoShareBarProps {
   compact?: boolean;
   /** Callback para abrir / editar o RDO via menu compacto. */
   onOpen?: () => void;
+  /** Direção da abertura do menu: 'up' (para cima) ou 'down' (para baixo). */
+  direction?: 'up' | 'down';
 }
 
 /**
@@ -27,6 +29,7 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
   rdoLabel = 'RDO',
   compact = false,
   onOpen,
+  direction = 'down',
 }) => {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfFotosLoading, setPdfFotosLoading] = useState(false);
@@ -189,7 +192,9 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
         </button>
 
         {dropdownOpen && (
-          <div className="absolute right-0 mt-1 w-52 rounded-xl shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50 overflow-hidden divide-y divide-gray-50">
+          <div className={`absolute right-0 w-52 rounded-xl shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50 overflow-hidden divide-y divide-gray-50 ${
+            direction === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'
+          }`}>
             <div className="py-1">
               {onOpen && (
                 <button

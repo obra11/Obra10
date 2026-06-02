@@ -1,0 +1,476 @@
+Total RDOs in DB: 95
+RDO: a3eaa46a-55fd-40f7-90e4-c2b432b1eebe
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: BELLE VIE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed May 13 2026 21:00:00 GMT-0300 (Horário Padrão de Brasília) | deletedAt: null
+--------------------------------------------------
+RDO: 9b41c3bf-70fc-4ecb-884b-d049e487af0b
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue May 19 2026 21:00:00 GMT-0300 (Horário Padrão de Brasília) | deletedAt: null
+--------------------------------------------------
+RDO: ff0ce812-db89-44ac-b91d-10904329f873
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:20:43 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 465a8994-e0b9-4df4-8d76-5ca479276f8e
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 08:01:42 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 9eee2418-c05d-4122-92cb-927e09df6522
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:20:46 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 88043076-a206-4370-9b19-f60cab1fbb06
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:25:22 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 5886ec31-0c1e-43f7-b17a-4b5a012caf2d
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 08:01:44 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 462533ed-d0a5-4462-bafa-81084b4309bf
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed May 13 2026 21:00:00 GMT-0300 (Horário Padrão de Brasília) | deletedAt: null
+--------------------------------------------------
+RDO: ba7e8f18-a76a-44c5-a513-d1711ebee9bb
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: BELLE VIE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed May 20 2026 21:00:00 GMT-0300 (Horário Padrão de Brasília) | deletedAt: null
+--------------------------------------------------
+RDO: 2dcb71d6-9cd2-4184-b855-b6265c8d25e5
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed May 27 2026 21:00:00 GMT-0300 (Horário Padrão de Brasília) | deletedAt: null
+--------------------------------------------------
+RDO: 4ba3a200-9a98-4117-a8b2-a22a3c6b333b
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: BELLE VIE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed May 27 2026 21:00:00 GMT-0300 (Horário Padrão de Brasília) | deletedAt: null
+--------------------------------------------------
+RDO: 5dc8d79a-2838-4786-a8dd-d61f8a4f9837
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed May 20 2026 21:00:00 GMT-0300 (Horário Padrão de Brasília) | deletedAt: null
+--------------------------------------------------
+RDO: 7045357f-74d6-40b1-8da1-00cd1c10408e
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:21:28 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 6e59ddf4-d7a5-4ea8-a5b9-c5523b6bb028
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 23:07:35 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 6c67868d-9521-43c5-b695-280c49a9d903
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 23:07:38 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 19d58841-f581-4ecd-8c47-57f37d1fc55c
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 23:13:10 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 7742ebd2-4c0b-4e47-89cd-aea6d8d1da33
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 23:13:13 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: edff9dbb-0e5a-4692-87b1-1b340a0f628e
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 07:54:40 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: ac59a2ed-b3a1-4821-a8a7-1d21ef76dcf2
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 07:54:43 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 265f89e8-0922-4177-b84a-6dbc88a71f83
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 08:00:43 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: c4154fec-2782-4abe-a7bc-c53f8f62e29a
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 08:00:46 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 5bfb5490-7191-4db1-b71f-552c9b33302f
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:22:34 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: a9ac405f-9f80-432d-902c-bf86cdbbc363
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 08:04:07 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: bd86a3bd-5014-4f5f-9ff4-fc9d1435d452
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:22:36 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 55e793c6-fc1d-4157-8ffc-fa0445af0a6d
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:27:23 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 2d71c472-2406-41eb-9221-1a1e15db4517
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 08:04:10 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 6de0c217-ff17-42bc-9ec4-5a80c2118a44
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:27:26 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 6aa23388-91cb-49c5-9073-d9fdf990f6c1
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:33:46 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: b273104f-7962-4fdb-a441-7668aa6ff751
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 11:14:11 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 3176de78-e82f-402a-a996-3b5ea751a82e
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:33:49 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 8fa1c346-2a9b-46af-a2ab-b2061538ddb1
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 23:08:34 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: d8c538bd-7e98-4a19-8828-bde94e0866b0
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 23:08:36 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: a0b1b6ba-73de-44e6-811a-1a1c8a2a8d24
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 23:14:23 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 3cc4c351-579d-4c78-8844-192f5184bebc
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 07:55:32 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: da69ce37-53ff-4764-8d1f-9d17fea2ae1d
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu May 28 2026 21:00:00 GMT-0300 (Horário Padrão de Brasília) | deletedAt: null
+--------------------------------------------------
+RDO: 4941ca41-dc12-40d7-8149-0a6a2d916d03
+  Creator: tecnicogiliardi@gmail.com (tecnicogiliardi@gmail.com) | Company ID: 3d952506-866f-47f7-88de-df2fa376089b
+  Project: Felicitá | Client: Gjf - Engenharia (tecnicogiliardi@gmail.com)
+  Ref Date: Thu May 28 2026 21:00:00 GMT-0300 (Horário Padrão de Brasília) | deletedAt: null
+--------------------------------------------------
+RDO: bf0ade4e-7643-4e94-9a51-78031b46a10f
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:22:52 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: d4b534cb-1648-4b86-8c08-a7935f962606
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 08:05:48 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 322788d3-f063-4e7c-8606-2d86a072ef23
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:22:55 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 5fee0bd8-d139-4343-a725-93f1046aa475
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:28:22 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 125924bd-a57a-4612-8e7a-3124e8d5a1dd
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:31:24 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: caa51840-b14e-46d3-943c-677c48c678cb
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:41:50 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: c5e16033-8de0-459c-bccd-b165ba975636
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 10:17:32 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 029e9ddf-9614-46ac-b579-6f6c59c6c7e7
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:41:52 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: b40cf306-4e76-4e05-975c-a2e813600e1c
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 23:12:12 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 7fb730e8-49a0-4ae6-bf69-c1cb66ff86cc
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 23:12:15 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: cb857b3f-4726-4a10-9c73-6664fc589ad4
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 07:53:42 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 41245ded-d2c9-4bbc-b22d-c66d4aa5cbc7
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 07:53:44 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: b283662b-57ee-4450-9772-952c23be82c7
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 07:58:43 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 661eb979-df98-4daf-bab3-d5f8d431ffa0
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 07:58:46 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: d66a5044-162b-4b89-8771-8c46b3ffd168
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 08:03:08 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 7b413232-ef87-48f7-becd-0ab108f22e6b
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:21:31 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 18ce1a02-6506-4467-87e3-541625310aca
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:25:54 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 924ae6ce-1430-4afc-ba28-5e6b6e918804
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 08:03:11 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 62861e1d-24ac-4b71-8b5d-386785372b2a
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:25:56 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 1e131869-358d-4dc5-a5d2-b20c3a1cd16f
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:32:47 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: fe612a3f-0eeb-461e-8d40-e66281a2165d
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 11:14:09 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 4d58c148-4e7e-486d-b292-186a01b626a5
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:32:50 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 0f6348c3-ddcb-475b-8c8b-83ccc9722056
+  Creator: tecnicogiliardi@gmail.com (tecnicogiliardi@gmail.com) | Company ID: 3d952506-866f-47f7-88de-df2fa376089b
+  Project: Felicitá | Client: Gjf - Engenharia (tecnicogiliardi@gmail.com)
+  Ref Date: Wed May 27 2026 21:00:00 GMT-0300 (Horário Padrão de Brasília) | deletedAt: null
+--------------------------------------------------
+RDO: 646af891-9a38-4752-8705-35f64a46017b
+  Creator: tecnicogiliardi@gmail.com (tecnicogiliardi@gmail.com) | Company ID: 3d952506-866f-47f7-88de-df2fa376089b
+  Project: Felicitá | Client: Gjf - Engenharia (tecnicogiliardi@gmail.com)
+  Ref Date: Thu May 28 2026 21:00:00 GMT-0300 (Horário Padrão de Brasília) | deletedAt: null
+--------------------------------------------------
+RDO: 31b8aab8-40cd-4e94-978b-4b93fa0139cc
+  Creator: tecnicogiliardi@gmail.com (tecnicogiliardi@gmail.com) | Company ID: 3d952506-866f-47f7-88de-df2fa376089b
+  Project: Felicitá | Client: Gjf - Engenharia (tecnicogiliardi@gmail.com)
+  Ref Date: Thu May 28 2026 21:00:00 GMT-0300 (Horário Padrão de Brasília) | deletedAt: null
+--------------------------------------------------
+RDO: 00434e9c-2006-4f7f-a291-ce9b0989a231
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:25:25 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: f7a5f8ad-de55-4766-adb0-c8ce5d5d183b
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:31:22 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: a9ad4294-b01d-41af-902f-1d02371a90d1
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 10:17:30 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 4b66ccb7-d1bd-44bc-a30a-a1af15fef95f
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 23:14:26 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 87d64db6-2378-4a86-b5a1-9edb183232b9
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 07:55:34 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 8c2b5945-5469-4f90-b86a-6f317b186134
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 08:05:51 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 3e36553a-3d34-4766-8619-57fa88cd0a27
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:28:25 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 86399d75-439a-4652-8103-4d5cb47335e7
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:34:07 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: b9b46247-c19c-48d3-a7ae-f7bc8b474ada
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 23:09:37 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 1a91cfc7-bfb1-4616-a5af-c6e1be142070
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 11:36:18 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: bd6921ca-f5f4-40db-9b40-8eb153d37252
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 23:09:40 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 55bdfc40-7b46-45a8-a049-33af3cb60818
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 23:15:21 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 48cea046-8ecb-4592-ac0c-199f8787e00d
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 11:36:20 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: e317b852-25b3-4ffc-8da5-e8635247070a
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 23:15:24 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: bfe32fb5-61fd-4c36-9254-257fb4fb7f6b
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 07:56:30 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 9af25fb8-3488-4dd9-87b6-fbf031dd6c12
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 07:56:32 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 1a42d8eb-7712-49ae-8f03-327505abe5d9
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:23:47 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: c7ce0697-91df-4eb3-b4e4-e9ca0b449007
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 08:07:10 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 4487d3c1-1c6d-4a71-9c43-74e50a249d1c
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:23:49 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 40181e48-9280-440d-a23b-8700ea76975e
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:30:22 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 3fc2dee9-7e16-4520-9ac2-da03ba744e86
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 08:07:12 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 1df64702-2ba8-40a6-8190-db74752759bd
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:30:25 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: fe8b4c9d-25d0-4d1b-b321-2662df7c81e4
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:40:51 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 05e6dd09-930c-4699-9a13-50a8bd3a5d3d
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:40:54 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: f275139a-b669-4c30-858c-5f8fb7f2b9c4
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:19:34 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 419b5a98-f995-4d0f-861f-c639dcf7ae98
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 23:10:36 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: b11a321f-7a74-4cdf-851e-5beb0674bde8
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:19:37 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: dc945759-44bb-4629-8f93-624cf6b318cb
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Tue Jun 02 2026 22:19:59 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 13a60354-eff5-48c4-9635-8440a057ff6c
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 23:10:38 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: f32dd4e3-35ec-4857-859b-87f1f0388a1c
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 22:20:01 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 7fa78fdd-1bea-4745-a80c-1bb2596cb462
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 07:51:08 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 2eeb044d-b5d0-4bac-8010-50a69a422296
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 07:51:11 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: d3722575-fdec-44b9-b9ff-6a730afab4a8
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Wed Jun 03 2026 07:57:44 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
+RDO: 0a07708d-323b-47b0-bdc4-9cb2d0acca99
+  Creator: Tarcisio Lunardeli (tarcisio@lunardeli.com.br) | Company ID: 95abdcb5-bad5-45b5-9d96-1302e82d04ef
+  Project: VICTORIA RESIDENCE | Client: LUNARDELI ENGENHARIA (tarcisio@lunardeli.com.br)
+  Ref Date: Thu Jun 04 2026 07:57:47 GMT-0300 (Horário Padrão de Brasília) | deletedAt: Tue Jun 02 2026 16:40:19 GMT-0300 (Horário Padrão de Brasília)
+--------------------------------------------------
