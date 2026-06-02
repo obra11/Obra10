@@ -79,7 +79,7 @@ export class CobrancaService {
 
     const now = new Date();
     const mesRef = new Date(now.getFullYear(), now.getMonth(), 1);
-    const vencimento = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const vencimento = new Date(now.getFullYear(), now.getMonth() + 1, 5);
     const idempotencyKey = `${dto.empresaId}-${mesRef.toISOString().slice(0, 7)}`;
 
     // Idempotency check
