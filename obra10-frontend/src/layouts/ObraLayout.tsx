@@ -328,7 +328,7 @@ export const ObraLayout: React.FC = () => {
       {/* ═══ Bottom Navigation Bar — Mobile Only ═══ */}
       {/* Hidden when inside DiarioDeObra since it has its own floating action bar */}
       {!isInsideDiario && (
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           <div className="flex items-center justify-around h-16 px-1">
             {menuItems.slice(0, 5).map(item => {
               const isActive = location.pathname.startsWith(item.path);

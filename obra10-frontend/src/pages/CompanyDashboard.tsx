@@ -1,26 +1,21 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth, type Obra } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Trash2, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User } from 'lucide-react';
+import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
 
 export const CompanyDashboard: React.FC = () => {
-  const { user, empresa, obras, logout, setObraAtiva, updateEmpresaLogo, updateObraImage, updateUserPhoto } = useAuth();
+  const { user, empresa, obras, logout, setObraAtiva, updateEmpresaLogo, updateUserPhoto } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingUserPhoto, setUploadingUserPhoto] = useState(false);
-  const [uploadingObraId, setUploadingObraId] = useState<string | null>(null);
 
   const [showNovoModal, setShowNovoModal] = useState(false);
   const [novaObra, setNovaObra] = useState({ nome: '', endereco: '' });
   const [loadingCriar, setLoadingCriar] = useState(false);
-  const [loadingExcluirId, setLoadingExcluirId] = useState<string | null>(null);
 
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [obraEdit, setObraEdit] = useState<{id: string, nome: string, endereco: string}>({ id: '', nome: '', endereco: '' });
-  const [loadingEdit, setLoadingEdit] = useState(false);
 
   const [showEditEmpresaModal, setShowEditEmpresaModal] = useState(false);
   const [empresaEdit, setEmpresaEdit] = useState({ 
@@ -58,17 +53,6 @@ export const CompanyDashboard: React.FC = () => {
     } finally { setLoadingCriar(false); }
   };
 
-  const handleEditarObra = async () => {
-    if (!obraEdit.nome.trim()) return;
-    setLoadingEdit(true);
-    try {
-      await api.patch(`/obras/${obraEdit.id}`, { nome: obraEdit.nome, endereco: obraEdit.endereco });
-      window.location.reload();
-    } catch(e: any) {
-      alert('Erro ao editar obra: ' + (e?.response?.data?.message || e.message));
-    } finally { setLoadingEdit(false); }
-  };
-
   const handleEditarEmpresa = async () => {
     if (!empresaEdit.nomeFantasia.trim()) return;
     setLoadingEditEmpresa(true);
@@ -78,32 +62,6 @@ export const CompanyDashboard: React.FC = () => {
     } catch(e: any) {
       alert('Erro ao editar empresa: ' + (e?.response?.data?.message || e.message));
     } finally { setLoadingEditEmpresa(false); }
-  };
-
-  const handleExcluirObra = async (id: string, nome: string) => {
-    if(!window.confirm(`Você está prestes a excluir a obra "${nome}".\n\nATENÇÃO: Você perderá todos os dados, anexos e RDOs vinculados a ela. Esta ação não pode ser desfeita.\n\nTem certeza que deseja continuar?`)) return;
-    setLoadingExcluirId(id);
-    try {
-      await api.delete(`/obras/${id}`);
-      window.location.reload();
-    } catch(e: any) {
-      alert('Erro ao excluir obra: ' + (e?.response?.data?.message || e.message));
-    } finally { setLoadingExcluirId(null); }
-  };
-
-  const handleToggleStatus = async (obra: Obra) => {
-    if (user?.perfilGlobal !== 'GESTOR') return;
-    const nextStatus = 
-      obra.status === 'ATIVA' ? 'INATIVA' : 
-      obra.status === 'INATIVA' ? 'FINALIZADA' : 
-      'ATIVA';
-      
-    try {
-      await api.patch(`/obras/${obra.id}`, { status: nextStatus });
-      window.location.reload();
-    } catch(e: any) {
-      alert('Erro ao alterar status: ' + (e?.response?.data?.message || e.message));
-    }
   };
 
   const handleLogout = () => {
@@ -161,27 +119,7 @@ export const CompanyDashboard: React.FC = () => {
     }
   };
 
-  const handleObraImageUpload = async (obraId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
 
-    setUploadingObraId(obraId);
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const response = await api.post(`/upload/obra/${obraId}/imagem`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      updateObraImage(obraId, response.data.url);
-    } catch (err: any) {
-      console.error('Erro ao fazer upload da imagem da obra:', err);
-      alert('Erro ao fazer upload da capa: ' + (err?.response?.data?.message || err.message));
-    } finally {
-      setUploadingObraId(null);
-      e.target.value = '';
-    }
-  };
 
   // const baseURL = import.meta.env.VITE_API_URL ?? '';
 
@@ -392,39 +330,15 @@ export const CompanyDashboard: React.FC = () => {
                   {/* Overlay Upload Button was here, moved to Edit Modal */}
                   
                   {/* Status Badge */}
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleToggleStatus(obra); }}
-                    title={user?.perfilGlobal === 'GESTOR' ? "Clique para alterar o status" : ""}
-                    className={`absolute top-3 left-3 text-white text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-full shadow-sm transition-colors ${
-                      obra.status === 'ATIVA' ? 'bg-green-500 hover:bg-green-600' :
-                      obra.status === 'INATIVA' ? 'bg-yellow-500 hover:bg-yellow-600' :
-                      obra.status === 'FINALIZADA' ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-500'
-                    } ${user?.perfilGlobal === 'GESTOR' ? 'cursor-pointer' : 'cursor-default'}`}
+                  <div 
+                    className={`absolute top-3 left-3 text-white text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-full shadow-sm ${
+                      obra.status === 'ATIVA' ? 'bg-green-500' :
+                      obra.status === 'INATIVA' ? 'bg-yellow-500' :
+                      obra.status === 'FINALIZADA' ? 'bg-red-500' : 'bg-gray-500'
+                    }`}
                   >
                     {obra.status}
-                  </button>
-                  
-                  {/* Editar Badge */}
-                  {user?.perfilGlobal === 'GESTOR' && (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setObraEdit({ id: obra.id, nome: obra.nome, endereco: obra.endereco || '' }); setShowEditModal(true); }}
-                      className="absolute top-3 right-[88px] md:right-24 bg-blue-500/90 hover:bg-blue-600 text-white p-2.5 rounded-full cursor-pointer shadow-sm transition-all"
-                      title="Editar Obra"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                  )}
-                  
-                  {/* Excluir Badge */}
-                  {user?.perfilGlobal === 'GESTOR' && (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleExcluirObra(obra.id, obra.nome); }}
-                      className="absolute top-3 right-12 bg-red-500/90 hover:bg-red-600 text-white p-2.5 rounded-full cursor-pointer shadow-sm transition-all"
-                      title="Excluir Obra"
-                    >
-                      {loadingExcluirId === obra.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                    </button>
-                  )}
+                  </div>
                 </div>
 
                 {/* Obra Details */}
@@ -477,41 +391,7 @@ export const CompanyDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Editar Obra */}
-      {showEditModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-            <h3 className="text-xl font-bold mb-4">Editar Obra</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Nome da Obra *</label>
-                <input value={obraEdit.nome} onChange={e => setObraEdit({...obraEdit, nome: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="Ex: Residencial Lumière" />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Endereço (opcional)</label>
-                <input value={obraEdit.endereco} onChange={e => setObraEdit({...obraEdit, endereco: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="Ex: Av. Paulista, 1000" />
-                <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Capa da Obra</label>
-                <div className="flex items-center gap-4">
-                  <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 border border-gray-300 px-4 py-2 rounded-lg flex items-center gap-2 text-gray-700 font-medium transition-colors">
-                    {uploadingObraId === obraEdit.id ? <Loader2 className="animate-spin" size={18} /> : <Upload size={18} />}
-                    {uploadingObraId === obraEdit.id ? 'Enviando...' : 'Atualizar Imagem'}
-                    <input type="file" className="hidden" accept="image/*" onChange={(e) => handleObraImageUpload(obraEdit.id, e)} />
-                  </label>
-                  <span className="text-xs text-gray-500">Selecione uma imagem para a capa (JPG, PNG).</span>
-                </div>
-              </div>
-            </div>
-            </div>
-            <div className="flex gap-3 justify-end mt-6">
-              <button onClick={() => setShowEditModal(false)} className="px-4 py-2 text-gray-600 font-semibold hover:bg-gray-100 rounded-lg">Cancelar</button>
-              <button onClick={handleEditarObra} disabled={loadingEdit} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 flex items-center gap-2">
-                {loadingEdit ? <Loader2 size={16} className="animate-spin" /> : null} Salvar Obra
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Modal Editar Empresa */}
       {showEditEmpresaModal && (

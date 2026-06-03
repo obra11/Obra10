@@ -296,8 +296,8 @@ export const RdoList: React.FC = () => {
 
       {/* Modal Relatório IA */}
       {showIAModal && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-0 md:p-4">
-          <div className="bg-white rounded-t-2xl md:rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-0 md:p-4">
+          <div className="bg-white rounded-t-2xl md:rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden max-h-[85dvh] md:max-h-[90vh] flex flex-col">
             <div className="p-4 md:p-5 border-b border-gray-100 flex items-center justify-between shrink-0">
               <div>
                 <h3 className="font-bold text-gray-900 flex items-center gap-2">
@@ -316,7 +316,7 @@ export const RdoList: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-4 md:p-5 space-y-4 overflow-y-auto custom-scrollbar">
+            <div className="p-4 md:p-5 space-y-4 overflow-y-auto custom-scrollbar flex-1">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -780,15 +780,30 @@ export const RdoList: React.FC = () => {
                 </div>
               )}
 
+            </div>
+
+            <div 
+              className="p-4 border-t border-gray-100 bg-gray-50 flex gap-3 shrink-0"
+              style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}
+            >
+              <button
+                type="button"
+                onClick={fecharIaModal}
+                className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-100 active:bg-gray-200 transition-colors"
+              >
+                Cancelar
+              </button>
               <button
                 onClick={gerarRelatorioIA}
                 disabled={iaLoading}
-                className="w-full py-3 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 active:bg-red-800 disabled:opacity-60 flex items-center justify-center gap-2 transition-colors"
+                className="flex-[2] py-3 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 active:bg-red-800 disabled:opacity-60 flex items-center justify-center gap-2 transition-colors shadow-sm"
               >
                 {iaLoading ? (
                   <>
                     <Loader2 size={16} className="animate-spin" /> Gerando...
                   </>
+                ) : iaResultado ? (
+                  'Atualizar Relatório'
                 ) : (
                   'Gerar Relatório'
                 )}
