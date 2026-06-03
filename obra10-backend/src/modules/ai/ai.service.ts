@@ -17,7 +17,7 @@ try {
   Anthropic = null;
 }
 
-const AI_MODEL = 'claude-sonnet-4-20250514';
+const AI_MODEL = 'claude-3-5-sonnet-20241022';
 const CACHE_TTL_HOURS = 24;
 const MAX_CHAMADAS_DIA = 3;
 
@@ -195,7 +195,7 @@ export class AiService {
       let efetivoDia = 0;
       if (d.profissionais && Array.isArray(d.profissionais)) {
         efetivoDia = d.profissionais.reduce(
-          (sum: number, p: any) => sum + Number(p.quantidade || 0),
+          (sum: number, p: any) => sum + Number(p && typeof p === 'object' ? p.quantidade || 0 : 0),
           0,
         );
       } else {
@@ -232,9 +232,9 @@ export class AiService {
         clima: climaStr,
         atividadesExecutadas: d.atividadesExecutadas || '',
         atividadesPendentes: d.atividadesPendentes || '',
-        profissionais: (d.profissionais || []).map(
-          (p: any) => `${p.nome}: ${p.quantidade}`,
-        ),
+        profissionais: (d.profissionais || [])
+          .filter((p: any) => p && typeof p === 'object')
+          .map((p: any) => `${p.nome || 'Profissional'}: ${p.quantidade || 0}`),
         observacoes: d.observacoes || '',
         gargalos: gargalosRdo,
       };
@@ -468,6 +468,7 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
 
     this.activeQueries.add(obraId);
 
+    let totalRdos = 0;
     try {
       const inicio = new Date(dataInicio);
       const fim = new Date(dataFim);
@@ -487,6 +488,7 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
         orderBy: { dataReferencia: 'asc' },
       });
 
+      totalRdos = rdos.length;
       if (rdos.length === 0) {
         throw new BadRequestException(
           'Nenhum RDO aprovado encontrado no período informado.',
@@ -510,9 +512,9 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
           clima: climaStr,
           atividadesExecutadas: d.atividadesExecutadas || '',
           atividadesPendentes: d.atividadesPendentes || '',
-          profissionais: (d.profissionais || []).map(
-            (p: any) => `${p.nome}: ${p.quantidade}`,
-          ),
+          profissionais: (d.profissionais || [])
+            .filter((p: any) => p && typeof p === 'object')
+            .map((p: any) => `${p.nome || 'Profissional'}: ${p.quantidade || 0}`),
           observacoes: d.observacoes || '',
         };
       });
@@ -545,6 +547,7 @@ ${JSON.stringify(resumoRdosParaIA, null, 2)}`;
         response.content[0]?.type === 'text' ? response.content[0].text : '';
       return { resposta };
     } catch (err: any) {
+      this.logger.error(`[AiService] Erro ao chamar a API do Claude para pergunta: ${err?.message}`);
       const msg = err?.message ?? '';
       const isCreditsError =
         msg.includes('Plans & Billing') ||
@@ -556,7 +559,11 @@ ${JSON.stringify(resumoRdosParaIA, null, 2)}`;
           'Saldo insuficiente na conta Anthropic. Adicione créditos em console.anthropic.com → Plans & Billing, ou deixe ANTHROPIC_API_KEY vazia para usar modo MOCK.',
         );
       }
-      throw err;
+      
+      // Retorna uma resposta amigável em caso de falha da API externa de IA
+      return {
+        resposta: `Não foi possível consultar a Inteligência Artificial ativa no momento (Erro: ${err?.message || 'Serviço temporariamente indisponível'}).\n\nResumo consolidado do período (total de ${totalRdos} diários):\n- Clima ou andamento: verifique os detalhes no painel do relatório executivo acima ou consulte as observações diretamente no RDO.`,
+      };
     } finally {
       this.activeQueries.delete(obraId);
     }
