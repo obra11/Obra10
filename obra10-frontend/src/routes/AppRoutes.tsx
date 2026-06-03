@@ -25,6 +25,7 @@ import { Precos } from '../pages/Precos';
 import { Assinatura } from '../pages/Assinatura';
 import { Efetivo } from '../pages/obras/Efetivo';
 import { Perfil } from '../pages/Perfil';
+import { Configuracoes } from '../pages/obras/Configuracoes';
 
 import { AdminRoute } from './AdminRoute';
 import { AdminLayout } from '../layouts/AdminLayout';
@@ -95,6 +96,7 @@ export const AppRoutes: React.FC = () => {
         <Route path="rdos/:rdoId" element={<DiarioDeObra />} />
         <Route path="rdos/dashboard" element={<RdoDashboard />} />
         <Route path="efetivo" element={<Efetivo />} />
+        <Route path="configuracoes" element={<Configuracoes />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

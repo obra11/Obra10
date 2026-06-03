@@ -873,7 +873,7 @@ export const RdoList: React.FC = () => {
               ) : (
                 rdosFiltrados.map((rdo, index) => {
                   const st = getStatus(rdo.status);
-                  const isNearBottom = rdosFiltrados.length > 2 && index >= rdosFiltrados.length - 2;
+                  const openUp = index >= 2;
                   return (
                     <tr
                       key={rdo.id}
@@ -934,7 +934,7 @@ export const RdoList: React.FC = () => {
                               'yyyy-MM-dd',
                             )}`}
                             compact
-                            direction={isNearBottom ? 'up' : 'down'}
+                            direction={openUp ? 'up' : 'down'}
                           />
                           <button
                             onClick={() =>
@@ -970,7 +970,7 @@ export const RdoList: React.FC = () => {
             <div className="divide-y divide-gray-100">
               {rdosFiltrados.map((rdo, index) => {
                 const st = getStatus(rdo.status);
-                const isNearBottom = rdosFiltrados.length > 2 && index >= rdosFiltrados.length - 2;
+                const openUp = index >= 2;
                 return (
                   <div
                     key={rdo.id}
@@ -1025,7 +1025,7 @@ export const RdoList: React.FC = () => {
                         'yyyy-MM-dd',
                       )}`}
                       compact
-                      direction={isNearBottom ? 'up' : 'down'}
+                      direction={openUp ? 'up' : 'down'}
                     />
                   </div>
                 );

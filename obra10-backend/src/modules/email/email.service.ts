@@ -329,5 +329,25 @@ export class EmailService {
     `,
     );
   }
+
+  async enviarConfirmacaoExcluirObra(
+    email: string,
+    nomeUsuario: string,
+    nomeObra: string,
+  ) {
+    await this.send(
+      email,
+      `⚠️ Confirmação de Exclusão de Obra — ${nomeObra}`,
+      `
+      <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
+        <h2 style="color:#dc2626;margin-top:0">Obra Excluída com Sucesso</h2>
+        <p>Olá, <strong>${nomeUsuario}</strong>!</p>
+        <p>Confirmamos que o canteiro de obras <strong>${nomeObra}</strong> foi excluído (desativado) com sucesso de sua conta na plataforma OBRA 10.</p>
+        <p style="color:#6b7280;font-size:12px;margin-top:24px">Se você não realizou esta ação, entre em contato imediatamente com o suporte técnico.</p>
+        <p style="color:#9ca3af;font-size:11px;border-top:1px solid #e5e7eb;padding-top:12px">Esta é uma notificação automática do OBRA 10. Não responda este e-mail.</p>
+      </div>
+      `,
+    );
+  }
 }
 

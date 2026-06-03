@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class ObraService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+  ) {}
 
   async listarObrasDoUsuario(usuarioId: string) {
     // Busca as obras ATIVAS nas quais o usuário tem um perfil
@@ -94,17 +98,35 @@ export class ObraService {
     });
   }
 
-  async excluirObra(id: string, empresaId: string) {
+  async excluirObra(id: string, empresaId: string, userId: string) {
     // Soft delete
     if (!id) throw new Error('ID não fornecido');
     const obra = await this.prisma.obra.findFirst({ where: { id, empresaId } });
     if (!obra)
       throw new Error('Obra não encontrada ou não pertence a esta empresa.');
 
-    return this.prisma.obra.update({
+    const user = await this.prisma.usuario.findUnique({
+      where: { id: userId },
+    });
+
+    const deletedObra = await this.prisma.obra.update({
       where: { id },
       data: { deletedAt: new Date(), status: 'EXCLUIDA' },
     });
+
+    if (user) {
+      try {
+        await this.emailService.enviarConfirmacaoExcluirObra(
+          user.email,
+          user.nome,
+          obra.nome,
+        );
+      } catch (err) {
+        console.error('Erro ao enviar e-mail de confirmação de exclusão:', err);
+      }
+    }
+
+    return deletedObra;
   }
 
   async editarObra(

@@ -49,8 +49,9 @@ export class ObraController {
   async excluirObra(@Req() req: any, @Param('id') id: string) {
     try {
       const empresaId = req.user?.empresaId;
-      if (!empresaId) throw new UnauthorizedException('Sessão inválida.');
-      return await this.obraService.excluirObra(id, empresaId);
+      const userId = req.user?.sub;
+      if (!empresaId || !userId) throw new UnauthorizedException('Sessão inválida.');
+      return await this.obraService.excluirObra(id, empresaId, userId);
     } catch (err: any) {
       throw new BadRequestException('Erro ao excluir: ' + err.message);
     }
