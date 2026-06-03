@@ -4,11 +4,11 @@ import {
   Post,
   Body,
   Param,
-  Query,
   Req,
   UseGuards,
   Delete,
   Patch,
+  ForbiddenException,
 } from '@nestjs/common';
 import { AnexosService } from './anexos.service';
 import { ObraContextGuard } from '../../core/guards/obra-context.guard';
@@ -20,8 +20,22 @@ import { SolicitarUploadDto } from './dto/anexos.dto';
 export class AnexosController {
   constructor(private readonly anexosService: AnexosService) {}
 
+  private assertWritePermission(req: any) {
+    const permRdo = req.obraRole?.permissoes?.RDO || req.obraRole?.permissoes?.rdo;
+    if (
+      permRdo === 'VIEW' ||
+      permRdo === 'VIEW_APPROVED' ||
+      permRdo === 'VIEW_PARTIAL_APPROVED'
+    ) {
+      throw new ForbiddenException(
+        'Você não tem permissão para alterar anexos nesta obra.',
+      );
+    }
+  }
+
   @Post('solicitar-upload')
   async solicitarUpload(@Body() dto: SolicitarUploadDto, @Req() req: any) {
+    this.assertWritePermission(req);
     const obraId = req.headers['x-obra-id'];
     const criadorId = req.user?.sub || 'dev-id';
     return this.anexosService.criarPresignedUpload(obraId, criadorId, dto);
@@ -40,7 +54,7 @@ export class AnexosController {
   @Get('obra')
   async listarDaObra(@Req() req: any) {
     const obraId = req.headers['x-obra-id'];
-    return this.anexosService.listarDaObra(obraId);
+    return this.anexosService.listarDaObra(obraId, req.obraRole);
   }
 
   @Get(':id/visualizar')
@@ -55,12 +69,14 @@ export class AnexosController {
     @Body('legenda') legenda: string,
     @Req() req: any,
   ) {
+    this.assertWritePermission(req);
     const obraId = req.headers['x-obra-id'];
     return this.anexosService.atualizarLegenda(id, obraId, legenda);
   }
 
   @Delete(':id')
   async deletarAnexo(@Param('id') id: string, @Req() req: any) {
+    this.assertWritePermission(req);
     const obraId = req.headers['x-obra-id'];
     return this.anexosService.deletar(id, obraId);
   }

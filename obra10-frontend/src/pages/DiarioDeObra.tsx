@@ -163,7 +163,7 @@ export const DiarioDeObra: React.FC = () => {
   const [motivoRejeicaoBackend, setMotivoRejeicaoBackend] = useState<string>('');
 
   const obraAtual = (user as any)?.obrasPermitidas?.find((o: any) => (o.obraId || o.id) === obraId) || obras?.find((o: any) => o.id === obraId);
-  const permRdo = obraAtual?.permissoes?.rdo;
+  const permRdo = obraAtual?.permissoes?.RDO || obraAtual?.permissoes?.rdo;
   const isGestorOrAdmin = user?.perfilGlobal === 'GESTOR' || user?.perfilGlobal === 'SUPER_ADMIN' || (user as any)?.role === 'GESTOR' || (user as any)?.role === 'SUPER_ADMIN';
   const isReadOnly = permRdo === 'VIEW' || permRdo === 'VIEW_APPROVED' || permRdo === 'VIEW_PARTIAL_APPROVED' || (status !== 'rascunho' && !isGestorOrAdmin);
   const isPartialView = permRdo === 'VIEW_PARTIAL_APPROVED';
@@ -183,6 +183,12 @@ export const DiarioDeObra: React.FC = () => {
     if (!obraId) {
       setRdoNumberStr('RDO #1 (Preview)');
       setInitLoading(false);
+      return;
+    }
+
+    if (!rdoId && (permRdo === 'VIEW' || permRdo === 'VIEW_APPROVED' || permRdo === 'VIEW_PARTIAL_APPROVED')) {
+      alert('Você não tem permissão para criar diários de obra.');
+      navigate(`/obras/${obraId}/rdos`);
       return;
     }
 
@@ -250,7 +256,8 @@ export const DiarioDeObra: React.FC = () => {
         })
         .catch(err => {
           console.error('Erro ao carregar RDO:', err);
-          setInitLoading(false);
+          alert(err?.response?.data?.message || 'Erro ao carregar RDO.');
+          navigate(`/obras/${obraId}/rdos`);
         });
     } else {
       // Novo RDO — buscar apenas o setup e RDOs anteriores
@@ -268,7 +275,7 @@ export const DiarioDeObra: React.FC = () => {
         })
         .catch(() => {/* silent */});
     }
-  }, [obraId, rdoId]);
+  }, [obraId, rdoId, permRdo, navigate]);
 
   // ── Seção 2 ── Condições climáticas
   const [climaManha, setClimaManha] = useState('');
@@ -1542,7 +1549,7 @@ export const DiarioDeObra: React.FC = () => {
                  )}
 
                  <div className="space-y-3">
-                   {status === 'rascunho' && (
+                   {status === 'rascunho' && !isReadOnly && (
                      <div className="flex gap-3">
                        <button
                          onClick={handleEnviar}
@@ -1561,48 +1568,56 @@ export const DiarioDeObra: React.FC = () => {
                      </div>
                    )}
 
+                   {status === 'rascunho' && isReadOnly && (
+                     <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-500 text-sm font-medium">
+                       ℹ️ Este diário de obra está em rascunho. Seu perfil possui apenas acesso de visualização de RDOs aprovados.
+                     </div>
+                   )}
+
                    {status === 'pendente' && (
                      <div className="space-y-4">
                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm font-medium">
                          ⏳ Aguardando aprovação do gestor.
                        </div>
-                       <div className="flex gap-3">
-                         <button onClick={handleAprovar} className="flex-1 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 shadow-sm transition-colors text-center">
-                           ✅ Aprovar RDO
-                         </button>
-                         <button
-                           onClick={handleRejeitar}
-                           disabled={!motivoRejeicao.trim()}
-                           className={`px-4 py-2 ${motivoRejeicao.trim() ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'} text-sm font-bold rounded-lg transition-colors`}
-                         >
-                           ❌ Reprovar
-                         </button>
-                       </div>
-                       <textarea
-                         className="w-full border border-gray-300 p-2 text-sm rounded bg-white"
-                         rows={2}
-                         placeholder="Motivo da reprovação (obrigatório para reprovar)"
-                         value={motivoRejeicao}
-                         onChange={e => setMotivoRejeicao(e.target.value)}
-                         disabled={isReadOnly}
-                       />
                        {isGestorOrAdmin && (
-                         <div className="flex gap-3 pt-2 border-t border-gray-200 mt-2">
-                           <button
-                             onClick={handleSalvarRascunho}
-                             disabled={saving}
-                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-sm transition-colors"
-                           >
-                             <Save size={16} /> {saving ? 'Salvando...' : 'Salvar Alterações'}
-                           </button>
-                           <button
-                             onClick={handleReabrir}
-                             disabled={saving}
-                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-orange-500 text-white text-sm font-bold rounded-lg hover:bg-orange-600 shadow-sm transition-colors"
-                           >
-                             <RotateCcw size={16} /> Reabrir RDO
-                           </button>
-                         </div>
+                         <>
+                           <div className="flex gap-3">
+                             <button onClick={handleAprovar} className="flex-1 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 shadow-sm transition-colors text-center">
+                               ✅ Aprovar RDO
+                             </button>
+                             <button
+                               onClick={handleRejeitar}
+                               disabled={!motivoRejeicao.trim()}
+                               className={`px-4 py-2 ${motivoRejeicao.trim() ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'} text-sm font-bold rounded-lg transition-colors`}
+                             >
+                               ❌ Reprovar
+                             </button>
+                           </div>
+                           <textarea
+                             className="w-full border border-gray-300 p-2 text-sm rounded bg-white"
+                             rows={2}
+                             placeholder="Motivo da reprovação (obrigatório para reprovar)"
+                             value={motivoRejeicao}
+                             onChange={e => setMotivoRejeicao(e.target.value)}
+                             disabled={isReadOnly}
+                           />
+                           <div className="flex gap-3 pt-2 border-t border-gray-200 mt-2">
+                             <button
+                               onClick={handleSalvarRascunho}
+                               disabled={saving}
+                               className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-sm transition-colors"
+                             >
+                               <Save size={16} /> {saving ? 'Salvando...' : 'Salvar Alterações'}
+                             </button>
+                             <button
+                               onClick={handleReabrir}
+                               disabled={saving}
+                               className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-orange-500 text-white text-sm font-bold rounded-lg hover:bg-orange-600 shadow-sm transition-colors"
+                             >
+                               <RotateCcw size={16} /> Reabrir RDO
+                             </button>
+                           </div>
+                         </>
                        )}
                      </div>
                    )}
@@ -1651,9 +1666,11 @@ export const DiarioDeObra: React.FC = () => {
                          <p className="font-bold flex items-center gap-2 text-red-900">❌ RDO Reprovado</p>
                          <p className="text-sm mt-1">{motivoRejeicaoBackend || motivoRejeicao}</p>
                        </div>
-                       <button onClick={handleRevisar} className="flex items-center gap-2 text-sm font-bold text-red-700 hover:underline">
-                         <RotateCcw size={14}/> Revisar e Reenviar
-                       </button>
+                       {!isReadOnly && (
+                         <button onClick={handleRevisar} className="flex items-center gap-2 text-sm font-bold text-red-700 hover:underline">
+                           <RotateCcw size={14}/> Revisar e Reenviar
+                         </button>
+                       )}
                      </div>
                    )}
                  </div>

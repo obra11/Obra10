@@ -10,6 +10,7 @@ import {
   Res,
   Query,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { RdoService } from './rdo.service';
 import { PdfService } from './pdf.service';
@@ -40,6 +41,19 @@ export class RdoController {
     private readonly pdfService: PdfService,
   ) {}
 
+  private assertWritePermission(req: any) {
+    const permRdo = req.obraRole?.permissoes?.RDO || req.obraRole?.permissoes?.rdo;
+    if (
+      permRdo === 'VIEW' ||
+      permRdo === 'VIEW_APPROVED' ||
+      permRdo === 'VIEW_PARTIAL_APPROVED'
+    ) {
+      throw new ForbiddenException(
+        'Você não tem permissão para realizar alterações no diário de obra.',
+      );
+    }
+  }
+
   // ── STATS (dashboard) — ANTES das rotas com :id para evitar conflito ──────────
   @Get('stats')
   async getStats(@Query() query: any, @Req() req: any) {
@@ -47,12 +61,14 @@ export class RdoController {
       query.obraId || req.headers['x-obra-id'],
       query.dataInicio,
       query.dataFim,
+      req.obraRole,
     );
   }
 
   // ── PROFISSIONAIS RECENTES ────────────────────────────────────────────────────
   @Get('profissionais/recentes')
   async profissionaisRecentes(@Req() req: any) {
+    this.assertWritePermission(req);
     return this.rdoService.getRecentProfissionais(
       req.headers['x-obra-id'],
       req.user.sub,
@@ -80,6 +96,9 @@ export class RdoController {
     @Query('fotos') fotosParam?: string,
   ) {
     const incluirFotos = fotosParam === 'true' || fotosParam === '1';
+    // Valida se o usuário tem acesso a este RDO baseado no status/permissões
+    await this.rdoService.findOne(id, req.headers['x-obra-id'], req.obraRole);
+
     const buffer = await this.pdfService.gerarPdfRdo(id, req.user.empresaId, incluirFotos);
     res.set({
       'Content-Type': 'application/pdf',
@@ -97,6 +116,7 @@ export class RdoController {
   // ── CRUD RDO BASE ─────────────────────────────────────────────────────────────
   @Post()
   async criar(@Body() dto: CreateRdoDto, @Req() req: any) {
+    this.assertWritePermission(req);
     return this.rdoService.create(req.headers['x-obra-id'], req.user.sub, dto);
   }
 
@@ -108,6 +128,7 @@ export class RdoController {
     @Body() dto: SaveRascunhoDto,
     @Req() req: any,
   ) {
+    this.assertWritePermission(req);
     return this.rdoService.saveRascunho(id, req.headers['x-obra-id'], dto, req.user);
   }
 
@@ -118,6 +139,7 @@ export class RdoController {
     @Body() dto: AddAtividadeDto,
     @Req() req: any,
   ) {
+    this.assertWritePermission(req);
     return this.rdoService.addAtividade(
       id,
       req.headers['x-obra-id'],
@@ -132,6 +154,7 @@ export class RdoController {
     @Body() dto: AddEfetivoDto,
     @Req() req: any,
   ) {
+    this.assertWritePermission(req);
     return this.rdoService.addEfetivo(
       id,
       req.headers['x-obra-id'],
@@ -146,6 +169,7 @@ export class RdoController {
     @Body() dto: AddOcorrenciaDto,
     @Req() req: any,
   ) {
+    this.assertWritePermission(req);
     return this.rdoService.addOcorrencia(
       id,
       req.headers['x-obra-id'],
@@ -161,6 +185,7 @@ export class RdoController {
     @Body() dto: AddTarefaDto,
     @Req() req: any,
   ) {
+    this.assertWritePermission(req);
     return this.rdoService.addTarefa(
       id,
       req.headers['x-obra-id'],
@@ -176,6 +201,7 @@ export class RdoController {
     @Body() dto: UpdateTarefaDto,
     @Req() req: any,
   ) {
+    this.assertWritePermission(req);
     return this.rdoService.updateTarefa(
       id,
       tarefaId,
@@ -191,6 +217,7 @@ export class RdoController {
     @Body() dto: SubmeterRdoDto,
     @Req() req: any,
   ) {
+    this.assertWritePermission(req);
     return this.rdoService.submeter(
       id,
       req.headers['x-obra-id'],
@@ -201,6 +228,7 @@ export class RdoController {
 
   @Put(':id/aprovar')
   async aprovar(@Param('id') id: string, @Req() req: any) {
+    this.assertWritePermission(req);
     return this.rdoService.aprovar(
       id,
       req.headers['x-obra-id'],
@@ -215,6 +243,7 @@ export class RdoController {
     @Body() dto: ReprovarRdoDto,
     @Req() req: any,
   ) {
+    this.assertWritePermission(req);
     return this.rdoService.rejeitar(
       id,
       req.headers['x-obra-id'],
@@ -227,6 +256,7 @@ export class RdoController {
   /** PUT /rdos/:id/revisar — Reabre um RDO rejeitado para reedição. */
   @Put(':id/revisar')
   async revisar(@Param('id') id: string, @Req() req: any) {
+    this.assertWritePermission(req);
     return this.rdoService.revisar(id, req.headers['x-obra-id']);
   }
 
@@ -234,6 +264,7 @@ export class RdoController {
   @Put(':id/reabrir')
   @UseGuards(JwtAuthGuard)
   async reabrir(@Param('id') id: string, @Req() req: any) {
+    this.assertWritePermission(req);
     return this.rdoService.reabrir(id, req.user.empresaId, req.user);
   }
 }

@@ -519,10 +519,70 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
         };
       });
 
+      // Função local de resposta simulada baseada nos RDOs (Fallback inteligente)
+      const gerarRespostaSimulada = (p: string) => {
+        const perguntaNorm = p.toLowerCase();
+        
+        // 1. Clima e chuva
+        if (perguntaNorm.includes('chuva') || perguntaNorm.includes('choveu') || perguntaNorm.includes('clima') || perguntaNorm.includes('tempo')) {
+          let contagemChuva = 0;
+          resumoRdosParaIA.forEach((r) => {
+            const txt = (r.clima || '').toLowerCase();
+            if (txt.includes('chuva') || txt.includes('chuvoso') || txt.includes('chuvosa') || txt.includes('🌧️') || txt.includes('⛈️') || txt.includes('🌦️')) {
+              contagemChuva++;
+            }
+          });
+          return `Com base nos diários analisados no período (total de ${totalRdos} dias), foi registrado chuva ou tempo instável em ${contagemChuva} dia(s). Nos demais dias, o clima registrado foi predominantemente estável/sol.`;
+        }
+
+        // 2. Efetivo e profissionais
+        if (perguntaNorm.includes('funcionario') || perguntaNorm.includes('efetivo') || perguntaNorm.includes('pedreiro') || perguntaNorm.includes('servente') || perguntaNorm.includes('trabalhou') || perguntaNorm.includes('pessoas') || perguntaNorm.includes('equipe')) {
+          let totalProfissionais = 0;
+          const profissionaisMap: Record<string, number> = {};
+          
+          rdos.forEach((r) => {
+            const d = (r.dadosExtras as any) || {};
+            if (d.profissionais && Array.isArray(d.profissionais)) {
+              d.profissionais.forEach((p: any) => {
+                if (p && typeof p === 'object') {
+                  const nome = (p.nome || 'Outros').trim();
+                  const qtd = Number(p.quantidade || 0);
+                  profissionaisMap[nome] = (profissionaisMap[nome] || 0) + qtd;
+                  totalProfissionais += qtd;
+                }
+              });
+            }
+          });
+
+          if (totalProfissionais > 0) {
+            const lista = Object.entries(profissionaisMap)
+              .map(([nome, qtd]) => `- ${nome}: acumulado de ${qtd} participações no período`)
+              .join('\n');
+            return `No período selecionado, o efetivo total acumulado nos diários foi de ${totalProfissionais} profissionais (soma de todos os dias).\nDistribuição dos profissionais registrados:\n${lista}`;
+          }
+          
+          const totalEfetivoRel = rdos.reduce((sum, r) => sum + r.efetivos.reduce((s, e) => s + e.quantidade, 0), 0);
+          return `O efetivo total registrado no período foi de ${totalEfetivoRel} profissionais (soma do efetivo diário acumulado).`;
+        }
+
+        // 3. Atividades executadas
+        if (perguntaNorm.includes('atividade') || perguntaNorm.includes('servico') || perguntaNorm.includes('feito') || perguntaNorm.includes('executado') || perguntaNorm.includes('obra')) {
+          const atividades = resumoRdosParaIA
+            .map((r) => r.atividadesExecutadas)
+            .filter(Boolean)
+            .join('\n');
+          if (atividades.trim()) {
+            return `Resumo das atividades executadas no período:\n${atividades.slice(0, 500)}${atividades.length > 500 ? '...' : ''}`;
+          }
+        }
+
+        return `Com base nos diários do período de ${dataInicio} a ${dataFim} (total de ${totalRdos} diários analisados), a pergunta "${pergunta}" foi processada localmente. O relatório executivo principal da obra indica que o andamento segue conforme os diários aprovados. Para um detalhamento preciso de outras ocorrências, consulte o painel superior.`;
+      };
+
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (!apiKey || !Anthropic) {
         return {
-          resposta: `Com base nos diários do período de ${dataInicio} a ${dataFim}, a pergunta "${pergunta}" indica a necessidade de verificação direta com os engenheiros de campo. (Nota: Configure uma chave válida em ANTHROPIC_API_KEY no painel de controle do Railway para habilitar inteligência artificial ativa)`,
+          resposta: `🤖 [Assistente de IA - Modo Local]\n\n${gerarRespostaSimulada(pergunta)}\n\n*(Nota: Chave ANTHROPIC_API_KEY não configurada no Railway. Para habilitar a resposta inteligente do Claude 3.5 Sonnet, adicione a variável de ambiente correspondente)*`,
         };
       }
 
@@ -560,10 +620,16 @@ ${JSON.stringify(resumoRdosParaIA, null, 2)}`;
         );
       }
       
-      // Retorna uma resposta amigável em caso de falha da API externa de IA
-      return {
-        resposta: `Não foi possível consultar a Inteligência Artificial ativa no momento (Erro: ${err?.message || 'Serviço temporariamente indisponível'}).\n\nResumo consolidado do período (total de ${totalRdos} diários):\n- Clima ou andamento: verifique os detalhes no painel do relatório executivo acima ou consulte as observações diretamente no RDO.`,
-      };
+      try {
+        const respostaSimulada = gerarRespostaSimulada(pergunta);
+        return {
+          resposta: `🤖 [Assistente de IA - Modo Local]\n\n${respostaSimulada}\n\n*(Nota: Ocorreu um erro ao conectar à API da Anthropic: "${err?.message || 'invalid x-api-key'}". Para ativar a resposta real gerada pelo Claude 3.5 Sonnet, certifique-se de configurar uma chave válida e ativa na variável ANTHROPIC_API_KEY no painel do Railway)*`
+        };
+      } catch (simErr) {
+        return {
+          resposta: `Não foi possível consultar a Inteligência Artificial ativa no momento (Erro: ${err?.message || 'Serviço temporariamente indisponível'}).\n\nResumo consolidado do período (total de ${totalRdos} diários):\n- Clima ou andamento: verifique os detalhes no painel do relatório executivo acima ou consulte as observações diretamente no RDO.`
+        };
+      }
     } finally {
       this.activeQueries.delete(obraId);
     }

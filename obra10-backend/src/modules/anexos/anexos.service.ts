@@ -128,9 +128,20 @@ export class AnexosService {
     });
   }
 
-  async listarDaObra(obraId: string) {
+  async listarDaObra(obraId: string, obraRole?: any) {
+    const permRdo = obraRole?.permissoes?.RDO || obraRole?.permissoes?.rdo;
+    const where: any = { obraId, deletedAt: null, origem: 'RDO' };
+
+    if (permRdo === 'VIEW_APPROVED' || permRdo === 'VIEW_PARTIAL_APPROVED') {
+      const approvedRdos = await this.prisma.rdo.findMany({
+        where: { obraId, deletedAt: null, status: 'APROVADO' },
+        select: { id: true },
+      });
+      where.attachableId = { in: approvedRdos.map((r) => r.id) };
+    }
+
     const attachments = await this.prisma.anexo.findMany({
-      where: { obraId, deletedAt: null, origem: 'RDO' },
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         criador: { select: { nome: true } },

@@ -12,6 +12,22 @@ interface Colaborador {
   permissoes: any;
 }
 
+const getPermLabel = (val: string) => {
+  if (val === 'EDIT') return 'Edição';
+  if (val === 'VIEW') return 'Visualização Total';
+  if (val === 'VIEW_APPROVED') return 'Visualização Aprovados';
+  if (val === 'VIEW_PARTIAL_APPROVED') return 'Visualização Parcial (Aprovados)';
+  return val;
+};
+
+const getPermColor = (val: string) => {
+  if (val === 'EDIT') return 'text-green-600 bg-green-50 border-green-200';
+  if (val === 'VIEW') return 'text-amber-600 bg-amber-50 border-amber-200';
+  if (val === 'VIEW_APPROVED') return 'text-blue-600 bg-blue-50 border-blue-200';
+  if (val === 'VIEW_PARTIAL_APPROVED') return 'text-indigo-600 bg-indigo-50 border-indigo-200';
+  return 'text-gray-500 bg-gray-50 border-gray-200';
+};
+
 export const Efetivo: React.FC = () => {
   const { user } = useAuth();
   const { obraId } = useParams();
@@ -107,12 +123,15 @@ export const Efetivo: React.FC = () => {
                             </span>
                           ) : (
                             <>
-                              {Object.keys(c.permissoes || {}).map(mod => (
-                                <span key={mod} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-gray-100 text-gray-700 shadow-sm border border-gray-200">
-                                  <Shield size={12} className={`mr-1 ${c.permissoes[mod] === 'EDIT' ? 'text-green-500' : 'text-yellow-500'}`} />
-                                  {mod}: {c.permissoes[mod] === 'EDIT' ? 'Edição' : 'Visualização'}
-                                </span>
-                              ))}
+                              {Object.keys(c.permissoes || {}).map(mod => {
+                                const val = c.permissoes[mod];
+                                return (
+                                  <span key={mod} className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold border shadow-sm ${getPermColor(val)}`}>
+                                    <Shield size={12} className="mr-1" />
+                                    {mod}: {getPermLabel(val)}
+                                  </span>
+                                );
+                              })}
                               {(!c.permissoes || Object.keys(c.permissoes).length === 0) && (
                                  <span className="text-gray-400 text-xs italic">Nenhuma permissão especial</span>
                               )}
@@ -157,12 +176,15 @@ export const Efetivo: React.FC = () => {
                     </span>
                   ) : (
                     <>
-                      {Object.keys(c.permissoes || {}).map(mod => (
-                        <span key={mod} className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
-                          <Shield size={10} className={`mr-1 ${c.permissoes[mod] === 'EDIT' ? 'text-green-500' : 'text-yellow-500'}`} />
-                          {mod}
-                        </span>
-                      ))}
+                      {Object.keys(c.permissoes || {}).map(mod => {
+                        const val = c.permissoes[mod];
+                        return (
+                          <span key={mod} className={`inline-flex items-center px-2 py-1 rounded-md text-[10px] font-semibold border ${getPermColor(val)}`}>
+                            <Shield size={10} className="mr-1" />
+                            {mod}: {getPermLabel(val)}
+                          </span>
+                        );
+                      })}
                       {(!c.permissoes || Object.keys(c.permissoes).length === 0) && (
                         <span className="text-gray-400 text-xs italic">Sem permissões</span>
                       )}

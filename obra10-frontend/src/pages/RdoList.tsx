@@ -80,6 +80,9 @@ export const RdoList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
 
+  const permRdo = obraAtiva?.permissoes?.RDO || obraAtiva?.permissoes?.rdo;
+  const isReadOnly = permRdo === 'VIEW' || permRdo === 'VIEW_APPROVED' || permRdo === 'VIEW_PARTIAL_APPROVED';
+
   // Relatório IA
   const [showIAModal, setShowIAModal] = useState(false);
   const [iaDataInicio, setIaDataInicio] = useState('');
@@ -278,19 +281,23 @@ export const RdoList: React.FC = () => {
             <ImageIcon size={16} />{' '}
             <span className="hidden sm:inline">Galeria</span> Mídias
           </button>
-          <button
-            onClick={() => setShowIAModal(true)}
-            className="flex items-center gap-2 px-3 md:px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors"
-          >
-            <BarChart2 size={16} />{' '}
-            <span className="hidden sm:inline">Relatório</span> IA
-          </button>
-          <button
-            onClick={() => navigate(`/obras/${obraAtiva?.id}/rdos/novo`)}
-            className="bg-lunardeli-red hover:bg-red-700 active:bg-red-800 text-white px-4 md:px-5 py-2.5 rounded-lg flex items-center font-medium shadow-sm transition-colors"
-          >
-            <Plus size={18} className="mr-1.5" /> Novo Diário
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={() => setShowIAModal(true)}
+              className="flex items-center gap-2 px-3 md:px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+            >
+              <BarChart2 size={16} />{' '}
+              <span className="hidden sm:inline">Relatório</span> IA
+            </button>
+          )}
+          {!isReadOnly && (
+            <button
+              onClick={() => navigate(`/obras/${obraAtiva?.id}/rdos/novo`)}
+              className="bg-lunardeli-red hover:bg-red-700 active:bg-red-800 text-white px-4 md:px-5 py-2.5 rounded-lg flex items-center font-medium shadow-sm transition-colors"
+            >
+              <Plus size={18} className="mr-1.5" /> Novo Diário
+            </button>
+          )}
         </div>
       </div>
 

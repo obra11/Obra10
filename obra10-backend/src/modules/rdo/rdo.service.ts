@@ -53,7 +53,7 @@ export class RdoService {
   async findAllByObra(obraId: string, obraRole?: any) {
     const where: any = { obraId, deletedAt: null };
 
-    const permRdo = obraRole?.permissoes?.rdo;
+    const permRdo = obraRole?.permissoes?.RDO || obraRole?.permissoes?.rdo;
     if (permRdo === 'VIEW_APPROVED' || permRdo === 'VIEW_PARTIAL_APPROVED') {
       where.status = RdoStatus.APROVADO;
     }
@@ -112,7 +112,7 @@ export class RdoService {
     });
     if (!rdo) throw new NotFoundException('RDO não encontrado.');
 
-    const permRdo = obraRole?.permissoes?.rdo;
+    const permRdo = obraRole?.permissoes?.RDO || obraRole?.permissoes?.rdo;
     if (permRdo === 'VIEW_APPROVED' || permRdo === 'VIEW_PARTIAL_APPROVED') {
       if (rdo.status !== RdoStatus.APROVADO) {
         throw new ForbiddenException(
@@ -632,7 +632,7 @@ export class RdoService {
   }
 
   // ===================== STATS PARA DASHBOARD =====================
-  async getStats(obraId: string, dataInicio?: string, dataFim?: string) {
+  async getStats(obraId: string, dataInicio?: string, dataFim?: string, obraRole?: any) {
     const inicio = dataInicio
       ? new Date(dataInicio)
       : (() => {
@@ -642,12 +642,18 @@ export class RdoService {
         })();
     const fim = dataFim ? new Date(dataFim) : new Date();
 
+    const permRdo = obraRole?.permissoes?.RDO || obraRole?.permissoes?.rdo;
+    const where: any = {
+      obraId,
+      deletedAt: null,
+      dataReferencia: { gte: inicio, lte: fim },
+    };
+    if (permRdo === 'VIEW_APPROVED' || permRdo === 'VIEW_PARTIAL_APPROVED') {
+      where.status = RdoStatus.APROVADO;
+    }
+
     const rdos = await this.prisma.rdo.findMany({
-      where: {
-        obraId,
-        deletedAt: null,
-        dataReferencia: { gte: inicio, lte: fim },
-      },
+      where,
       include: { tarefas: true, efetivos: { where: { deletedAt: null } } },
       orderBy: { dataReferencia: 'asc' },
       take: 500,
