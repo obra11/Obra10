@@ -466,9 +466,73 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
       );
     }
 
+    let totalRdos = 0;
+    let rdos: any[] = [];
+    let resumoRdosParaIA: any[] = [];
+    let respostaSimulada = '';
+
+    // Função local de resposta simulada baseada nos RDOs (Fallback inteligente)
+    const gerarRespostaSimulada = (p: string) => {
+      const perguntaNorm = p.toLowerCase();
+      
+      // 1. Clima e chuva
+      if (perguntaNorm.includes('chuva') || perguntaNorm.includes('choveu') || perguntaNorm.includes('clima') || perguntaNorm.includes('tempo')) {
+        let contagemChuva = 0;
+        resumoRdosParaIA.forEach((r) => {
+          const txt = (r.clima || '').toLowerCase();
+          if (txt.includes('chuva') || txt.includes('chuvoso') || txt.includes('chuvosa') || txt.includes('🌧️') || txt.includes('⛈️') || txt.includes('🌦️')) {
+            contagemChuva++;
+          }
+        });
+        return `Com base nos diários analisados no período (total de ${totalRdos} dias), foi registrado chuva ou tempo instável em ${contagemChuva} dia(s). Nos demais dias, o clima registrado foi predominantemente estável/sol.`;
+      }
+
+      // 2. Efetivo e profissionais
+      if (perguntaNorm.includes('funcionario') || perguntaNorm.includes('efetivo') || perguntaNorm.includes('pedreiro') || perguntaNorm.includes('servente') || perguntaNorm.includes('trabalhou') || perguntaNorm.includes('pessoas') || perguntaNorm.includes('equipe')) {
+        let totalProfissionais = 0;
+        const profissionaisMap: Record<string, number> = {};
+        
+        rdos.forEach((r) => {
+          const d = (r.dadosExtras as any) || {};
+          if (d.profissionais && Array.isArray(d.profissionais)) {
+            d.profissionais.forEach((p: any) => {
+              if (p && typeof p === 'object') {
+                const nome = (p.nome || 'Outros').trim();
+                const qtd = Number(p.quantidade || 0);
+                profissionaisMap[nome] = (profissionaisMap[nome] || 0) + qtd;
+                totalProfissionais += qtd;
+              }
+            });
+          }
+        });
+
+        if (totalProfissionais > 0) {
+          const lista = Object.entries(profissionaisMap)
+            .map(([nome, qtd]) => `- ${nome}: acumulado de ${qtd} participações no período`)
+            .join('\n');
+          return `No período selecionado, o efetivo total acumulado nos diários foi de ${totalProfissionais} profissionais (soma de todos os dias).\nDistribuição dos profissionais registrados:\n${lista}`;
+        }
+        
+        const totalEfetivoRel = rdos.reduce((sum, r) => sum + (r.efetivos?.reduce((s, e) => s + e.quantidade, 0) || 0), 0);
+        return `O efetivo total registrado no período foi de ${totalEfetivoRel} profissionais (soma do efetivo diário acumulado).`;
+      }
+
+      // 3. Atividades executadas
+      if (perguntaNorm.includes('atividade') || perguntaNorm.includes('servico') || perguntaNorm.includes('feito') || perguntaNorm.includes('executado') || perguntaNorm.includes('obra')) {
+        const atividades = resumoRdosParaIA
+          .map((r) => r.atividadesExecutadas)
+          .filter(Boolean)
+          .join('\n');
+        if (atividades.trim()) {
+          return `Resumo das atividades executadas no período:\n${atividades.slice(0, 500)}${atividades.length > 500 ? '...' : ''}`;
+        }
+      }
+
+      return `Com base nos diários do período de ${dataInicio} a ${dataFim} (total de ${totalRdos} diários analisados), a pergunta "${pergunta}" foi processada localmente. O relatório executivo principal da obra indica que o andamento segue conforme os diários aprovados. Para um detalhamento preciso de outras ocorrências, consulte o painel superior.`;
+    };
+
     this.activeQueries.add(obraId);
 
-    let totalRdos = 0;
     try {
       const inicio = new Date(dataInicio);
       const fim = new Date(dataFim);
@@ -478,12 +542,15 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
       }
 
       // Buscar RDOs aprovados do período
-      const rdos = await this.prisma.rdo.findMany({
+      rdos = await this.prisma.rdo.findMany({
         where: {
           obraId,
           status: 'APROVADO' as any,
           dataReferencia: { gte: inicio, lte: fim },
           deletedAt: null,
+        },
+        include: {
+          efetivos: { where: { deletedAt: null } },
         },
         orderBy: { dataReferencia: 'asc' },
       });
@@ -495,7 +562,7 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
         );
       }
 
-      const resumoRdosParaIA = rdos.map((r) => {
+      resumoRdosParaIA = rdos.map((r) => {
         const d = (r.dadosExtras as any) || {};
 
         let climaStr = '';
@@ -518,66 +585,6 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
           observacoes: d.observacoes || '',
         };
       });
-
-      // Função local de resposta simulada baseada nos RDOs (Fallback inteligente)
-      const gerarRespostaSimulada = (p: string) => {
-        const perguntaNorm = p.toLowerCase();
-        
-        // 1. Clima e chuva
-        if (perguntaNorm.includes('chuva') || perguntaNorm.includes('choveu') || perguntaNorm.includes('clima') || perguntaNorm.includes('tempo')) {
-          let contagemChuva = 0;
-          resumoRdosParaIA.forEach((r) => {
-            const txt = (r.clima || '').toLowerCase();
-            if (txt.includes('chuva') || txt.includes('chuvoso') || txt.includes('chuvosa') || txt.includes('🌧️') || txt.includes('⛈️') || txt.includes('🌦️')) {
-              contagemChuva++;
-            }
-          });
-          return `Com base nos diários analisados no período (total de ${totalRdos} dias), foi registrado chuva ou tempo instável em ${contagemChuva} dia(s). Nos demais dias, o clima registrado foi predominantemente estável/sol.`;
-        }
-
-        // 2. Efetivo e profissionais
-        if (perguntaNorm.includes('funcionario') || perguntaNorm.includes('efetivo') || perguntaNorm.includes('pedreiro') || perguntaNorm.includes('servente') || perguntaNorm.includes('trabalhou') || perguntaNorm.includes('pessoas') || perguntaNorm.includes('equipe')) {
-          let totalProfissionais = 0;
-          const profissionaisMap: Record<string, number> = {};
-          
-          rdos.forEach((r) => {
-            const d = (r.dadosExtras as any) || {};
-            if (d.profissionais && Array.isArray(d.profissionais)) {
-              d.profissionais.forEach((p: any) => {
-                if (p && typeof p === 'object') {
-                  const nome = (p.nome || 'Outros').trim();
-                  const qtd = Number(p.quantidade || 0);
-                  profissionaisMap[nome] = (profissionaisMap[nome] || 0) + qtd;
-                  totalProfissionais += qtd;
-                }
-              });
-            }
-          });
-
-          if (totalProfissionais > 0) {
-            const lista = Object.entries(profissionaisMap)
-              .map(([nome, qtd]) => `- ${nome}: acumulado de ${qtd} participações no período`)
-              .join('\n');
-            return `No período selecionado, o efetivo total acumulado nos diários foi de ${totalProfissionais} profissionais (soma de todos os dias).\nDistribuição dos profissionais registrados:\n${lista}`;
-          }
-          
-          const totalEfetivoRel = rdos.reduce((sum, r) => sum + r.efetivos.reduce((s, e) => s + e.quantidade, 0), 0);
-          return `O efetivo total registrado no período foi de ${totalEfetivoRel} profissionais (soma do efetivo diário acumulado).`;
-        }
-
-        // 3. Atividades executadas
-        if (perguntaNorm.includes('atividade') || perguntaNorm.includes('servico') || perguntaNorm.includes('feito') || perguntaNorm.includes('executado') || perguntaNorm.includes('obra')) {
-          const atividades = resumoRdosParaIA
-            .map((r) => r.atividadesExecutadas)
-            .filter(Boolean)
-            .join('\n');
-          if (atividades.trim()) {
-            return `Resumo das atividades executadas no período:\n${atividades.slice(0, 500)}${atividades.length > 500 ? '...' : ''}`;
-          }
-        }
-
-        return `Com base nos diários do período de ${dataInicio} a ${dataFim} (total de ${totalRdos} diários analisados), a pergunta "${pergunta}" foi processada localmente. O relatório executivo principal da obra indica que o andamento segue conforme os diários aprovados. Para um detalhamento preciso de outras ocorrências, consulte o painel superior.`;
-      };
 
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (!apiKey || !Anthropic) {
@@ -621,7 +628,7 @@ ${JSON.stringify(resumoRdosParaIA, null, 2)}`;
       }
       
       try {
-        const respostaSimulada = gerarRespostaSimulada(pergunta);
+        respostaSimulada = gerarRespostaSimulada(pergunta);
         return {
           resposta: `🤖 [Assistente de IA - Modo Local]\n\n${respostaSimulada}\n\n*(Nota: Ocorreu um erro ao conectar à API da Anthropic: "${err?.message || 'invalid x-api-key'}". Para ativar a resposta real gerada pelo Claude 3.5 Sonnet, certifique-se de configurar uma chave válida e ativa na variável ANTHROPIC_API_KEY no painel do Railway)*`
         };
@@ -650,6 +657,203 @@ ${JSON.stringify(resumoRdosParaIA, null, 2)}`;
       this.logger.log(
         `[AiService] Limpeza de cache: ${resultado.count} RelatorioIA removidos (>30 dias).`,
       );
+    }
+  }
+
+  /**
+   * Endpoint de chat da Luna.
+   * Busca dados em tempo real da empresa do usuário e chama a API da Anthropic.
+   */
+  async chat(
+    empresaId: string,
+    userId: string,
+    message: string,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+  ) {
+    if (!message?.trim()) {
+      throw new BadRequestException('A mensagem é obrigatória.');
+    }
+
+    // 1. Obras ativas da empresa
+    const obrasAtivas = await this.prisma.obra.findMany({
+      where: {
+        empresaId,
+        status: 'ATIVA',
+        deletedAt: null,
+      },
+      select: {
+        nome: true,
+      },
+    });
+    const listaObras = obrasAtivas.map((o) => o.nome).join(', ') || 'Nenhuma obra ativa';
+
+    // 2. Últimos 10 RDOs (com status, data, obra, responsável)
+    const ultimosRdos = await this.prisma.rdo.findMany({
+      where: {
+        obra: {
+          empresaId,
+        },
+        deletedAt: null,
+      },
+      orderBy: {
+        dataReferencia: 'desc',
+      },
+      take: 10,
+      select: {
+        status: true,
+        dataReferencia: true,
+        obra: {
+          select: {
+            nome: true,
+          },
+        },
+        criador: {
+          select: {
+            nome: true,
+          },
+        },
+      },
+    });
+    const listaRdosRecentes = ultimosRdos
+      .map(
+        (r) =>
+          `- Obra: ${r.obra.nome}, Data: ${r.dataReferencia.toISOString().split('T')[0]}, Status: ${r.status}, Responsável: ${r.criador.nome}`,
+      )
+      .join('\n') || 'Nenhum RDO recente';
+
+    // 3. RDOs com status PENDENTE (aguardando aprovação = SUBMETIDO)
+    const rdosPendentes = await this.prisma.rdo.findMany({
+      where: {
+        obra: {
+          empresaId,
+        },
+        status: 'SUBMETIDO',
+        deletedAt: null,
+      },
+      select: {
+        dataReferencia: true,
+        obra: {
+          select: {
+            nome: true,
+          },
+        },
+        criador: {
+          select: {
+            nome: true,
+          },
+        },
+      },
+    });
+    const totalPendentes = rdosPendentes.length;
+    const listaRdosPendentes = rdosPendentes
+      .map(
+        (r) =>
+          `- Obra: ${r.obra.nome}, Data: ${r.dataReferencia.toISOString().split('T')[0]}, Responsável: ${r.criador.nome}`,
+      )
+      .join('\n') || 'Nenhum RDO aguardando aprovação';
+
+    // 4. Contagem de RDOs do mês atual
+    const agora = new Date();
+    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+    const totalRdosMes = await this.prisma.rdo.count({
+      where: {
+        obra: {
+          empresaId,
+        },
+        dataReferencia: {
+          gte: inicioMes,
+        },
+        deletedAt: null,
+      },
+    });
+
+    // Construção do System Prompt
+    const systemPrompt = `Você é a Luna, assistente de IA do Obra 10, plataforma de gestão de obras.
+Responda sempre em português brasileiro. Seja objetiva, direta e profissional, mas com tom acolhedor.
+Nunca invente dados — use apenas as informações abaixo.
+Se não tiver a informação, diga que não tem acesso no momento.
+Para ações que não pode executar (aprovar, criar registros), oriente o usuário a fazer manualmente.
+
+DADOS DA EMPRESA (tempo real):
+- Obras ativas: ${listaObras}
+- RDOs recentes:
+${listaRdosRecentes}
+- RDOs pendentes de aprovação: Quantidade: ${totalPendentes}
+${listaRdosPendentes}
+- Total de RDOs este mês: ${totalRdosMes}`;
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey || !Anthropic) {
+      // Fallback local/offline amigável para produção
+      return {
+        reply: `Olá! Sou a Luna, sua assistente no Obra 10. No momento, meu canal de comunicação inteligente está passando por uma rápida manutenção. No entanto, consigo te adiantar alguns dados rápidos da empresa:\n- **Obras ativas**: ${listaObras}\n- **RDOs criados este mês**: ${totalRdosMes}\n- **RDOs pendentes de aprovação**: ${totalPendentes} pendentes.\n\nComo posso te ajudar no momento?`,
+      };
+    }
+
+    const client = new Anthropic.default({ apiKey });
+
+    // Preparar mensagens do histórico + nova mensagem
+    const formattedMessages = history.map((h) => ({
+      role: h.role,
+      content: h.content,
+    }));
+    formattedMessages.push({
+      role: 'user',
+      content: message,
+    });
+
+    try {
+      const chatModel = 'claude-sonnet-4-20250514';
+      
+      const makeCall = async (modelToUse: string) => {
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout de 30 segundos atingido ao chamar a API da Anthropic.')), 30000)
+        );
+        
+        const apiPromise = client.messages.create({
+          model: modelToUse,
+          max_tokens: 1024,
+          system: systemPrompt,
+          messages: formattedMessages,
+        });
+
+        return await Promise.race([apiPromise, timeoutPromise]);
+      };
+
+      let response: any;
+      try {
+        response = await makeCall(chatModel);
+      } catch (err: any) {
+        // Fallback de modelo se der erro de modelo inválido ou não suportado
+        const isModelError = err?.status === 404 || err?.message?.includes('model') || err?.message?.includes('not found');
+        if (isModelError) {
+          this.logger.warn(`[AiService] Modelo '${chatModel}' falhou ou não existe. Fazendo fallback para 'claude-3-5-sonnet-20241022'.`);
+          response = await makeCall('claude-3-5-sonnet-20241022');
+        } else {
+          throw err; // Outros erros (ex: timeout, billing) são repassados
+        }
+      }
+
+      const reply = response.content[0]?.type === 'text' ? response.content[0].text : '';
+      return { reply };
+
+    } catch (err: any) {
+      this.logger.error(`[AiService] Erro ao chamar a API da Anthropic no Chat: ${err?.message}`);
+      const isCreditsError =
+        err?.message?.includes('Plans & Billing') ||
+        err?.message?.includes('credit') ||
+        err?.status === 402 ||
+        err?.error?.type === 'insufficient_quota';
+
+      if (isCreditsError) {
+        return {
+          reply: 'Olá! Desculpe, mas meu saldo de créditos de Inteligência Artificial está temporariamente esgotado. Por favor, avise o administrador do sistema para verificar o faturamento.',
+        };
+      }
+
+      return {
+        reply: `Olá! Desculpe, não consegui obter uma resposta no momento por conta de um erro de conexão (Erro: ${err?.message || 'Serviço indisponível'}). Por favor, tente novamente em alguns instantes!`,
+      };
     }
   }
 }
