@@ -1,1 +1,1 @@
-export { default } from './LunaWidget';
+export { default as LunaWidget } from './LunaWidget';
