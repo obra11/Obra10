@@ -839,6 +839,22 @@ ${listaRdosPendentes}
 
     } catch (err: any) {
       this.logger.error(`[AiService] Erro ao chamar a API da Anthropic no Chat: ${err?.message}`);
+
+      const msgNorm = message.toLowerCase();
+      let respostaSimulada = '';
+
+      if (msgNorm.includes('chuva') || msgNorm.includes('choveu') || msgNorm.includes('clima') || msgNorm.includes('tempo')) {
+        respostaSimulada = `Com base nos relatórios recentes da empresa, o clima tem variado nos canteiros. Para ver o registro oficial de chuvas ou sol de uma obra específica em um período, você pode utilizar a aba de **Relatório Diário de Obra** ou gerar o **Relatório Executivo — IA** selecionando o período desejado na listagem de RDOs.`;
+      } else if (msgNorm.includes('obra') || msgNorm.includes('ativa')) {
+        respostaSimulada = `Atualmente, temos as seguintes **obras ativas** registradas na empresa:\n\n${listaObras.split(', ').map(nome => `- ${nome}`).join('\n')}`;
+      } else if (msgNorm.includes('pendente') || msgNorm.includes('aprova')) {
+        respostaSimulada = `Temos um total de **${totalPendentes} RDO(s) pendente(s)** de aprovação no momento:\n\n${listaRdosPendentes || 'Nenhum RDO pendente.'}`;
+      } else if (msgNorm.includes('criado') || msgNorm.includes('mês') || msgNorm.includes('total')) {
+        respostaSimulada = `Este mês já foram criados **${totalRdosMes} RDOs** no total. Os 10 diários de obra mais recentes são:\n\n${listaRdosRecentes}`;
+      } else {
+        respostaSimulada = `Olá! Sou a Luna, sua assistente no Obra 10. No momento, estou respondendo em **Modo Local** (offline) devido a um problema temporário na chave de API da Anthropic. Consigo te adiantar as seguintes informações rápidas:\n\n- **Obras ativas**: ${listaObras}\n- **RDOs criados este mês**: ${totalRdosMes}\n- **RDOs pendentes de aprovação**: ${totalPendentes} pendentes.\n\nComo posso te ajudar no momento?`;
+      }
+
       const isCreditsError =
         err?.message?.includes('Plans & Billing') ||
         err?.message?.includes('credit') ||
@@ -847,12 +863,12 @@ ${listaRdosPendentes}
 
       if (isCreditsError) {
         return {
-          reply: 'Olá! Desculpe, mas meu saldo de créditos de Inteligência Artificial está temporariamente esgotado. Por favor, avise o administrador do sistema para verificar o faturamento.',
+          reply: `🤖 [Modo Local - Limite de Créditos Atingido]\n\n${respostaSimulada}\n\n*(Nota: O saldo de créditos da Anthropic acabou. Por favor, avise o administrador do sistema para verificar a conta)*`,
         };
       }
 
       return {
-        reply: `Olá! Desculpe, não consegui obter uma resposta no momento por conta de um erro de conexão (Erro: ${err?.message || 'Serviço indisponível'}). Por favor, tente novamente em alguns instantes!`,
+        reply: `🤖 [Modo Local - Chave de API Inválida ou Instável]\n\n${respostaSimulada}\n\n*(Nota: Ocorreu uma falha de autenticação/conexão com a Anthropic: "${err?.message || 'invalid x-api-key'}" - Status: ${err?.status || 401}. Avise o administrador para revisar a chave ANTHROPIC_API_KEY no Railway)*`,
       };
     }
   }
