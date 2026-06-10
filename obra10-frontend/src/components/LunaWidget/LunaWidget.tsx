@@ -87,7 +87,7 @@ export default function LunaWidget() {
             background: '#E5192C', padding: '12px 16px', display: 'flex',
             alignItems: 'center', gap: '10px'
           }}>
-            <img src="/luna-avatar.png" alt="Luna" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.5)' }} />
+            <img src="/luna-avatar.png?v=3" alt="Luna" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.5)' }} />
             <div style={{ flex: 1 }}>
               <div style={{ color: 'white', fontWeight: 700, fontSize: 16 }}>Luna</div>
               <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>Assistente Obra 10</div>
@@ -99,7 +99,7 @@ export default function LunaWidget() {
             {messages.map((m, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
                 {m.role === 'assistant' && (
-                  <img src="/luna-avatar.png" alt="Luna" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, marginTop: 2 }} />
+                  <img src="/luna-avatar.png?v=3" alt="Luna" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, marginTop: 2 }} />
                 )}
                 <div style={{
                   maxWidth: '80%', padding: '10px 14px', borderRadius: m.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
@@ -115,7 +115,7 @@ export default function LunaWidget() {
             ))}
             {loading && (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                <img src="/luna-avatar.png" alt="Luna" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, marginTop: 2 }} />
+                <img src="/luna-avatar.png?v=3" alt="Luna" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, marginTop: 2 }} />
                 <div style={{ background: 'white', padding: '10px 14px', borderRadius: '16px 16px 16px 4px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
                   <span style={{ display: 'inline-flex', gap: 4 }}>
                     {[0,1,2].map(i => (
@@ -167,7 +167,7 @@ export default function LunaWidget() {
           background: '#E5192C', boxShadow: '0 4px 16px rgba(229,25,44,0.35)', zIndex: 9999
         }}
       >
-        <img src="/luna-avatar.png" alt="Luna" style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', margin: 4 }} />
+        <img src="/luna-avatar.png?v=3" alt="Luna" style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', margin: 4 }} />
       </button>
 
       <style>{`
