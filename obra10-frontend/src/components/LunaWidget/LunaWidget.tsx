@@ -57,7 +57,17 @@ export default function LunaWidget() {
       setListening(false);
       sendMessage(transcript);
     };
-    rec.onerror = () => setListening(false);
+    rec.onerror = (event: any) => {
+      console.error('Speech recognition error:', event);
+      if (event.error === 'not-allowed') {
+        alert('Acesso ao microfone negado. Por favor, ative a permissão de microfone nas configurações do seu navegador para usar esta função.');
+      } else if (event.error === 'no-speech') {
+        alert('Nenhuma voz foi detectada. Verifique se o microfone está funcionando e fale um pouco mais alto.');
+      } else {
+        alert(`Erro de voz (${event.error}). Verifique as conexões do microfone.`);
+      }
+      setListening(false);
+    };
     rec.onend = () => setListening(false);
     recognitionRef.current = rec;
     rec.start();

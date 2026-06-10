@@ -3,8 +3,8 @@ import { AiService } from './ai.service';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { ObraContextGuard } from '../../core/guards/obra-context.guard';
 
-@UseGuards(JwtAuthGuard, ObraContextGuard)
-@Controller('obras/:obraId')
+@UseGuards(JwtAuthGuard)
+@Controller()
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 
@@ -15,7 +15,8 @@ export class AiController {
    * Consolida todos os RDOs APROVADOS do período e gera insights estruturados.
    * Cache: 24h. Rate limit: 3x/dia por obra.
    */
-  @Post('relatorio-ia')
+  @UseGuards(ObraContextGuard)
+  @Post('obras/:obraId/relatorio-ia')
   async gerarRelatorio(
     @Param('obraId') obraId: string,
     @Body() body: { dataInicio: string; dataFim: string; foco?: string; secoes?: string[] },
@@ -38,7 +39,8 @@ export class AiController {
    *
    * Responde a uma pergunta interativa do usuário baseando-se nos RDOs aprovados do período.
    */
-  @Post('relatorio-ia/perguntar')
+  @UseGuards(ObraContextGuard)
+  @Post('obras/:obraId/relatorio-ia/perguntar')
   async perguntarRelatorio(
     @Param('obraId') obraId: string,
     @Body() body: { dataInicio: string; dataFim: string; pergunta: string },
@@ -52,5 +54,21 @@ export class AiController {
       body.dataFim,
       body.pergunta,
     );
+  }
+
+  /**
+   * POST /ai/chat
+   * Body: { message: "pergunta", history: [] }
+   *
+   * Responde a perguntas gerais do chatbot Luna.
+   */
+  @Post('ai/chat')
+  async chat(
+    @Body() body: { message: string; history: Array<{ role: 'user' | 'assistant'; content: string }> },
+    @Req() req: any,
+  ) {
+    const empresaId = req.user.empresaId;
+    const userId = req.user.sub || req.user.id;
+    return this.aiService.chat(empresaId, userId, body.message, body.history);
   }
 }
