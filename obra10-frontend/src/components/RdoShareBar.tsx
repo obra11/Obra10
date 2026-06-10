@@ -183,7 +183,7 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
   // ── Modo compacto: menu de 3 pontos ──────────────────────────────────────────
   if (compact) {
     return (
-      <div className="relative inline-block text-left" ref={dropdownRef}>
+      <div className="relative inline-block text-left" style={{ zIndex: dropdownOpen ? 100 : 'auto' }} ref={dropdownRef}>
         <button
           onClick={(e) => { e.stopPropagation(); setDropdownOpen(!dropdownOpen); }}
           className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-lunardeli-red transition-colors"
