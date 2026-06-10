@@ -821,7 +821,7 @@ export const RdoList: React.FC = () => {
       )}
 
       {/* Search and Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
         <div className="p-3 md:p-4 border-b border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between bg-gray-50/50 gap-3">
           <div className="relative w-full max-w-md">
             <Search
@@ -861,7 +861,7 @@ export const RdoList: React.FC = () => {
           </div>
         </div>
 
-        <div className="hidden md:block overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto rounded-b-xl">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
