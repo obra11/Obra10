@@ -1,4 +1,15 @@
 {
+  "name": "obra10-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:backend": "npm --prefix obra10-backend run start:dev",
+    "dev:frontend": "npm --prefix obra10-frontend run dev",
+    "build:frontend": "npm --prefix obra10-frontend run build",
+    "build:backend": "npm --prefix obra10-backend run build",
+    "sync:assets": "node sync-assets.js",
+    "build": "npm run build:frontend && npm run sync:assets && npm run build:backend"
+  },
   "dependencies": {
     "localtunnel": "^2.0.2"
   }
