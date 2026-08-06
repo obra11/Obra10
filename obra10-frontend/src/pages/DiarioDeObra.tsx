@@ -4,7 +4,8 @@ import api from '../services/api';
 import {
   ClipboardList, CloudSun, Users, Hammer, Drill,
   CheckSquare, FileSpreadsheet, Paperclip, MessageSquare, ShieldCheck,
-  Plus, Trash2, Video, FileText, Image as ImageIcon, Save, Send, RotateCcw, ArrowLeft
+  Plus, Trash2, Video, FileText, Image as ImageIcon, Save, Send, RotateCcw, ArrowLeft,
+  ChevronDown, ChevronUp, Maximize2, Minimize2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { parseUTCDate } from '../utils/date';
@@ -128,16 +129,45 @@ function getFileExt(name: string): string {
 /* ═══════════════════════════════════════════════════════════════
    Render Helpers
    ═══════════════════════════════════════════════════════════════ */
-const SectionContainer = ({ children }: { children: React.ReactNode }) => (
-  <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 border-t-[3px] border-t-lunardeli-red/80">{children}</div>
-);
-
-const SectionTitle = ({ icon: Icon, title, badge }: { icon: any; title: string; badge?: React.ReactNode }) => (
-  <h2 className="text-base md:text-lg font-bold text-gray-900 mb-4 md:mb-5 flex items-center gap-2">
-    <Icon className="text-lunardeli-red shrink-0" size={20} />
-    <span className="truncate">{title}</span>
-    {badge}
-  </h2>
+const CollapsibleSection = ({
+  icon: Icon,
+  title,
+  badge,
+  children,
+  isCollapsed = false,
+  onToggle,
+}: {
+  icon: any;
+  title: string;
+  badge?: React.ReactNode;
+  children: React.ReactNode;
+  isCollapsed?: boolean;
+  onToggle?: () => void;
+}) => (
+  <div className="bg-white rounded-xl shadow-sm border border-gray-100 border-t-[3px] border-t-lunardeli-red/80 overflow-hidden transition-all">
+    <div
+      onClick={onToggle}
+      className={`p-4 md:px-6 md:py-4 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-gray-50/80 transition-colors ${isCollapsed ? '' : 'border-b border-gray-100'}`}
+    >
+      <h2 className="text-base md:text-lg font-bold text-gray-900 flex items-center gap-2 min-w-0">
+        <Icon className="text-lunardeli-red shrink-0" size={20} />
+        <span className="truncate">{title}</span>
+        {badge}
+      </h2>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle?.();
+        }}
+        className="p-1.5 text-gray-400 hover:text-lunardeli-red hover:bg-red-50 rounded-lg transition-colors shrink-0"
+        title={isCollapsed ? 'Expandir seção' : 'Recolher seção'}
+      >
+        {isCollapsed ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
+      </button>
+    </div>
+    {!isCollapsed && <div className="p-4 md:p-6 pt-3 md:pt-5">{children}</div>}
+  </div>
 );
 
 const InputField = ({ label, type = 'text', ...props }: any) => (
@@ -163,6 +193,15 @@ export const DiarioDeObra: React.FC = () => {
   const [toast, setToast] = useState<string | null>(null);
   const [rdoNumberStr, setRdoNumberStr] = useState<string>(generateRdoNumber());
   const [motivoRejeicaoBackend, setMotivoRejeicaoBackend] = useState<string>('');
+
+  // ── Estado de seções recolhidas / minimizadas ──
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const toggleSection = (key: string) => setCollapsedSections(prev => ({ ...prev, [key]: !prev[key] }));
+  const expandAllSections = () => setCollapsedSections({});
+  const collapseAllSections = () => setCollapsedSections({
+    sec1: true, sec2: true, sec3: true, sec4: true, sec5: true,
+    sec6: true, sec7: true, sec8: true, sec9: true, sec10: true
+  });
 
   const obraAtual = (user as any)?.obrasPermitidas?.find((o: any) => (o.obraId || o.id) === obraId) || obras?.find((o: any) => o.id === obraId);
   const permRdo = obraAtual?.permissoes?.RDO || obraAtual?.permissoes?.rdo;
@@ -1010,9 +1049,36 @@ export const DiarioDeObra: React.FC = () => {
           </div>
         )}
 
+        {/* Toolbar de Controle de Seções */}
+        <div className="flex items-center justify-between px-1 py-1">
+          <span className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Seções do Diário</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={expandAllSections}
+              className="text-xs font-semibold text-gray-600 hover:text-lunardeli-red hover:bg-white px-2.5 py-1 rounded-lg border border-gray-200 shadow-sm transition-all flex items-center gap-1"
+              title="Expandir todas as seções"
+            >
+              <Maximize2 size={13} /> Expandir todos
+            </button>
+            <button
+              type="button"
+              onClick={collapseAllSections}
+              className="text-xs font-semibold text-gray-600 hover:text-lunardeli-red hover:bg-white px-2.5 py-1 rounded-lg border border-gray-200 shadow-sm transition-all flex items-center gap-1"
+              title="Recolher todas as seções"
+            >
+              <Minimize2 size={13} /> Recolher todos
+            </button>
+          </div>
+        </div>
+
         {/* 1. Informações */}
-        <SectionContainer>
-          <SectionTitle icon={ClipboardList} title="1. Informações gerais" />
+        <CollapsibleSection
+          icon={ClipboardList}
+          title="1. Informações gerais"
+          isCollapsed={!!collapsedSections.sec1}
+          onToggle={() => toggleSection('sec1')}
+        >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <InputField label="Data" type="date" value={data} onChange={(e: any) => setData(e.target.value)} disabled={isReadOnly} />
             <InputField label="Número RDO" value={rdoNumberStr} disabled />
@@ -1023,11 +1089,15 @@ export const DiarioDeObra: React.FC = () => {
                <InputField label="Responsável técnico" value={responsavel} onChange={(e: any) => setResponsavel(e.target.value)} placeholder="Nome do engenheiro ou responsável" disabled={isReadOnly} />
             </div>
           </div>
-        </SectionContainer>
+        </CollapsibleSection>
 
         {/* 2. Condições Climáticas */}
-        <SectionContainer>
-          <SectionTitle icon={CloudSun} title="2. Condições climáticas" />
+        <CollapsibleSection
+          icon={CloudSun}
+          title="2. Condições climáticas"
+          isCollapsed={!!collapsedSections.sec2}
+          onToggle={() => toggleSection('sec2')}
+        >
           <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
             {renderWeatherShift('Manhã', climaManha, setClimaManha)}
             {renderWeatherShift('Tarde', climaTarde, setClimaTarde)}
@@ -1037,12 +1107,16 @@ export const DiarioDeObra: React.FC = () => {
              <InputField label="Temperatura mínima (°C)" type="number" value={tempMin} onChange={(e: any) => setTempMin(e.target.value)} placeholder="Ex: 18" disabled={isReadOnly} />
              <InputField label="Temperatura máxima (°C)" type="number" value={tempMax} onChange={(e: any) => setTempMax(e.target.value)} placeholder="Ex: 32" disabled={isReadOnly} />
           </div>
-        </SectionContainer>
+        </CollapsibleSection>
 
         {/* 3. Presentes na vistoria */}
         {!isPartialView && (
-          <SectionContainer>
-            <SectionTitle icon={Users} title="3. Presentes na vistoria" />
+          <CollapsibleSection
+            icon={Users}
+            title="3. Presentes na vistoria"
+            isCollapsed={!!collapsedSections.sec3}
+            onToggle={() => toggleSection('sec3')}
+          >
             <div className="space-y-3">
               {pessoas.map((p, i) => (
                 <div key={i} className="flex flex-col sm:flex-row gap-3 items-start sm:items-end p-4 bg-gray-50 rounded-xl border border-gray-200">
@@ -1056,13 +1130,18 @@ export const DiarioDeObra: React.FC = () => {
             <button type="button" onClick={() => setPessoas(prev => [...prev, { nome: '', funcao: '', empresa: '' }])} className="mt-4 flex items-center gap-2 text-sm font-semibold text-lunardeli-red hover:text-red-700 disabled:opacity-50" disabled={isReadOnly}>
               <Plus size={16} /> Adicionar pessoa
             </button>
-          </SectionContainer>
+          </CollapsibleSection>
         )}
 
         {/* 4. Efetivo */}
         {!isPartialView && (
-          <SectionContainer>
-            <SectionTitle icon={Hammer} title="4. Efetivo de mão de obra" badge={<span className="ml-2 px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">{totalEfetivo} trabalhadores</span>} />
+          <CollapsibleSection
+            icon={Hammer}
+            title="4. Efetivo de mão de obra"
+            badge={<span className="ml-2 px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">{totalEfetivo} trabalhadores</span>}
+            isCollapsed={!!collapsedSections.sec4}
+            onToggle={() => toggleSection('sec4')}
+          >
             <div className="flex flex-col sm:flex-row gap-3 items-end mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
                <div className="flex-1 w-full">
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Profissional</label>
@@ -1118,13 +1197,17 @@ export const DiarioDeObra: React.FC = () => {
                   </div>
                ))}
             </div>
-          </SectionContainer>
+          </CollapsibleSection>
         )}
 
         {/* 5. Materiais e Equipamentos */}
         {!isPartialView && (
-          <SectionContainer>
-            <SectionTitle icon={Drill} title="5. Materiais e equipamentos" />
+          <CollapsibleSection
+            icon={Drill}
+            title="5. Materiais e equipamentos"
+            isCollapsed={!!collapsedSections.sec5}
+            onToggle={() => toggleSection('sec5')}
+          >
             
             <div className="mb-6">
               <h3 className="text-sm font-bold text-gray-800 mb-3">Materiais utilizados</h3>
@@ -1159,13 +1242,17 @@ export const DiarioDeObra: React.FC = () => {
                </div>
                <button type="button" onClick={() => setEquipamentos(prev => [...prev, { equipamento: '', qtd: '', status: 'Operando' }])} className="mt-3 text-sm font-semibold text-lunardeli-red hover:text-red-700 disabled:opacity-50" disabled={isReadOnly}>+ Adicionar equipamento</button>
             </div>
-          </SectionContainer>
+          </CollapsibleSection>
         )}
 
         {/* 6 & 7. Atividades */}
         <div className="flex flex-col gap-6">
-           <SectionContainer>
-             <SectionTitle icon={CheckSquare} title="6. Atividades Executadas" />
+           <CollapsibleSection
+             icon={CheckSquare}
+             title="6. Atividades Executadas"
+             isCollapsed={!!collapsedSections.sec6}
+             onToggle={() => toggleSection('sec6')}
+           >
              <div className="space-y-3">
                {atividadesExecutadas.map((atv, i) => (
                  <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center p-3 bg-gray-50 border border-gray-200 rounded-lg">
@@ -1217,27 +1304,39 @@ export const DiarioDeObra: React.FC = () => {
                  + Adicionar atividade
                </button>
              </div>
-           </SectionContainer>
+           </CollapsibleSection>
            
            {!isPartialView && (
-             <SectionContainer>
-               <SectionTitle icon={MessageSquare} title="7. Observações gerais" />
+             <CollapsibleSection
+               icon={MessageSquare}
+               title="7. Observações gerais"
+               isCollapsed={!!collapsedSections.sec7}
+               onToggle={() => toggleSection('sec7')}
+             >
                <textarea rows={4} className="w-full border border-gray-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red" placeholder="Detalhes adicionais, comentários, paralisações..." value={observacoes} onChange={e => setObservacoes(e.target.value)} disabled={isReadOnly}></textarea>
-             </SectionContainer>
+             </CollapsibleSection>
            )}
 
            {!isPartialView && (
-             <SectionContainer>
-               <SectionTitle icon={FileSpreadsheet} title="8. Atividades Pendentes" />
+             <CollapsibleSection
+               icon={FileSpreadsheet}
+               title="8. Atividades Pendentes"
+               isCollapsed={!!collapsedSections.sec8}
+               onToggle={() => toggleSection('sec8')}
+             >
                <textarea rows={8} className="w-full border border-gray-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red resize-y" placeholder="O que faltou concluir..." value={atividadesPendentes} onChange={e => setAtividadesPendentes(e.target.value)} disabled={isReadOnly}></textarea>
-             </SectionContainer>
+             </CollapsibleSection>
            )}
         </div>
 
         {/* 9. Mídias e Anexos */}
         {!isPartialView && (
-          <SectionContainer>
-            <SectionTitle icon={Paperclip} title="9. Mídias e Anexos" />
+          <CollapsibleSection
+            icon={Paperclip}
+            title="9. Mídias e Anexos"
+            isCollapsed={!!collapsedSections.sec9}
+            onToggle={() => toggleSection('sec9')}
+          >
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                {/* Fotos */}
@@ -1527,21 +1626,19 @@ export const DiarioDeObra: React.FC = () => {
                </div>
             </div>
 
-          </SectionContainer>
+          </CollapsibleSection>
         )}
 
-        {/* 9. Observações */}
-        {!isPartialView && (
-          <SectionContainer>
-            <SectionTitle icon={MessageSquare} title="9. Observações gerais" />
-            <textarea rows={4} className="w-full border border-gray-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red" placeholder="Detalhes adicionais, comentários, paralisações..." value={observacoes} onChange={e => setObservacoes(e.target.value)} disabled={isReadOnly}></textarea>
-          </SectionContainer>
-        )}
+
 
         {/* 10. Validação e Aprovação */}
         {!isPartialView && (
-          <SectionContainer>
-            <SectionTitle icon={ShieldCheck} title="10. Validação e Aprovação" />
+          <CollapsibleSection
+            icon={ShieldCheck}
+            title="10. Validação e Aprovação"
+            isCollapsed={!!collapsedSections.sec10}
+            onToggle={() => toggleSection('sec10')}
+          >
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-6 rounded-xl border border-gray-200">
                <div className="space-y-4">
@@ -1730,7 +1827,7 @@ export const DiarioDeObra: React.FC = () => {
                    )}
                </div>
             </div>
-          </SectionContainer>
+          </CollapsibleSection>
         )}
         
       </div>
