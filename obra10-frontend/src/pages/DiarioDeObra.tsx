@@ -1255,17 +1255,19 @@ export const DiarioDeObra: React.FC = () => {
            >
              <div className="space-y-3">
                {atividadesExecutadas.map((atv, i) => (
-                 <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                   <input 
-                     className="flex-1 min-w-0 border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-lunardeli-red" 
-                     placeholder="Descrição da atividade..." 
-                     value={atv.descricao} 
-                     onChange={e => {
-                       const newVal = e.target.value;
-                       setAtividadesExecutadas(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: newVal } : item));
-                     }} 
-                     disabled={isReadOnly}
-                   />
+                  <div key={i} className="flex flex-col sm:flex-row gap-2 items-start p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <textarea 
+                      rows={2}
+                      className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white resize-y" 
+                      placeholder="Descrição detalhada da atividade executada..." 
+                      value={atv.descricao} 
+                      onChange={e => {
+                        const newVal = e.target.value;
+                        setAtividadesExecutadas(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: newVal } : item));
+                      }} 
+                      disabled={isReadOnly}
+                    />
+                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 pt-0.5">
                    <select 
                      className="w-full sm:w-40 border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red bg-white text-gray-700 font-medium" 
                      value={atv.status} 
@@ -1289,7 +1291,8 @@ export const DiarioDeObra: React.FC = () => {
                      <Trash2 size={16}/>
                    </button>
                  </div>
-               ))}
+                  </div>
+                ))}
                {atividadesExecutadas.length === 0 && (
                  <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-lg text-gray-400 text-sm">
                    Nenhuma atividade adicionada. Clique abaixo para acrescentar.
