@@ -1221,16 +1221,23 @@ export const DiarioDeObra: React.FC = () => {
            
            {!isPartialView && (
              <SectionContainer>
-               <SectionTitle icon={FileSpreadsheet} title="7. Atividades Pendentes" />
+               <SectionTitle icon={MessageSquare} title="7. Observações gerais" />
+               <textarea rows={4} className="w-full border border-gray-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red" placeholder="Detalhes adicionais, comentários, paralisações..." value={observacoes} onChange={e => setObservacoes(e.target.value)} disabled={isReadOnly}></textarea>
+             </SectionContainer>
+           )}
+
+           {!isPartialView && (
+             <SectionContainer>
+               <SectionTitle icon={FileSpreadsheet} title="8. Atividades Pendentes" />
                <textarea rows={8} className="w-full border border-gray-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red resize-y" placeholder="O que faltou concluir..." value={atividadesPendentes} onChange={e => setAtividadesPendentes(e.target.value)} disabled={isReadOnly}></textarea>
              </SectionContainer>
            )}
         </div>
 
-        {/* 8. Mídias e Anexos */}
+        {/* 9. Mídias e Anexos */}
         {!isPartialView && (
           <SectionContainer>
-            <SectionTitle icon={Paperclip} title="8. Mídias e Anexos" />
+            <SectionTitle icon={Paperclip} title="9. Mídias e Anexos" />
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                {/* Fotos */}
