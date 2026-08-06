@@ -994,7 +994,7 @@ export const DiarioDeObra: React.FC = () => {
                 <option value="">Selecione um diário...</option>
                 {previousRdos.map(r => (
                   <option key={r.id} value={r.id}>
-                    RDO #{r.id.slice(-6).toUpperCase()} ({format(parseUTCDate(r.dataReferencia), 'dd/MM/yyyy')})
+                    RDO #{r.sequencial ?? r.id.slice(-6).toUpperCase()} ({format(parseUTCDate(r.dataReferencia), 'dd/MM/yyyy')})
                   </option>
                 ))}
               </select>
