@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { rdoService } from '../services/rdo.service';
 import { format } from 'date-fns';
+import { parseUTCDate } from '../utils/date';
 import {
   Plus,
   Search,
@@ -208,7 +209,7 @@ export const RdoList: React.FC = () => {
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '');
 
-      const dateStr = format(new Date(r.dataReferencia), 'dd/MM/yyyy');
+      const dateStr = format(parseUTCDate(r.dataReferencia), 'dd/MM/yyyy');
       const climaManha = (r.dadosExtras?.climaManha || '')
         .toLowerCase()
         .normalize('NFD')
@@ -915,7 +916,7 @@ export const RdoList: React.FC = () => {
                           navigate(`/obras/${obraAtiva?.id}/rdos/${rdo.id}`)
                         }
                       >
-                        {format(new Date(rdo.dataReferencia), 'dd/MM/yyyy')}
+                        {format(parseUTCDate(rdo.dataReferencia), 'dd/MM/yyyy')}
                       </td>
                       <td
                         className="p-4 text-gray-600 text-sm cursor-pointer"
@@ -952,7 +953,7 @@ export const RdoList: React.FC = () => {
                             rdoId={rdo.id}
                             obraId={obraAtiva?.id || ''}
                             rdoLabel={`RDO_${format(
-                              new Date(rdo.dataReferencia),
+                              parseUTCDate(rdo.dataReferencia),
                               'yyyy-MM-dd',
                             )}`}
                             compact
@@ -1006,10 +1007,10 @@ export const RdoList: React.FC = () => {
                       className="w-12 h-12 rounded-xl bg-gray-100 flex flex-col items-center justify-center shrink-0 active:bg-gray-200"
                     >
                       <span className="text-lg font-black text-lunardeli-dark leading-none">
-                        {format(new Date(rdo.dataReferencia), 'dd')}
+                        {format(parseUTCDate(rdo.dataReferencia), 'dd')}
                       </span>
                       <span className="text-[9px] font-bold uppercase text-gray-400 leading-tight">
-                        {format(new Date(rdo.dataReferencia), 'MMM')}
+                        {format(parseUTCDate(rdo.dataReferencia), 'MMM')}
                       </span>
                     </button>
 
@@ -1043,7 +1044,7 @@ export const RdoList: React.FC = () => {
                       rdoId={rdo.id}
                       obraId={obraAtiva?.id || ''}
                       rdoLabel={`RDO_${format(
-                        new Date(rdo.dataReferencia),
+                        parseUTCDate(rdo.dataReferencia),
                         'yyyy-MM-dd',
                       )}`}
                       compact

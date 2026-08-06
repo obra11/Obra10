@@ -383,7 +383,13 @@ export class AdminEmpresasController {
     if (!adminUser) throw new ForbiddenException('Usuário não autenticado.');
 
     // Validar senha do Super Admin
-    const senhaOk = await bcrypt.compare(dto.senha, adminUser.senhaHash);
+    const usuarioBanco = await this.prisma.usuario.findUnique({
+      where: { id: adminUser.sub },
+      select: { senhaHash: true },
+    });
+    if (!usuarioBanco) throw new ForbiddenException('Usuário não encontrado.');
+
+    const senhaOk = await bcrypt.compare(dto.senha, usuarioBanco.senhaHash);
     if (!senhaOk) {
       throw new ForbiddenException('Senha de administrador incorreta.');
     }
@@ -397,6 +403,6 @@ export class AdminEmpresasController {
       throw new BadRequestException('A cobrança não pertence à empresa informada.');
     }
 
-    return this.cobrancaService.confirmarPagamentoManualAdmin(cobrancaId, adminUser.id);
+    return this.cobrancaService.confirmarPagamentoManualAdmin(cobrancaId, adminUser.sub);
   }
 }

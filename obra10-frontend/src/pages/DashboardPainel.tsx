@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { FileText, Users, LayoutDashboard, Image as ImageIcon, Loader2, ArrowRight, CheckCircle, Clock, AlertCircle, XCircle } from 'lucide-react';
 import api from '../services/api';
 import { format } from 'date-fns';
+import { parseUTCDate } from '../utils/date';
 import { useNavigate } from 'react-router-dom';
 import { MediaGalleryModal } from '../components/MediaGalleryModal';
 
@@ -147,7 +148,7 @@ export const Dashboard: React.FC = () => {
                                 <div className="flex-1 min-w-0 pt-1.5 flex justify-between space-x-4">
                                   <div>
                                     <p className="text-sm font-semibold text-gray-800 cursor-pointer hover:text-lunardeli-red transition-colors" onClick={() => navigate(`/obras/${obraAtiva?.id}/rdos/${item.id}`)}>
-                                      Diário de Obra — {format(new Date(item.dataReferencia), 'dd/MM/yyyy')}
+                                      Diário de Obra — {format(parseUTCDate(item.dataReferencia), 'dd/MM/yyyy')}
                                     </p>
                                     <p className="text-xs text-gray-500 mt-1 line-clamp-2" title={item.descricao}>
                                       {item.descricao}

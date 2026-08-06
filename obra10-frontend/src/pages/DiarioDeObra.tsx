@@ -4,8 +4,10 @@ import api from '../services/api';
 import {
   ClipboardList, CloudSun, Users, Hammer, Drill,
   CheckSquare, FileSpreadsheet, Paperclip, MessageSquare, ShieldCheck,
-  Plus, Trash2, Video, FileText, Image as ImageIcon, Save, Send, RotateCcw
+  Plus, Trash2, Video, FileText, Image as ImageIcon, Save, Send, RotateCcw, ArrowLeft
 } from 'lucide-react';
+import { format } from 'date-fns';
+import { parseUTCDate } from '../utils/date';
 import { RdoShareBar } from '../components/RdoShareBar';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -943,9 +945,28 @@ export const DiarioDeObra: React.FC = () => {
       {/* Header Sticky */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 md:px-8 py-3 md:py-4 flex flex-row items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-lg md:text-2xl font-bold text-gray-900 tracking-tight truncate">Diário de Obra</h1>
-            <p className="text-xs md:text-sm text-gray-500 font-medium truncate">{initLoading ? 'Carregando...' : `${rdoNumberStr}`}</p>
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => {
+                const targetObraId = obraId || obraAtual?.id;
+                if (targetObraId) {
+                  navigate(`/obras/${targetObraId}/rdos`);
+                } else {
+                  navigate('/dashboard');
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs md:text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-red-50 hover:text-lunardeli-red rounded-lg transition-colors border border-gray-200 shrink-0"
+              title="Voltar para a lista de RDOs"
+            >
+              <ArrowLeft size={16} />
+              <span className="hidden sm:inline">Voltar para RDOs</span>
+              <span className="sm:hidden">Voltar</span>
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-lg md:text-2xl font-bold text-gray-900 tracking-tight truncate">Diário de Obra</h1>
+              <p className="text-xs md:text-sm text-gray-500 font-medium truncate">{initLoading ? 'Carregando...' : `${rdoNumberStr}`}</p>
+            </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border whitespace-nowrap ${statusBadgeColor[status]}`}>
@@ -973,7 +994,7 @@ export const DiarioDeObra: React.FC = () => {
                 <option value="">Selecione um diário...</option>
                 {previousRdos.map(r => (
                   <option key={r.id} value={r.id}>
-                    RDO #{r.id.slice(-6).toUpperCase()} ({new Date(r.dataReferencia).toLocaleDateString('pt-BR', { timeZone: 'UTC' })})
+                    RDO #{r.id.slice(-6).toUpperCase()} ({format(parseUTCDate(r.dataReferencia), 'dd/MM/yyyy')})
                   </option>
                 ))}
               </select>
