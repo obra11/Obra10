@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useAuth, type Obra } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User } from 'lucide-react';
+import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
 
@@ -229,6 +229,9 @@ export const CompanyDashboard: React.FC = () => {
                 <input type="file" className="hidden" accept="image/*" onChange={handleUserPhotoUpload} />
               </label>
             </div>
+            <button onClick={() => navigate('/catalogo')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Cadastro Base">
+              <Boxes size={18} className="sm:mr-2 text-lunardeli-red" /> <span className="hidden sm:inline">Cadastro Base</span>
+            </button>
             {user?.perfilGlobal === 'GESTOR' && (
               <>
                 <button onClick={() => navigate('/gestor/usuarios')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Equipe">

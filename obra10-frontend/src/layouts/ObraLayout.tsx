@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   LogOut, Settings, LayoutDashboard, Users, FileText, ArrowLeft, BarChart2, Loader2,
   Beaker, ClipboardCheck, Home, Package, Calendar, Clock, Layers, Files, ShieldCheck, Heart, BadgeDollarSign,
-  Building2, User
+  Building2, User, Boxes
 } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
@@ -120,6 +120,7 @@ export const ObraLayout: React.FC = () => {
   // Final permanent items
   const footerItems = [
     { name: 'Efetivo', icon: Users, path: `/obras/${obraAtiva?.id}/efetivo`, visible: true },
+    { name: 'Cadastro Base', icon: Boxes, path: '/catalogo', visible: true },
     { name: 'Configurações', icon: Settings, path: `/obras/${obraAtiva?.id}/configuracoes`, visible: hasPerm('SUPER') },
   ];
 

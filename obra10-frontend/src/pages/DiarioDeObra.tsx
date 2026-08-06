@@ -214,6 +214,28 @@ export const DiarioDeObra: React.FC = () => {
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
   const [aprovadorIdSelecionado, setAprovadorIdSelecionado] = useState('');
 
+  // ── Catálogo de Insumos da Empresa ──
+  const [catalogoProfissionais, setCatalogoProfissionais] = useState<string[]>(DEFAULT_PROFISSIONAIS);
+  const [catalogoMateriais, setCatalogoMateriais] = useState<{ id: string; nome: string; unidade?: string }[]>([]);
+  const [catalogoEquipamentos, setCatalogoEquipamentos] = useState<{ id: string; nome: string }[]>([]);
+
+  useEffect(() => {
+    api.get('/catalogo')
+      .then((res) => {
+        const items: any[] = res.data || [];
+        const maos = items.filter((i) => i.tipo === 'MAO_DE_OBRA').map((i) => i.nome);
+        if (maos.length > 0) {
+          const merged = Array.from(new Set([...maos, ...DEFAULT_PROFISSIONAIS]));
+          setCatalogoProfissionais(merged);
+        }
+        const mats = items.filter((i) => i.tipo === 'MATERIAL');
+        if (mats.length > 0) setCatalogoMateriais(mats);
+        const equips = items.filter((i) => i.tipo === 'EQUIPAMENTO');
+        if (equips.length > 0) setCatalogoEquipamentos(equips);
+      })
+      .catch(() => {});
+  }, []);
+
   // ── Seção 1 ── Informações gerais
   const today = new Date().toISOString().split('T')[0];
   const [data, setData] = useState(today);
@@ -1153,7 +1175,7 @@ export const DiarioDeObra: React.FC = () => {
                         disabled={isReadOnly}
                      >
                         <option value="" disabled>Selecione um profissional...</option>
-                        {DEFAULT_PROFISSIONAIS.filter(
+                        {catalogoProfissionais.filter(
                           p => !profissionais.some(added => added.nome.toLowerCase() === p.toLowerCase())
                         ).map(p => <option key={p} value={p}>{p}</option>)}
                         <option value="outro" className="font-bold text-lunardeli-red">Outro (Digitar manualmente)...</option>
@@ -1163,7 +1185,6 @@ export const DiarioDeObra: React.FC = () => {
                      </div>
                   </div>
                </div>
-
                {selectedProfissional === 'outro' && (
                   <div className="flex-1 w-full">
                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome da função</label>
@@ -1187,16 +1208,16 @@ export const DiarioDeObra: React.FC = () => {
                )}
                {profissionais.map((p, i) => (
                   <div key={i} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg shadow-sm">
-                     <span className="text-sm font-medium text-gray-700">{p.nome}</span>
-                     <div className="flex items-center gap-2">
-                        <button onClick={() => handleProfQty(i, -1)} className="w-7 h-7 flex items-center justify-center bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 font-bold disabled:opacity-50 disabled:cursor-not-allowed" disabled={isReadOnly}>−</button>
-                        <input type="number" min="0" value={p.quantidade} onChange={e => handleProfQtyDirect(i, e.target.value)} className="w-12 text-center text-sm font-semibold border border-gray-300 rounded py-1 outline-none focus:border-lunardeli-red disabled:bg-gray-50 disabled:text-gray-500" disabled={isReadOnly} />
-                        <button onClick={() => handleProfQty(i, 1)} className="w-7 h-7 flex items-center justify-center bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 font-bold disabled:opacity-50 disabled:cursor-not-allowed" disabled={isReadOnly}>+</button>
-                        <button onClick={() => setProfissionais(prev => prev.filter((_, idx) => idx !== i))} className="p-1.5 text-red-400 hover:text-red-500 rounded disabled:opacity-50" disabled={isReadOnly}><Trash2 size={16}/></button>
-                     </div>
-                  </div>
-               ))}
-            </div>
+                      <span className="text-sm font-medium text-gray-700">{p.nome}</span>
+                      <div className="flex items-center gap-2">
+                         <button onClick={() => handleProfQty(i, -1)} className="w-7 h-7 flex items-center justify-center bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 font-bold disabled:opacity-50 disabled:cursor-not-allowed" disabled={isReadOnly}>−</button>
+                         <input type="number" min="0" value={p.quantidade} onChange={e => handleProfQtyDirect(i, e.target.value)} className="w-12 text-center text-sm font-semibold border border-gray-300 rounded py-1 outline-none focus:border-lunardeli-red disabled:bg-gray-50 disabled:text-gray-500" disabled={isReadOnly} />
+                         <button onClick={() => handleProfQty(i, 1)} className="w-7 h-7 flex items-center justify-center bg-gray-50 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 font-bold disabled:opacity-50 disabled:cursor-not-allowed" disabled={isReadOnly}>+</button>
+                         <button onClick={() => setProfissionais(prev => prev.filter((_, idx) => idx !== i))} className="p-1.5 text-red-400 hover:text-red-500 rounded disabled:opacity-50" disabled={isReadOnly}><Trash2 size={16}/></button>
+                      </div>
+                   </div>
+                ))}
+             </div>
           </CollapsibleSection>
         )}
 
@@ -1208,13 +1229,29 @@ export const DiarioDeObra: React.FC = () => {
             isCollapsed={!!collapsedSections.sec5}
             onToggle={() => toggleSection('sec5')}
           >
-            
             <div className="mb-6">
               <h3 className="text-sm font-bold text-gray-800 mb-3">Materiais utilizados</h3>
               <div className="space-y-2">
                 {materiais.map((m, i) => (
                   <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                    <input className="flex-[2] min-w-0 border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-lunardeli-red border disabled:bg-gray-50" placeholder="Material..." value={m.material} onChange={e => handleMaterialChange(i, 'material', e.target.value)} disabled={isReadOnly} />
+                    <input 
+                      className="flex-[2] min-w-0 border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-lunardeli-red border disabled:bg-gray-50" 
+                      placeholder="Material..." 
+                      value={m.material} 
+                      onChange={e => {
+                        const val = e.target.value;
+                        handleMaterialChange(i, 'material', val);
+                        const matched = catalogoMateriais.find(c => c.nome.toLowerCase() === val.toLowerCase());
+                        if (matched?.unidade) {
+                          handleMaterialChange(i, 'unidade', matched.unidade);
+                        }
+                      }} 
+                      list="lista-catalogo-materiais"
+                      disabled={isReadOnly} 
+                    />
+                    <datalist id="lista-catalogo-materiais">
+                      {catalogoMateriais.map(mat => <option key={mat.id} value={mat.nome} />)}
+                    </datalist>
                     <input className="w-full sm:w-20 border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red border disabled:bg-gray-50" placeholder="Qtd" value={m.qtd} onChange={e => handleMaterialChange(i, 'qtd', e.target.value)} disabled={isReadOnly} />
                     <select className="w-full sm:w-24 border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red border bg-white disabled:bg-gray-50" value={m.unidade} onChange={e => handleMaterialChange(i, 'unidade', e.target.value)} disabled={isReadOnly}>
                       {UNIDADES.map(u => <option key={u}>{u}</option>)}
@@ -1231,7 +1268,17 @@ export const DiarioDeObra: React.FC = () => {
                <div className="space-y-2">
                  {equipamentos.map((eq, i) => (
                     <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                       <input className="flex-[2] min-w-0 border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-lunardeli-red border disabled:bg-gray-50" placeholder="Equipamento..." value={eq.equipamento} onChange={e => handleEquipChange(i, 'equipamento', e.target.value)} disabled={isReadOnly} />
+                       <input 
+                          className="flex-[2] min-w-0 border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-lunardeli-red border disabled:bg-gray-50" 
+                          placeholder="Equipamento..." 
+                          value={eq.equipamento} 
+                          onChange={e => handleEquipChange(i, 'equipamento', e.target.value)} 
+                          list="lista-catalogo-equipamentos"
+                          disabled={isReadOnly} 
+                       />
+                       <datalist id="lista-catalogo-equipamentos">
+                          {catalogoEquipamentos.map(eqItem => <option key={eqItem.id} value={eqItem.nome} />)}
+                       </datalist>
                        <input className="w-full sm:w-24 border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red border disabled:bg-gray-50" placeholder="Qtd" value={eq.qtd} onChange={e => handleEquipChange(i, 'qtd', e.target.value)} disabled={isReadOnly} />
                        <select className="w-full sm:flex-[1] border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red border bg-white disabled:bg-gray-50" value={eq.status} onChange={e => handleEquipChange(i, 'status', e.target.value)} disabled={isReadOnly}>
                           {EQUIP_STATUS.map(s => <option key={s}>{s}</option>)}
@@ -1241,7 +1288,7 @@ export const DiarioDeObra: React.FC = () => {
                  ))}
                </div>
                <button type="button" onClick={() => setEquipamentos(prev => [...prev, { equipamento: '', qtd: '', status: 'Operando' }])} className="mt-3 text-sm font-semibold text-lunardeli-red hover:text-red-700 disabled:opacity-50" disabled={isReadOnly}>+ Adicionar equipamento</button>
-            </div>
+             </div>
           </CollapsibleSection>
         )}
 

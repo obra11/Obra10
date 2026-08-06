@@ -26,6 +26,7 @@ import { Assinatura } from '../pages/Assinatura';
 import { Efetivo } from '../pages/obras/Efetivo';
 import { Perfil } from '../pages/Perfil';
 import { Configuracoes } from '../pages/obras/Configuracoes';
+import { CatalogoPage } from '../pages/CatalogoPage';
 
 import { AdminRoute } from './AdminRoute';
 import { AdminLayout } from '../layouts/AdminLayout';
@@ -86,8 +87,9 @@ export const AppRoutes: React.FC = () => {
       <Route path="/assinatura" element={<ProtectedRoute><Assinatura /></ProtectedRoute>} />
       <Route path="/perfil" element={<ProtectedRoute><Perfil /></ProtectedRoute>} />
 
-      {/* === MAIN DASHBOARD === */}
+      {/* === MAIN DASHBOARD & CATALOGO === */}
       <Route path="/dashboard" element={<ProtectedRoute><CompanyDashboard /></ProtectedRoute>} />
+      <Route path="/catalogo" element={<ProtectedRoute><CatalogoPage /></ProtectedRoute>} />
 
       <Route path="/obras/:obraId/*" element={<ProtectedRoute><ObraLayout /></ProtectedRoute>}>
         <Route path="dashboard" element={<Dashboard />} />

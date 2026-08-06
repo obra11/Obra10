@@ -44,6 +44,7 @@ model Empresa {
   tenantModulos       TenantModulo[]
   usuarios            Usuario[]
   features            EmpresaFeature[]
+  catalogoInsumos     CatalogoInsumo[]
 
   @@map("empresas")
 }
@@ -545,4 +546,29 @@ model EmpresaFeature {
 
   @@unique([empresaId, featureId])
   @@map("empresas_features")
+}
+
+enum TipoInsumo {
+  MATERIAL
+  EQUIPAMENTO
+  MAO_DE_OBRA
+}
+
+model CatalogoInsumo {
+  id          String     @id @default(uuid())
+  empresaId   String     @map("empresa_id")
+  tipo        TipoInsumo
+  nome        String
+  unidade     String?
+  codigo      String?
+  observacao  String?
+  ativo       Boolean    @default(true)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  deletedAt   DateTime?  @map("deleted_at")
+
+  empresa     Empresa    @relation(fields: [empresaId], references: [id])
+
+  @@index([empresaId, tipo])
+  @@map("catalogo_insumos")
 }

@@ -28,6 +28,7 @@ import { CryptoModule } from './core/services/crypto.module';
 import { CupomModule } from './modules/cupom/cupom.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { FeatureModule } from './modules/feature/feature.module';
+import { CatalogoModule } from './modules/catalogo/catalogo.module';
 import { ApiVersionMiddleware } from './core/middlewares/api-version.middleware';
 
 @Module({
@@ -66,6 +67,7 @@ import { ApiVersionMiddleware } from './core/middlewares/api-version.middleware'
     CupomModule,
     AdminModule,
     FeatureModule,
+    CatalogoModule,
   ],
   controllers: [AppController],
   providers: [
