@@ -24,7 +24,7 @@
 
     <!-- Asaas.js — tokenização de cartão (PCI DSS). Em produção trocar por: https://www.asaas.com/static/asaas.js -->
     <script src="https://sandbox.asaas.com/static/asaas.js"></script>
-    <script type="module" crossorigin src="/assets/index-Dd5DIwfY.js"></script>
+    <script type="module" crossorigin src="/assets/index-BECocyG8.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-VD2K2SLL.css">
   </head>
   <body>
@@ -58,7 +58,7 @@
       // Register Service Worker for PWA
       if ('serviceWorker' in navigator && window.location.hostname !== 'localhost') {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js?v=1.9.0').then(reg => {
+          navigator.serviceWorker.register('/sw.js?v=2.0.0').then(reg => {
             reg.update();
           }).catch(() => {});
         });

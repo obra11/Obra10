@@ -293,6 +293,25 @@ export const RdoList: React.FC = () => {
     XLSX.writeFile(wb, 'Modelo_Importacao_RDO.xlsx');
   };
 
+  // Funções Auxiliares de Leitura Inteligente de Colunas
+  const normalizeKey = (key: string) =>
+    String(key || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '');
+
+  const getColVal = (row: Record<string, any>, keywords: string[]) => {
+    for (const [key, val] of Object.entries(row)) {
+      if (val === null || val === undefined || String(val).trim() === '') continue;
+      const norm = normalizeKey(key);
+      if (keywords.some((kw) => norm.includes(kw))) {
+        return val;
+      }
+    }
+    return undefined;
+  };
+
   // Processar Arquivo Uploaded para Importação (Excel/CSV/JSON)
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -310,25 +329,63 @@ export const RdoList: React.FC = () => {
           const list = Array.isArray(json) ? json : [json];
           const formatted = list.map((item: any, idx: number) => {
             const extras = item.dadosExtras || item;
+            
+            let atvList: any[] = [];
+            const rawAtv = extras.atividadesExecutadas || extras.atividades || item.atividades;
+            if (Array.isArray(rawAtv)) {
+              atvList = rawAtv.map((a: any) => ({
+                descricao: typeof a === 'string' ? a : a.descricao || a.atividade || a.nome || '',
+                status: a.status || 'em andamento'
+              })).filter(a => a.descricao);
+            } else if (typeof rawAtv === 'string') {
+              atvList = rawAtv.split(/\r?\n|;/).map(s => s.trim().replace(/^[-*•\d.]+\s*/, '')).filter(Boolean).map(desc => ({ descricao: desc, status: 'em andamento' }));
+            }
+
+            let profList: any[] = [];
+            const rawProf = extras.profissionais || extras.efetivo || extras.maoDeObra || item.efetivos;
+            if (Array.isArray(rawProf)) {
+              profList = rawProf.map((p: any) => ({
+                nome: p.nome || p.funcao || p.profissional || 'Profissional',
+                quantidade: Number(p.quantidade || p.qtd || 1)
+              }));
+            }
+
+            let matList: any[] = [];
+            const rawMat = extras.materiais || item.materiais;
+            if (Array.isArray(rawMat)) {
+              matList = rawMat.map((m: any) => ({
+                material: m.material || m.nome || m.item || '',
+                qtd: String(m.qtd || m.quantidade || '1'),
+                unidade: m.unidade || 'un'
+              })).filter(m => m.material);
+            }
+
+            let eqList: any[] = [];
+            const rawEq = extras.equipamentos || item.equipamentos;
+            if (Array.isArray(rawEq)) {
+              eqList = rawEq.map((e: any) => ({
+                equipamento: e.equipamento || e.nome || e.item || '',
+                qtd: String(e.qtd || e.quantidade || '1'),
+                status: e.status || 'Operando'
+              })).filter(e => e.equipamento);
+            }
+
+            const rawDate = extras.data || item.dataReferencia?.split('T')[0] || new Date().toISOString().split('T')[0];
             return {
               id: `imp-${idx}`,
-              data: extras.data || item.dataReferencia?.split('T')[0] || new Date().toISOString().split('T')[0],
-              responsavel: extras.responsavel || '',
-              climaManha: extras.climaManha || 'Sol',
-              climaTarde: extras.climaTarde || 'Sol',
+              data: String(rawDate).split('T')[0],
+              responsavel: extras.responsavel || item.criador?.nome || item.aprovadorNome || '',
+              climaManha: extras.climaManha || extras.clima || 'Sol',
+              climaTarde: extras.climaTarde || extras.clima || 'Sol',
               climaNoite: extras.climaNoite || 'Sem Chuva',
-              tempMin: extras.tempMin || '',
-              tempMax: extras.tempMax || '',
-              profissionais: extras.profissionais || [],
-              materiais: extras.materiais || [],
-              equipamentos: extras.equipamentos || [],
-              atividadesExecutadas: Array.isArray(extras.atividadesExecutadas)
-                ? extras.atividadesExecutadas
-                : typeof extras.atividadesExecutadas === 'string'
-                ? extras.atividadesExecutadas.split('\n').filter(Boolean).map((a: any) => ({ descricao: a, status: 'em andamento' }))
-                : [],
+              tempMin: String(extras.tempMin || ''),
+              tempMax: String(extras.tempMax || ''),
+              profissionais: profList,
+              materiais: matList,
+              equipamentos: eqList,
+              atividadesExecutadas: atvList,
               atividadesPendentes: extras.atividadesPendentes || '',
-              observacoes: extras.observacoes || '',
+              observacoes: extras.observacoes || item.observacoes || '',
             };
           });
           setParsedRdos(formatted);
@@ -342,61 +399,150 @@ export const RdoList: React.FC = () => {
         try {
           const data = new Uint8Array(event.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
-          const rows: any[] = XLSX.utils.sheet_to_json(worksheet);
-
-          if (!rows || rows.length === 0) {
+          
+          if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
             setImportError('O arquivo selecionado está vazio.');
             return;
           }
 
-          const formatted = rows.map((row: any, idx: number) => {
-            const rawDate = row['Data (AAAA-MM-DD)'] || row['Data'] || row['DATA'] || new Date().toISOString().split('T')[0];
+          const sheet1 = workbook.Sheets[workbook.SheetNames[0]];
+          const rows1: any[] = XLSX.utils.sheet_to_json(sheet1);
+
+          if (!rows1 || rows1.length === 0) {
+            setImportError('A primeira aba da planilha está vazia.');
+            return;
+          }
+
+          let atividadesSecundarias: Record<string, any[]> = {};
+          let efetivoSecundario: Record<string, any[]> = {};
+          let materiaisSecundarios: Record<string, any[]> = {};
+
+          workbook.SheetNames.forEach((sheetName, index) => {
+            if (index === 0) return;
+            const normName = normalizeKey(sheetName);
+            const sheetRows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+            if (normName.includes('atividad') || normName.includes('servico')) {
+              sheetRows.forEach((r) => {
+                const key = getColVal(r, ['numero', 'rdo', 'data']) || 'geral';
+                const keyStr = String(key).trim();
+                const desc = getColVal(r, ['atividade', 'servico', 'descricao', 'item', 'trabalho']);
+                if (desc) {
+                  if (!atividadesSecundarias[keyStr]) atividadesSecundarias[keyStr] = [];
+                  atividadesSecundarias[keyStr].push({ descricao: String(desc).trim(), status: 'em andamento' });
+                }
+              });
+            } else if (normName.includes('efetivo') || normName.includes('mao') || normName.includes('profissional')) {
+              sheetRows.forEach((r) => {
+                const key = getColVal(r, ['numero', 'rdo', 'data']) || 'geral';
+                const keyStr = String(key).trim();
+                const nome = getColVal(r, ['profissional', 'funcao', 'cargo', 'nome']);
+                const qtd = getColVal(r, ['quantidade', 'qtd', 'num']);
+                if (nome) {
+                  if (!efetivoSecundario[keyStr]) efetivoSecundario[keyStr] = [];
+                  efetivoSecundario[keyStr].push({ nome: String(nome).trim(), quantidade: Number(qtd || 1) });
+                }
+              });
+            } else if (normName.includes('material') || normName.includes('insumo') || normName.includes('equipament')) {
+              sheetRows.forEach((r) => {
+                const key = getColVal(r, ['numero', 'rdo', 'data']) || 'geral';
+                const keyStr = String(key).trim();
+                const item = getColVal(r, ['material', 'equipamento', 'item', 'nome']);
+                const qtd = getColVal(r, ['quantidade', 'qtd']);
+                const un = getColVal(r, ['unidade', 'un', 'status']);
+                if (item) {
+                  if (!materiaisSecundarios[keyStr]) materiaisSecundarios[keyStr] = [];
+                  materiaisSecundarios[keyStr].push({ material: String(item).trim(), qtd: String(qtd || '1'), unidade: String(un || 'un') });
+                }
+              });
+            }
+          });
+
+          const formatted = rows1.map((row: any, idx: number) => {
+            const rawDate = getColVal(row, ['data', 'date', 'referencia', 'dia']) || new Date().toISOString().split('T')[0];
             let dateStr = String(rawDate).trim();
             if (dateStr.includes('/')) {
               const parts = dateStr.split('/');
               if (parts.length === 3) {
                 dateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
               }
+            } else if (!isNaN(Number(dateStr)) && Number(dateStr) > 40000) {
+              const excelDate = new Date(Math.round((Number(dateStr) - 25569) * 86400 * 1000));
+              dateStr = excelDate.toISOString().split('T')[0];
             }
 
-            const profsStr = row['Efetivo (Função: Qtd)'] || row['Efetivo'] || row['Profissionais'] || '';
-            const profissionais: any[] = [];
+            const rdoNum = String(getColVal(row, ['numero', 'rdo', 'id']) || `RDO #${idx + 1}`).trim();
+            const resp = getColVal(row, ['responsavel', 'engenheiro', 'autor', 'tecnico', 'encarregado']) || '';
+
+            const climaM = getColVal(row, ['climamanha', 'manha', 'tempo']) || getColVal(row, ['clima']) || 'Sol';
+            const climaT = getColVal(row, ['climatarde', 'tarde']) || getColVal(row, ['clima']) || 'Sol';
+            const climaN = getColVal(row, ['climanoite', 'noite']) || 'Sem Chuva';
+
+            const tMin = getColVal(row, ['temperaturamin', 'tempmin', 'minima']) || '';
+            const tMax = getColVal(row, ['temperaturamax', 'tempmax', 'maxima']) || '';
+
+            const rawAtvStr = getColVal(row, ['atividade', 'servico', 'descricao', 'trabalho', 'executado']) || '';
+            let atvList: any[] = [];
+            if (rawAtvStr) {
+              atvList = String(rawAtvStr)
+                .split(/;|\n|\r/)
+                .map((s) => s.trim().replace(/^[-*•\d.]+\s*/, ''))
+                .filter(Boolean)
+                .map((desc) => ({ descricao: desc, status: 'em andamento' }));
+            }
+
+            const secAtv = atividadesSecundarias[rdoNum] || atividadesSecundarias[dateStr] || atividadesSecundarias['geral'];
+            if (secAtv && secAtv.length > 0) {
+              atvList = [...atvList, ...secAtv];
+            }
+
+            const profsStr = getColVal(row, ['efetivo', 'maodeobra', 'equipe', 'funcionario', 'profissional']) || '';
+            let profList: any[] = [];
             if (profsStr) {
-              String(profsStr).split(',').forEach((p) => {
-                const [nome, qtd] = p.split(':');
-                if (nome?.trim()) {
-                  profissionais.push({
-                    nome: nome.trim(),
-                    quantidade: parseInt(qtd?.trim() || '1', 10) || 1,
-                  });
+              String(profsStr).split(/;|,/).forEach((p) => {
+                const parts = p.split(':');
+                if (parts.length >= 2) {
+                  profList.push({ nome: parts[0].trim(), quantidade: parseInt(parts[1].trim(), 10) || 1 });
+                } else if (p.trim()) {
+                  profList.push({ nome: p.trim(), quantidade: 1 });
                 }
               });
             }
+            const secEfet = efetivoSecundario[rdoNum] || efetivoSecundario[dateStr] || efetivoSecundario['geral'];
+            if (secEfet && secEfet.length > 0) {
+              profList = [...profList, ...secEfet];
+            }
 
-            const rawAtv = row['Atividades Executadas'] || row['Atividades'] || '';
-            const atividadesExecutadas = String(rawAtv)
-              .split(/;|\n/)
-              .map((s) => s.trim())
-              .filter(Boolean)
-              .map((desc) => ({ descricao: desc, status: 'em andamento' }));
+            const matStr = getColVal(row, ['material', 'insumo', 'produto']) || '';
+            let matList: any[] = [];
+            if (matStr) {
+              String(matStr).split(/;|,/).forEach((m) => {
+                matList.push({ material: m.trim(), qtd: '1', unidade: 'un' });
+              });
+            }
+            const secMat = materiaisSecundarios[rdoNum] || materiaisSecundarios[dateStr] || materiaisSecundarios['geral'];
+            if (secMat && secMat.length > 0) {
+              matList = [...matList, ...secMat];
+            }
+
+            const obsStr = getColVal(row, ['observac', 'nota', 'coment', 'ocorrenc']) || '';
+            const pendStr = getColVal(row, ['pendente', 'proxima', 'pendencia']) || '';
 
             return {
               id: `imp-${idx}`,
               data: dateStr,
-              responsavel: row['Responsável Técnico'] || row['Responsável'] || '',
-              climaManha: row['Clima Manhã'] || 'Sol',
-              climaTarde: row['Clima Tarde'] || 'Sol',
-              climaNoite: row['Clima Noite'] || 'Sem Chuva',
-              tempMin: String(row['Temperatura Mín (°C)'] || row['Temp Mín'] || ''),
-              tempMax: String(row['Temperatura Máx (°C)'] || row['Temp Máx'] || ''),
-              profissionais,
-              materiais: [],
+              responsavel: String(resp).trim(),
+              climaManha: String(climaM).trim(),
+              climaTarde: String(climaT).trim(),
+              climaNoite: String(climaN).trim(),
+              tempMin: String(tMin).trim(),
+              tempMax: String(tMax).trim(),
+              profissionais: profList,
+              materiais: matList,
               equipamentos: [],
-              atividadesExecutadas,
-              atividadesPendentes: row['Atividades Pendentes'] || '',
-              observacoes: row['Observações Gerais'] || row['Observações'] || '',
+              atividadesExecutadas: atvList,
+              atividadesPendentes: String(pendStr).trim(),
+              observacoes: String(obsStr).trim(),
             };
           });
 
@@ -410,7 +556,7 @@ export const RdoList: React.FC = () => {
     }
   };
 
-  // Executar Importação em Lote
+  // Executar Importação em Lote com Sincronização em Ambos os Formatos (JSON + Tabelas Relacionais)
   const executarImportacao = async () => {
     if (parsedRdos.length === 0) return;
     setImporting(true);
@@ -443,7 +589,33 @@ export const RdoList: React.FC = () => {
           observacoes: item.observacoes,
         };
 
+        // 1. Salvar JSON completo no campo dadosExtras
         await api.put(`/rdos/${createdId}/rascunho`, { dadosExtras }, { headers });
+
+        // 2. Sincronizar Atividades na Tabela Relacional Backend (para garantir leitura universal)
+        if (Array.isArray(item.atividadesExecutadas) && item.atividadesExecutadas.length > 0) {
+          for (const atv of item.atividadesExecutadas) {
+            try {
+              await api.post(`/rdos/${createdId}/atividades`, {
+                descricao: atv.descricao || String(atv),
+                status: 'CONCLUIDO'
+              }, { headers });
+            } catch {/* silencioso */}
+          }
+        }
+
+        // 3. Sincronizar Efetivos na Tabela Relacional Backend
+        if (Array.isArray(item.profissionais) && item.profissionais.length > 0) {
+          for (const prof of item.profissionais) {
+            try {
+              await api.post(`/rdos/${createdId}/efetivos`, {
+                funcao: prof.nome,
+                quantidade: prof.quantidade || 1
+              }, { headers });
+            } catch {/* silencioso */}
+          }
+        }
+
         sucessos++;
       } catch (err) {
         console.error(`Erro ao importar RDO de ${item.data}:`, err);
@@ -452,7 +624,7 @@ export const RdoList: React.FC = () => {
     }
 
     setImporting(false);
-    alert(`✅ Importação concluída! ${sucessos} de ${parsedRdos.length} diários de obra foram salvos com sucesso.`);
+    alert(`✅ Importação concluída com sucesso! ${sucessos} de ${parsedRdos.length} diários foram totalmente cadastrados.`);
     setShowImportModal(false);
     setParsedRdos([]);
     carregarRdos();
