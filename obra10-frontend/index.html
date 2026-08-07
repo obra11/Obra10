@@ -57,7 +57,7 @@
       // Register Service Worker for PWA
       if ('serviceWorker' in navigator && window.location.hostname !== 'localhost') {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js?v=1.7.0').then(reg => {
+          navigator.serviceWorker.register('/sw.js?v=1.8.0').then(reg => {
             reg.update();
           }).catch(() => {});
         });

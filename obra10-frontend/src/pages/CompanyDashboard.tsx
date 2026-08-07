@@ -1,7 +1,7 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useAuth, type Obra } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes } from 'lucide-react';
+import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
 
@@ -15,6 +15,33 @@ export const CompanyDashboard: React.FC = () => {
   const [showNovoModal, setShowNovoModal] = useState(false);
   const [novaObra, setNovaObra] = useState({ nome: '', endereco: '' });
   const [loadingCriar, setLoadingCriar] = useState(false);
+
+  // Filtros e Modos de Visualização das Obras
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('TODOS');
+  const [viewMode, setViewMode] = useState<'grid' | 'compact' | 'list'>(() => {
+    return (localStorage.getItem('obras_view_mode') as any) || 'grid';
+  });
+
+  const handleSetViewMode = (mode: 'grid' | 'compact' | 'list') => {
+    setViewMode(mode);
+    localStorage.setItem('obras_view_mode', mode);
+  };
+
+  const filteredObras = useMemo(() => {
+    return obras.filter((obra) => {
+      const matchSearch =
+        !searchQuery.trim() ||
+        obra.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (obra.endereco && obra.endereco.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      const matchStatus =
+        statusFilter === 'TODOS' ||
+        (obra.status || 'ATIVA').toUpperCase() === statusFilter.toUpperCase();
+
+      return matchSearch && matchStatus;
+    });
+  }, [obras, searchQuery, statusFilter]);
 
 
   const [showEditEmpresaModal, setShowEditEmpresaModal] = useState(false);
@@ -298,28 +325,124 @@ export const CompanyDashboard: React.FC = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="flex justify-between items-end mb-8">
+        <div className="flex justify-between items-end mb-6">
             <div>
                 <h2 className="text-2xl font-bold text-gray-800">Suas Obras</h2>
                 <p className="text-gray-500 text-sm mt-1">Selecione um canteiro de obras para acessar seus módulos e RDOs.</p>
             </div>
             {user?.perfilGlobal === 'GESTOR' && (
-              <button onClick={() => setShowNovoModal(true)} className="px-3 md:px-4 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 active:bg-red-800 flex items-center gap-1.5 md:gap-2 text-sm">
+              <button onClick={() => setShowNovoModal(true)} className="px-3 md:px-4 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 active:bg-red-800 flex items-center gap-1.5 md:gap-2 text-sm shrink-0">
                 <Plus size={18} /> <span className="hidden sm:inline">Nova </span>Obra
               </button>
             )}
         </div>
 
+        {/* Toolbar de Busca, Filtro e Visualização */}
+        {obras.length > 0 && (
+          <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm mb-6 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+            {/* Campo de Busca */}
+            <div className="relative flex-1">
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar obra por nome ou endereço..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red outline-none"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Filtro por Status */}
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-700 outline-none focus:ring-2 focus:ring-lunardeli-red"
+              >
+                <option value="TODOS">Todos os Status ({obras.length})</option>
+                <option value="ATIVA">Ativas ({obras.filter(o => (o.status || 'ATIVA') === 'ATIVA').length})</option>
+                <option value="INATIVA">Inativas ({obras.filter(o => o.status === 'INATIVA').length})</option>
+                <option value="FINALIZADA">Finalizadas ({obras.filter(o => o.status === 'FINALIZADA').length})</option>
+              </select>
+
+              {/* Botões de Modo de Visualização */}
+              <div className="flex items-center bg-gray-100 p-1 rounded-lg border border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => handleSetViewMode('grid')}
+                  className={`px-2.5 py-1.5 rounded text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    viewMode === 'grid'
+                      ? 'bg-white text-lunardeli-red shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                  title="Grade Grande (Cards)"
+                >
+                  <LayoutGrid size={15} />
+                  <span className="hidden sm:inline">Cards</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSetViewMode('compact')}
+                  className={`px-2.5 py-1.5 rounded text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    viewMode === 'compact'
+                      ? 'bg-white text-lunardeli-red shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                  title="Grade Compacta (Miniaturas)"
+                >
+                  <Grid size={15} />
+                  <span className="hidden sm:inline">Miniaturas</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSetViewMode('list')}
+                  className={`px-2.5 py-1.5 rounded text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    viewMode === 'list'
+                      ? 'bg-white text-lunardeli-red shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                  title="Lista Detalhada"
+                >
+                  <List size={15} />
+                  <span className="hidden sm:inline">Lista</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Exibição das Obras */}
         {obras.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center text-gray-500">
             <HardHat size={48} className="mx-auto mb-4 opacity-20" />
             <p>Nenhuma obra vinculada ao seu usuário no momento.</p>
           </div>
-        ) : (
+        ) : filteredObras.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center text-gray-500">
+            <Search size={48} className="mx-auto mb-4 opacity-20" />
+            <p className="font-semibold text-gray-700">Nenhuma obra encontrada com os filtros selecionados.</p>
+            <button
+              onClick={() => { setSearchQuery(''); setStatusFilter('TODOS'); }}
+              className="mt-3 text-sm text-lunardeli-red hover:underline font-bold"
+            >
+              Limpar busca e filtros
+            </button>
+          </div>
+        ) : viewMode === 'grid' ? (
+          /* Modo 1: Grade Grande (Cards Grandes) */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {obras.map(obra => (
+            {filteredObras.map(obra => (
               <div key={obra.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow group flex flex-col">
-                {/* Obra Cover Image */}
                 <div className="h-48 bg-gray-100 relative group/cover">
                   {obra.imageUrl ? (
                     <img src={getImageUrl(obra.imageUrl)} alt={obra.nome} className="w-full h-full object-cover" />
@@ -329,10 +452,6 @@ export const CompanyDashboard: React.FC = () => {
                       <span className="text-sm font-medium">Capa da Obra</span>
                     </div>
                   )}
-                  
-                  {/* Overlay Upload Button was here, moved to Edit Modal */}
-                  
-                  {/* Status Badge */}
                   <div 
                     className={`absolute top-3 left-3 text-white text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-full shadow-sm ${
                       obra.status === 'ATIVA' ? 'bg-green-500' :
@@ -340,11 +459,10 @@ export const CompanyDashboard: React.FC = () => {
                       obra.status === 'FINALIZADA' ? 'bg-red-500' : 'bg-gray-500'
                     }`}
                   >
-                    {obra.status}
+                    {obra.status || 'ATIVA'}
                   </div>
                 </div>
 
-                {/* Obra Details */}
                 <div className="p-5 flex-1 flex flex-col">
                   <h3 className="text-lg font-bold text-gray-800 mb-2 truncate">{obra.nome}</h3>
                   {obra.endereco && (
@@ -357,12 +475,105 @@ export const CompanyDashboard: React.FC = () => {
                   <div className="mt-auto pt-4 border-t border-gray-100">
                     <button 
                       onClick={() => handleObraSelect(obra)}
-                      className="w-full flex justify-center py-2.5 px-4 rounded-lg bg-gray-50 hover:bg-lunardeli-red hover:text-white transition-colors text-lunardeli-dark font-semibold border border-gray-200 hover:border-transparent"
+                      className="w-full flex justify-center py-2.5 px-4 rounded-lg bg-gray-50 hover:bg-lunardeli-red hover:text-white transition-colors text-lunardeli-dark font-semibold border border-gray-200 hover:border-transparent text-sm"
                     >
                       Acessar Painel
                     </button>
                   </div>
                 </div>
+              </div>
+            ))}
+          </div>
+        ) : viewMode === 'compact' ? (
+          /* Modo 2: Grade Compacta (Miniaturas) */
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {filteredObras.map(obra => (
+              <div key={obra.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-all flex flex-col">
+                <div className="h-28 bg-gray-100 relative">
+                  {obra.imageUrl ? (
+                    <img src={getImageUrl(obra.imageUrl)} alt={obra.nome} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                      <HardHat size={28} className="opacity-20" />
+                    </div>
+                  )}
+                  <div 
+                    className={`absolute top-2 left-2 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-sm ${
+                      obra.status === 'ATIVA' ? 'bg-green-500' :
+                      obra.status === 'INATIVA' ? 'bg-yellow-500' :
+                      obra.status === 'FINALIZADA' ? 'bg-red-500' : 'bg-gray-500'
+                    }`}
+                  >
+                    {obra.status || 'ATIVA'}
+                  </div>
+                </div>
+
+                <div className="p-3.5 flex-1 flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-800 truncate mb-1" title={obra.nome}>{obra.nome}</h3>
+                    {obra.endereco ? (
+                      <p className="text-xs text-gray-500 flex items-center gap-1 mb-3 truncate" title={obra.endereco}>
+                        <MapPin size={12} className="shrink-0" />
+                        <span className="truncate">{obra.endereco}</span>
+                      </p>
+                    ) : (
+                      <div className="mb-3" />
+                    )}
+                  </div>
+
+                  <button 
+                    onClick={() => handleObraSelect(obra)}
+                    className="w-full py-1.5 px-3 rounded-lg bg-gray-50 hover:bg-lunardeli-red hover:text-white transition-colors text-lunardeli-dark font-semibold border border-gray-200 hover:border-transparent text-xs text-center"
+                  >
+                    Acessar Painel
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* Modo 3: Lista Detalhada (Tabela / Linhas Horizontais) */
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden divide-y divide-gray-100">
+            {filteredObras.map(obra => (
+              <div key={obra.id} className="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50/80 transition-colors">
+                <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                  <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden shrink-0 border border-gray-200 relative">
+                    {obra.imageUrl ? (
+                      <img src={getImageUrl(obra.imageUrl)} alt={obra.nome} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-400">
+                        <HardHat size={20} className="opacity-30" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <h3 className="text-base font-bold text-gray-800 truncate">{obra.nome}</h3>
+                      <span 
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full text-white shrink-0 ${
+                          obra.status === 'ATIVA' ? 'bg-green-500' :
+                          obra.status === 'INATIVA' ? 'bg-yellow-500' :
+                          obra.status === 'FINALIZADA' ? 'bg-red-500' : 'bg-gray-500'
+                        }`}
+                      >
+                        {obra.status || 'ATIVA'}
+                      </span>
+                    </div>
+                    {obra.endereco && (
+                      <p className="text-xs text-gray-500 flex items-center gap-1 truncate">
+                        <MapPin size={13} className="shrink-0 text-gray-400" />
+                        <span className="truncate">{obra.endereco}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => handleObraSelect(obra)}
+                  className="w-full sm:w-auto px-4 py-2 bg-gray-50 hover:bg-lunardeli-red hover:text-white border border-gray-200 hover:border-transparent rounded-lg font-semibold text-gray-700 text-xs transition-all text-center shrink-0"
+                >
+                  Acessar Painel →
+                </button>
               </div>
             ))}
           </div>
