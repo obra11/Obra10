@@ -293,25 +293,6 @@ export const RdoList: React.FC = () => {
     XLSX.writeFile(wb, 'Modelo_Importacao_RDO.xlsx');
   };
 
-  // Funções Auxiliares de Leitura Inteligente de Colunas
-  const normalizeKey = (key: string) =>
-    String(key || '')
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]/g, '');
-
-  const getColVal = (row: Record<string, any>, keywords: string[]) => {
-    for (const [key, val] of Object.entries(row)) {
-      if (val === null || val === undefined || String(val).trim() === '') continue;
-      const norm = normalizeKey(key);
-      if (keywords.some((kw) => norm.includes(kw))) {
-        return val;
-      }
-    }
-    return undefined;
-  };
-
   // Processar Arquivo Uploaded para Importação (Excel/CSV/JSON)
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -373,7 +354,7 @@ export const RdoList: React.FC = () => {
             const rawDate = extras.data || item.dataReferencia?.split('T')[0] || new Date().toISOString().split('T')[0];
             return {
               id: `imp-${idx}`,
-              data: String(rawDate).split('T')[0],
+              data: formatIsoDate(rawDate),
               responsavel: extras.responsavel || item.criador?.nome || item.aprovadorNome || '',
               climaManha: extras.climaManha || extras.clima || 'Sol',
               climaTarde: extras.climaTarde || extras.clima || 'Sol',
@@ -405,146 +386,171 @@ export const RdoList: React.FC = () => {
             return;
           }
 
-          const sheet1 = workbook.Sheets[workbook.SheetNames[0]];
-          const rows1: any[] = XLSX.utils.sheet_to_json(sheet1);
+          // 1. Ler todas as abas como matriz 2D (array de arrays)
+          const allGroupedRdos: Record<string, any> = {};
 
-          if (!rows1 || rows1.length === 0) {
-            setImportError('A primeira aba da planilha está vazia.');
+          workbook.SheetNames.forEach((sheetName) => {
+            const worksheet = workbook.Sheets[sheetName];
+            const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+            if (!rawRows || rawRows.length === 0) return;
+
+            // Localizar linha de cabeçalho nos primeiros 20 registros
+            let headerIdx = -1;
+            for (let r = 0; r < Math.min(rawRows.length, 20); r++) {
+              const rowStr = (rawRows[r] || []).map((c) => String(c || '').toLowerCase()).join(' ');
+              if (
+                rowStr.includes('data') ||
+                rowStr.includes('servico') ||
+                rowStr.includes('atividade') ||
+                rowStr.includes('profis') ||
+                rowStr.includes('descri') ||
+                rowStr.includes('efetiv') ||
+                rowStr.includes('mao')
+              ) {
+                headerIdx = r;
+                break;
+              }
+            }
+
+            const colMap: Record<string, number> = {};
+            if (headerIdx >= 0) {
+              const headers = (rawRows[headerIdx] || []).map((c) =>
+                String(c || '')
+                  .toLowerCase()
+                  .normalize('NFD')
+                  .replace(/[\u0300-\u036f]/g, '')
+                  .replace(/[^a-z0-9]/g, '')
+              );
+
+              headers.forEach((h, colIdx) => {
+                if (h.includes('data') || h.includes('date') || h.includes('dia') || h.includes('dt')) {
+                  if (colMap.date === undefined) colMap.date = colIdx;
+                } else if (h.includes('resp') || h.includes('eng') || h.includes('autor') || h.includes('tecnic')) {
+                  colMap.resp = colIdx;
+                } else if (h.includes('clima') || h.includes('tempo')) {
+                  colMap.clima = colIdx;
+                } else if (h.includes('atvid') || h.includes('servic') || h.includes('descr') || h.includes('trabalh') || h.includes('item') || h.includes('histor')) {
+                  if (colMap.atv === undefined) colMap.atv = colIdx;
+                } else if (h.includes('prof') || h.includes('efet') || h.includes('func') || h.includes('mao') || h.includes('trabalhad')) {
+                  if (colMap.prof === undefined) colMap.prof = colIdx;
+                } else if (h.includes('materi') || h.includes('insum')) {
+                  if (colMap.mat === undefined) colMap.mat = colIdx;
+                } else if (h.includes('obs') || h.includes('nota') || h.includes('coment') || h.includes('ocorrenc')) {
+                  if (colMap.obs === undefined) colMap.obs = colIdx;
+                }
+              });
+            }
+
+            const startRow = headerIdx >= 0 ? headerIdx + 1 : 0;
+
+            for (let r = startRow; r < rawRows.length; r++) {
+              const row = rawRows[r];
+              if (!row || row.every((c) => !c || String(c).trim() === '')) continue;
+
+              let rawDateVal = colMap.date !== undefined ? row[colMap.date] : undefined;
+
+              // Se a data não foi mapeada pelo cabeçalho, buscar célula que pareça data
+              if (!rawDateVal) {
+                for (const cell of row) {
+                  if (!cell) continue;
+                  const cellStr = String(cell).trim();
+                  if (cellStr.includes('/') || (cellStr.includes('-') && cellStr.length <= 10) || (!isNaN(Number(cellStr)) && Number(cellStr) > 35000 && Number(cellStr) < 60000)) {
+                    rawDateVal = cellStr;
+                    break;
+                  }
+                }
+              }
+
+              const isoDate = formatIsoDate(rawDateVal);
+
+              if (!allGroupedRdos[isoDate]) {
+                allGroupedRdos[isoDate] = {
+                  id: `imp-${Object.keys(allGroupedRdos).length}`,
+                  data: isoDate,
+                  responsavel: colMap.resp !== undefined ? String(row[colMap.resp] || '').trim() : '',
+                  climaManha: colMap.clima !== undefined ? String(row[colMap.clima] || 'Sol').trim() : 'Sol',
+                  climaTarde: colMap.clima !== undefined ? String(row[colMap.clima] || 'Sol').trim() : 'Sol',
+                  climaNoite: 'Sem Chuva',
+                  tempMin: '',
+                  tempMax: '',
+                  profissionais: [],
+                  materiais: [],
+                  equipamentos: [],
+                  atividadesExecutadas: [],
+                  atividadesPendentes: '',
+                  observacoesList: [],
+                };
+              }
+
+              const target = allGroupedRdos[isoDate];
+
+              // Capturar Responsável
+              if (!target.responsavel && colMap.resp !== undefined && row[colMap.resp]) {
+                target.responsavel = String(row[colMap.resp]).trim();
+              }
+
+              // Capturar Atividades
+              let extractedAtv = false;
+              if (colMap.atv !== undefined && row[colMap.atv]) {
+                const txt = String(row[colMap.atv]).trim();
+                if (txt && !target.atividadesExecutadas.some((a: any) => a.descricao === txt)) {
+                  target.atividadesExecutadas.push({ descricao: txt, status: 'em andamento' });
+                  extractedAtv = true;
+                }
+              }
+
+              // Capturar Efetivo
+              if (colMap.prof !== undefined && row[colMap.prof]) {
+                const txt = String(row[colMap.prof]).trim();
+                if (txt) {
+                  const parts = txt.split(':');
+                  const nome = parts[0].trim();
+                  const qtd = parts.length >= 2 ? parseInt(parts[1].trim(), 10) || 1 : 1;
+                  if (!target.profissionais.some((p: any) => p.nome === nome)) {
+                    target.profissionais.push({ nome, quantidade: qtd });
+                  }
+                }
+              }
+
+              // Capturar Materiais
+              if (colMap.mat !== undefined && row[colMap.mat]) {
+                const txt = String(row[colMap.mat]).trim();
+                if (txt && !target.materiais.some((m: any) => m.material === txt)) {
+                  target.materiais.push({ material: txt, qtd: '1', unidade: 'un' });
+                }
+              }
+
+              // Capturar Observações
+              if (colMap.obs !== undefined && row[colMap.obs]) {
+                const txt = String(row[colMap.obs]).trim();
+                if (txt && !target.observacoesList.includes(txt)) {
+                  target.observacoesList.push(txt);
+                }
+              }
+
+              // Fallback de Segurança de Célula de Texto (Garante zero perda de conteúdo)
+              if (!extractedAtv) {
+                row.forEach((cell: any, cIdx: number) => {
+                  if (cIdx === colMap.date || cIdx === colMap.resp || cIdx === colMap.clima) return;
+                  const cellStr = String(cell || '').trim();
+                  if (cellStr.length > 3 && !cellStr.includes('/') && !target.atividadesExecutadas.some((a: any) => a.descricao === cellStr)) {
+                    target.atividadesExecutadas.push({ descricao: cellStr, status: 'em andamento' });
+                  }
+                });
+              }
+            }
+          });
+
+          const formatted = Object.values(allGroupedRdos).map((rdo: any) => ({
+            ...rdo,
+            observacoes: rdo.observacoesList.join('; '),
+          }));
+
+          if (formatted.length === 0) {
+            setImportError('Nenhum dado válido de diário de obra foi encontrado na planilha.');
             return;
           }
-
-          let atividadesSecundarias: Record<string, any[]> = {};
-          let efetivoSecundario: Record<string, any[]> = {};
-          let materiaisSecundarios: Record<string, any[]> = {};
-
-          workbook.SheetNames.forEach((sheetName, index) => {
-            if (index === 0) return;
-            const normName = normalizeKey(sheetName);
-            const sheetRows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-
-            if (normName.includes('atividad') || normName.includes('servico')) {
-              sheetRows.forEach((r) => {
-                const key = getColVal(r, ['numero', 'rdo', 'data']) || 'geral';
-                const keyStr = String(key).trim();
-                const desc = getColVal(r, ['atividade', 'servico', 'descricao', 'item', 'trabalho']);
-                if (desc) {
-                  if (!atividadesSecundarias[keyStr]) atividadesSecundarias[keyStr] = [];
-                  atividadesSecundarias[keyStr].push({ descricao: String(desc).trim(), status: 'em andamento' });
-                }
-              });
-            } else if (normName.includes('efetivo') || normName.includes('mao') || normName.includes('profissional')) {
-              sheetRows.forEach((r) => {
-                const key = getColVal(r, ['numero', 'rdo', 'data']) || 'geral';
-                const keyStr = String(key).trim();
-                const nome = getColVal(r, ['profissional', 'funcao', 'cargo', 'nome']);
-                const qtd = getColVal(r, ['quantidade', 'qtd', 'num']);
-                if (nome) {
-                  if (!efetivoSecundario[keyStr]) efetivoSecundario[keyStr] = [];
-                  efetivoSecundario[keyStr].push({ nome: String(nome).trim(), quantidade: Number(qtd || 1) });
-                }
-              });
-            } else if (normName.includes('material') || normName.includes('insumo') || normName.includes('equipament')) {
-              sheetRows.forEach((r) => {
-                const key = getColVal(r, ['numero', 'rdo', 'data']) || 'geral';
-                const keyStr = String(key).trim();
-                const item = getColVal(r, ['material', 'equipamento', 'item', 'nome']);
-                const qtd = getColVal(r, ['quantidade', 'qtd']);
-                const un = getColVal(r, ['unidade', 'un', 'status']);
-                if (item) {
-                  if (!materiaisSecundarios[keyStr]) materiaisSecundarios[keyStr] = [];
-                  materiaisSecundarios[keyStr].push({ material: String(item).trim(), qtd: String(qtd || '1'), unidade: String(un || 'un') });
-                }
-              });
-            }
-          });
-
-          const formatted = rows1.map((row: any, idx: number) => {
-            const rawDate = getColVal(row, ['data', 'date', 'referencia', 'dia']) || new Date().toISOString().split('T')[0];
-            let dateStr = String(rawDate).trim();
-            if (dateStr.includes('/')) {
-              const parts = dateStr.split('/');
-              if (parts.length === 3) {
-                dateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-              }
-            } else if (!isNaN(Number(dateStr)) && Number(dateStr) > 40000) {
-              const excelDate = new Date(Math.round((Number(dateStr) - 25569) * 86400 * 1000));
-              dateStr = excelDate.toISOString().split('T')[0];
-            }
-
-            const rdoNum = String(getColVal(row, ['numero', 'rdo', 'id']) || `RDO #${idx + 1}`).trim();
-            const resp = getColVal(row, ['responsavel', 'engenheiro', 'autor', 'tecnico', 'encarregado']) || '';
-
-            const climaM = getColVal(row, ['climamanha', 'manha', 'tempo']) || getColVal(row, ['clima']) || 'Sol';
-            const climaT = getColVal(row, ['climatarde', 'tarde']) || getColVal(row, ['clima']) || 'Sol';
-            const climaN = getColVal(row, ['climanoite', 'noite']) || 'Sem Chuva';
-
-            const tMin = getColVal(row, ['temperaturamin', 'tempmin', 'minima']) || '';
-            const tMax = getColVal(row, ['temperaturamax', 'tempmax', 'maxima']) || '';
-
-            const rawAtvStr = getColVal(row, ['atividade', 'servico', 'descricao', 'trabalho', 'executado']) || '';
-            let atvList: any[] = [];
-            if (rawAtvStr) {
-              atvList = String(rawAtvStr)
-                .split(/;|\n|\r/)
-                .map((s) => s.trim().replace(/^[-*•\d.]+\s*/, ''))
-                .filter(Boolean)
-                .map((desc) => ({ descricao: desc, status: 'em andamento' }));
-            }
-
-            const secAtv = atividadesSecundarias[rdoNum] || atividadesSecundarias[dateStr] || atividadesSecundarias['geral'];
-            if (secAtv && secAtv.length > 0) {
-              atvList = [...atvList, ...secAtv];
-            }
-
-            const profsStr = getColVal(row, ['efetivo', 'maodeobra', 'equipe', 'funcionario', 'profissional']) || '';
-            let profList: any[] = [];
-            if (profsStr) {
-              String(profsStr).split(/;|,/).forEach((p) => {
-                const parts = p.split(':');
-                if (parts.length >= 2) {
-                  profList.push({ nome: parts[0].trim(), quantidade: parseInt(parts[1].trim(), 10) || 1 });
-                } else if (p.trim()) {
-                  profList.push({ nome: p.trim(), quantidade: 1 });
-                }
-              });
-            }
-            const secEfet = efetivoSecundario[rdoNum] || efetivoSecundario[dateStr] || efetivoSecundario['geral'];
-            if (secEfet && secEfet.length > 0) {
-              profList = [...profList, ...secEfet];
-            }
-
-            const matStr = getColVal(row, ['material', 'insumo', 'produto']) || '';
-            let matList: any[] = [];
-            if (matStr) {
-              String(matStr).split(/;|,/).forEach((m) => {
-                matList.push({ material: m.trim(), qtd: '1', unidade: 'un' });
-              });
-            }
-            const secMat = materiaisSecundarios[rdoNum] || materiaisSecundarios[dateStr] || materiaisSecundarios['geral'];
-            if (secMat && secMat.length > 0) {
-              matList = [...matList, ...secMat];
-            }
-
-            const obsStr = getColVal(row, ['observac', 'nota', 'coment', 'ocorrenc']) || '';
-            const pendStr = getColVal(row, ['pendente', 'proxima', 'pendencia']) || '';
-
-            return {
-              id: `imp-${idx}`,
-              data: dateStr,
-              responsavel: String(resp).trim(),
-              climaManha: String(climaM).trim(),
-              climaTarde: String(climaT).trim(),
-              climaNoite: String(climaN).trim(),
-              tempMin: String(tMin).trim(),
-              tempMax: String(tMax).trim(),
-              profissionais: profList,
-              materiais: matList,
-              equipamentos: [],
-              atividadesExecutadas: atvList,
-              atividadesPendentes: String(pendStr).trim(),
-              observacoes: String(obsStr).trim(),
-            };
-          });
 
           setParsedRdos(formatted);
         } catch (err: any) {
