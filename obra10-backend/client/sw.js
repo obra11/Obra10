@@ -1,4 +1,4 @@
-const CACHE_NAME = 'obra10-v2.4.0';
+const CACHE_NAME = 'obra10-v2.5.0';
 const STATIC_ASSETS = [
   '/',
   '/favicon-16.png',

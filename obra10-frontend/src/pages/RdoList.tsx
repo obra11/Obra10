@@ -112,6 +112,7 @@ export const RdoList: React.FC = () => {
   // Exportar & Importar Modais
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
@@ -330,8 +331,7 @@ export const RdoList: React.FC = () => {
   };
 
   // Processar Arquivo Uploaded para Importação (Excel/CSV/JSON)
-  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const processSingleFile = (file: File) => {
     if (!file) return;
 
     setImportError('');
@@ -642,6 +642,31 @@ export const RdoList: React.FC = () => {
       };
       reader.readAsArrayBuffer(file);
     }
+  };
+
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processSingleFile(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) processSingleFile(file);
   };
 
   // Formatador ISO de Data de Extrema Precisão (Garante YYYY-MM-DD)
@@ -1859,11 +1884,27 @@ export const RdoList: React.FC = () => {
                 </div>
               </div>
 
-              {/* Seletor de Arquivo */}
-              <div className="border-2 border-dashed border-gray-300 hover:border-lunardeli-red rounded-2xl p-6 text-center transition-all bg-gray-50/50">
-                <Upload size={36} className="mx-auto text-gray-400 mb-2" />
-                <p className="text-sm font-bold text-gray-700">Selecione ou arraste o arquivo aqui</p>
-                <p className="text-xs text-gray-500 mt-1 mb-4">Formatos aceitos: .xlsx, .csv, .json</p>
+              {/* Seletor de Arquivo com Suporte Real a Drag & Drop */}
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer ${
+                  isDragging
+                    ? 'border-lunardeli-red bg-red-50/60 scale-[1.01] shadow-lg'
+                    : 'border-gray-300 hover:border-lunardeli-red bg-gray-50/50'
+                }`}
+              >
+                <Upload
+                  size={36}
+                  className={`mx-auto mb-2 transition-colors ${
+                    isDragging ? 'text-lunardeli-red animate-bounce' : 'text-gray-400'
+                  }`}
+                />
+                <p className="text-sm font-bold text-gray-700">
+                  {isDragging ? 'Solte o arquivo para importar!' : 'Selecione ou arraste o arquivo aqui'}
+                </p>
+                <p className="text-xs text-gray-500 mt-1 mb-4">Formatos aceitos: .xlsx, .xls, .csv, .json</p>
                 <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-lunardeli-red text-white text-xs font-bold rounded-xl hover:bg-red-700 transition-colors shadow-sm">
                   <span>Escolher Arquivo</span>
                   <input type="file" accept=".xlsx,.xls,.csv,.json" onChange={handleFileImport} className="hidden" />
