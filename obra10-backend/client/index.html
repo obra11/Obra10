@@ -24,11 +24,11 @@
 
     <!-- Asaas.js — tokenização de cartão (PCI DSS). Em produção trocar por: https://www.asaas.com/static/asaas.js -->
     <script src="https://sandbox.asaas.com/static/asaas.js"></script>
-    <script type="module" crossorigin src="/assets/index-CtFkxNhd.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-WsjTTGeL.css">
+    <script type="module" crossorigin src="/assets/index-BNQV4kdu.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CXHO4KLd.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
     <script>
       window.addEventListener('error', function(event) {
         document.body.innerHTML += '<div style="color:red; font-size: 20px; z-index:9999; position:absolute; top:0; left:0; background:white; padding:20px; word-wrap: break-word;">' + (event.error?.stack || event.message) + '</div>';
@@ -58,7 +58,9 @@
       // Register Service Worker for PWA
       if ('serviceWorker' in navigator && window.location.hostname !== 'localhost') {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(() => {});
+          navigator.serviceWorker.register('/sw.js?v=1.7.0').then(reg => {
+            reg.update();
+          }).catch(() => {});
         });
       }
     </script>
