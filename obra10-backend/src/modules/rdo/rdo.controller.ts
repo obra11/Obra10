@@ -4,6 +4,7 @@ import {
   Post,
   Put,
   Patch,
+  Delete,
   Body,
   Param,
   Req,
@@ -266,5 +267,12 @@ export class RdoController {
   async reabrir(@Param('id') id: string, @Req() req: any) {
     this.assertWritePermission(req);
     return this.rdoService.reabrir(id, req.user.empresaId, req.user);
+  }
+
+  /** DELETE /rdos/:id — Exclui um RDO. */
+  @Delete(':id')
+  async remove(@Param('id') id: string, @Req() req: any) {
+    this.assertWritePermission(req);
+    return this.rdoService.remove(id, req.headers['x-obra-id']);
   }
 }

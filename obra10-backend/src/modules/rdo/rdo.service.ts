@@ -803,4 +803,16 @@ export class RdoService {
     d.setDate(d.getDate() - d.getDay() + 1);
     return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   }
+
+  async remove(id: string, obraId: string) {
+    const rdo = await this.prisma.rdo.findFirst({
+      where: { id, obraId, deletedAt: null },
+    });
+    if (!rdo) throw new NotFoundException('RDO não encontrado.');
+
+    return this.prisma.rdo.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+  }
 }

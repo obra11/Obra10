@@ -24,6 +24,7 @@ import {
   Upload,
   FileSpreadsheet,
   FileCode,
+  Trash2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MediaGalleryModal } from '../components/MediaGalleryModal';
@@ -256,6 +257,17 @@ export const RdoList: React.FC = () => {
     }
   };
 
+  // Excluir RDO Individual
+  const handleExcluirRdo = async (id: string, sequencial: number | string) => {
+    if (!confirm(`Tem certeza que deseja excluir o RDO #${sequencial}?`)) return;
+    try {
+      await api.delete(`/rdos/${id}`, { headers: { 'x-obra-id': obraAtiva?.id } });
+      carregarRdos();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Erro ao excluir RDO.');
+    }
+  };
+
   // Baixar Modelo de Planilha Excel para Importação
   const downloadTemplateExcel = () => {
     const sampleData = [
@@ -379,23 +391,65 @@ export const RdoList: React.FC = () => {
       reader.onload = (event) => {
         try {
           const data = new Uint8Array(event.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array' });
-          
+          const workbook = XLSX.read(data, {
+            type: 'array',
+            cellDates: true,
+            dateNF: 'yyyy-mm-dd',
+            raw: false,
+          });
+
           if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
             setImportError('O arquivo selecionado está vazio.');
             return;
           }
 
-          // 1. Ler todas as abas como matriz 2D (array de arrays)
           const allGroupedRdos: Record<string, any> = {};
 
           workbook.SheetNames.forEach((sheetName) => {
             const worksheet = workbook.Sheets[sheetName];
-            const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+            const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, {
+              header: 1,
+              defval: '',
+              raw: false,
+              dateNF: 'yyyy-mm-dd',
+            });
 
             if (!rawRows || rawRows.length === 0) return;
 
-            // Localizar linha de cabeçalho nos primeiros 20 registros
+            // 1. Procurar Data e Responsável nas primeiras 15 linhas (Bloco de Cabeçalho Superior)
+            let sheetDate: string | null = null;
+            let sheetResp = '';
+            let sheetClima = 'Sol';
+
+            for (let r = 0; r < Math.min(rawRows.length, 15); r++) {
+              const row = rawRows[r] || [];
+              row.forEach((cell) => {
+                if (!cell) return;
+                const str = String(cell).trim();
+
+                const dateMatch = str.match(/\b(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4}|\d{4}[\/\.-]\d{1,2}[\/\.-]\d{1,2})\b/);
+                if (dateMatch && !sheetDate) {
+                  sheetDate = dateMatch[1];
+                }
+
+                if ((str.toLowerCase().includes('eng') || str.toLowerCase().includes('resp') || str.toLowerCase().includes('autor')) && str.includes(':')) {
+                  sheetResp = str.split(':')[1].trim();
+                }
+
+                if (str.toLowerCase().includes('sol') || str.toLowerCase().includes('chuva') || str.toLowerCase().includes('nublado')) {
+                  if (str.toLowerCase().includes('chuva')) sheetClima = 'Chuva Leve';
+                  else if (str.toLowerCase().includes('nublad')) sheetClima = 'Nublado';
+                  else sheetClima = 'Sol';
+                }
+              });
+            }
+
+            const sheetNameDate = sheetName.match(/\b(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4}|\d{4}[\/\.-]\d{1,2}[\/\.-]\d{1,2})\b/);
+            if (sheetNameDate && !sheetDate) {
+              sheetDate = sheetNameDate[1];
+            }
+
+            // 2. Encontrar a linha de cabeçalho da tabela de tarefas
             let headerIdx = -1;
             for (let r = 0; r < Math.min(rawRows.length, 20); r++) {
               const rowStr = (rawRows[r] || []).map((c) => String(c || '').toLowerCase()).join(' ');
@@ -406,7 +460,8 @@ export const RdoList: React.FC = () => {
                 rowStr.includes('profis') ||
                 rowStr.includes('descri') ||
                 rowStr.includes('efetiv') ||
-                rowStr.includes('mao')
+                rowStr.includes('mao') ||
+                rowStr.includes('item')
               ) {
                 headerIdx = r;
                 break;
@@ -432,7 +487,7 @@ export const RdoList: React.FC = () => {
                   colMap.clima = colIdx;
                 } else if (h.includes('atvid') || h.includes('servic') || h.includes('descr') || h.includes('trabalh') || h.includes('item') || h.includes('histor')) {
                   if (colMap.atv === undefined) colMap.atv = colIdx;
-                } else if (h.includes('prof') || h.includes('efet') || h.includes('func') || h.includes('mao') || h.includes('trabalhad')) {
+                } else if (h.includes('prof') || h.includes('efet') || h.includes('func') || h.includes('mao') || h.includes('trabalhad') || h.includes('equipe')) {
                   if (colMap.prof === undefined) colMap.prof = colIdx;
                 } else if (h.includes('materi') || h.includes('insum')) {
                   if (colMap.mat === undefined) colMap.mat = colIdx;
@@ -448,29 +503,28 @@ export const RdoList: React.FC = () => {
               const row = rawRows[r];
               if (!row || row.every((c) => !c || String(c).trim() === '')) continue;
 
-              let rawDateVal = colMap.date !== undefined ? row[colMap.date] : undefined;
+              let rowRawDate: any = colMap.date !== undefined ? row[colMap.date] : undefined;
 
-              // Se a data não foi mapeada pelo cabeçalho, buscar célula que pareça data
-              if (!rawDateVal) {
-                for (const cell of row) {
-                  if (!cell) continue;
-                  const cellStr = String(cell).trim();
-                  if (cellStr.includes('/') || (cellStr.includes('-') && cellStr.length <= 10) || (!isNaN(Number(cellStr)) && Number(cellStr) > 35000 && Number(cellStr) < 60000)) {
-                    rawDateVal = cellStr;
-                    break;
-                  }
-                }
+              if (!rowRawDate) {
+                row.forEach((cell) => {
+                  if (!cell) return;
+                  const str = String(cell).trim();
+                  const dm = str.match(/\b(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4}|\d{4}[\/\.-]\d{1,2}[\/\.-]\d{1,2})\b/);
+                  if (dm) rowRawDate = dm[1];
+                });
               }
 
-              const isoDate = formatIsoDate(rawDateVal);
+              if (!rowRawDate) rowRawDate = sheetDate;
+
+              const isoDate = formatIsoDate(rowRawDate);
 
               if (!allGroupedRdos[isoDate]) {
                 allGroupedRdos[isoDate] = {
                   id: `imp-${Object.keys(allGroupedRdos).length}`,
                   data: isoDate,
-                  responsavel: colMap.resp !== undefined ? String(row[colMap.resp] || '').trim() : '',
-                  climaManha: colMap.clima !== undefined ? String(row[colMap.clima] || 'Sol').trim() : 'Sol',
-                  climaTarde: colMap.clima !== undefined ? String(row[colMap.clima] || 'Sol').trim() : 'Sol',
+                  responsavel: sheetResp || (colMap.resp !== undefined ? String(row[colMap.resp] || '').trim() : ''),
+                  climaManha: colMap.clima !== undefined ? String(row[colMap.clima] || sheetClima).trim() : sheetClima,
+                  climaTarde: colMap.clima !== undefined ? String(row[colMap.clima] || sheetClima).trim() : sheetClima,
                   climaNoite: 'Sem Chuva',
                   tempMin: '',
                   tempMax: '',
@@ -485,60 +539,54 @@ export const RdoList: React.FC = () => {
 
               const target = allGroupedRdos[isoDate];
 
-              // Capturar Responsável
               if (!target.responsavel && colMap.resp !== undefined && row[colMap.resp]) {
                 target.responsavel = String(row[colMap.resp]).trim();
               }
 
-              // Capturar Atividades
-              let extractedAtv = false;
-              if (colMap.atv !== undefined && row[colMap.atv]) {
-                const txt = String(row[colMap.atv]).trim();
-                if (txt && !target.atividadesExecutadas.some((a: any) => a.descricao === txt)) {
-                  target.atividadesExecutadas.push({ descricao: txt, status: 'em andamento' });
-                  extractedAtv = true;
-                }
-              }
+              row.forEach((cell, cIdx) => {
+                if (!cell) return;
+                const str = String(cell).trim();
 
-              // Capturar Efetivo
-              if (colMap.prof !== undefined && row[colMap.prof]) {
-                const txt = String(row[colMap.prof]).trim();
-                if (txt) {
-                  const parts = txt.split(':');
-                  const nome = parts[0].trim();
-                  const qtd = parts.length >= 2 ? parseInt(parts[1].trim(), 10) || 1 : 1;
-                  if (!target.profissionais.some((p: any) => p.nome === nome)) {
+                if (
+                  str.length < 2 ||
+                  str.match(/^\d+$/) ||
+                  str.toLowerCase().startsWith('item') ||
+                  str.toLowerCase().startsWith('data') ||
+                  str.toLowerCase().startsWith('relat') ||
+                  str === isoDate
+                ) {
+                  return;
+                }
+
+                const isProf =
+                  cIdx === colMap.prof ||
+                  str.toLowerCase().includes('pedreiro') ||
+                  str.toLowerCase().includes('servente') ||
+                  str.toLowerCase().includes('eletricista') ||
+                  str.toLowerCase().includes('encarregado') ||
+                  str.toLowerCase().includes('pintor') ||
+                  str.toLowerCase().includes('azulejista') ||
+                  str.toLowerCase().includes('armador') ||
+                  str.toLowerCase().includes('carpinteiro') ||
+                  str.toLowerCase().includes('ajudante');
+
+                if (isProf) {
+                  if (!target.profissionais.some((p: any) => p.nome === str)) {
+                    const parts = str.split(':');
+                    const nome = parts[0].trim();
+                    const qtd = parts.length >= 2 ? parseInt(parts[1].trim(), 10) || 1 : 1;
                     target.profissionais.push({ nome, quantidade: qtd });
                   }
-                }
-              }
-
-              // Capturar Materiais
-              if (colMap.mat !== undefined && row[colMap.mat]) {
-                const txt = String(row[colMap.mat]).trim();
-                if (txt && !target.materiais.some((m: any) => m.material === txt)) {
-                  target.materiais.push({ material: txt, qtd: '1', unidade: 'un' });
-                }
-              }
-
-              // Capturar Observações
-              if (colMap.obs !== undefined && row[colMap.obs]) {
-                const txt = String(row[colMap.obs]).trim();
-                if (txt && !target.observacoesList.includes(txt)) {
-                  target.observacoesList.push(txt);
-                }
-              }
-
-              // Fallback de Segurança de Célula de Texto (Garante zero perda de conteúdo)
-              if (!extractedAtv) {
-                row.forEach((cell: any, cIdx: number) => {
-                  if (cIdx === colMap.date || cIdx === colMap.resp || cIdx === colMap.clima) return;
-                  const cellStr = String(cell || '').trim();
-                  if (cellStr.length > 3 && !cellStr.includes('/') && !target.atividadesExecutadas.some((a: any) => a.descricao === cellStr)) {
-                    target.atividadesExecutadas.push({ descricao: cellStr, status: 'em andamento' });
+                } else if (cIdx === colMap.obs || str.toLowerCase().startsWith('obs:') || str.toLowerCase().startsWith('nota:')) {
+                  if (!target.observacoesList.includes(str)) {
+                    target.observacoesList.push(str);
                   }
-                });
-              }
+                } else {
+                  if (!target.atividadesExecutadas.some((a: any) => a.descricao === str)) {
+                    target.atividadesExecutadas.push({ descricao: str, status: 'em andamento' });
+                  }
+                }
+              });
             }
           });
 
@@ -1554,6 +1602,18 @@ export const RdoList: React.FC = () => {
                           >
                             Abrir →
                           </button>
+                          {!isReadOnly && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleExcluirRdo(rdo.id, rdo.sequencial ?? rdo.id.slice(-6).toUpperCase());
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Excluir Diário"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1627,16 +1687,30 @@ export const RdoList: React.FC = () => {
                     </button>
 
                     {/* Share actions */}
-                    <RdoShareBar
-                      rdoId={rdo.id}
-                      obraId={obraAtiva?.id || ''}
-                      rdoLabel={`RDO_${format(
-                        parseUTCDate(rdo.dataReferencia),
-                        'yyyy-MM-dd',
-                      )}`}
-                      compact
-                      direction={openUp ? 'up' : 'down'}
-                    />
+                    <div className="flex items-center gap-1">
+                      <RdoShareBar
+                        rdoId={rdo.id}
+                        obraId={obraAtiva?.id || ''}
+                        rdoLabel={`RDO_${format(
+                          parseUTCDate(rdo.dataReferencia),
+                          'yyyy-MM-dd',
+                        )}`}
+                        compact
+                        direction={openUp ? 'up' : 'down'}
+                      />
+                      {!isReadOnly && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExcluirRdo(rdo.id, rdo.sequencial ?? rdo.id.slice(-6).toUpperCase());
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Excluir Diário"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
