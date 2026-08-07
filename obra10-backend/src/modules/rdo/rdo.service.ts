@@ -42,7 +42,9 @@ export class RdoService {
     });
     if (!obra) throw new NotFoundException('Obra não encontrada');
 
-    const count = await this.prisma.rdo.count({ where: { obraId } });
+    const count = await this.prisma.rdo.count({
+      where: { obraId, deletedAt: null },
+    });
 
     return {
       obraNome: obra.nome,

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
   Package,
@@ -12,7 +13,8 @@ import {
   AlertCircle,
   Tag,
   X,
-  Boxes
+  Boxes,
+  ArrowLeft
 } from 'lucide-react';
 
 export type TipoInsumo = 'MATERIAL' | 'EQUIPAMENTO' | 'MAO_DE_OBRA';
@@ -34,6 +36,7 @@ const UNIDADES_SUGERIDAS = [
 ];
 
 export const CatalogoPage: React.FC = () => {
+  const navigate = useNavigate();
   const [items, setItems] = useState<CatalogoInsumo[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TipoInsumo>('MATERIAL');
@@ -192,6 +195,14 @@ export const CatalogoPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3.5 py-2.5 rounded-xl font-bold text-sm transition-all"
+            title="Voltar para a página anterior"
+          >
+            <ArrowLeft size={18} />
+            <span>Voltar</span>
+          </button>
           <button
             onClick={() => openCreateModal(activeTab)}
             className="flex items-center gap-2 bg-lunardeli-red hover:bg-red-700 active:bg-red-800 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-sm transition-all hover:shadow"
