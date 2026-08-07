@@ -556,6 +556,36 @@ export const RdoList: React.FC = () => {
     }
   };
 
+  // Formatador ISO de Data de Extrema Precisão (Garante YYYY-MM-DD)
+  const formatIsoDate = (input: any): string => {
+    if (!input) return new Date().toISOString().split('T')[0];
+    const str = String(input).trim();
+
+    if (!isNaN(Number(str)) && Number(str) > 35000 && Number(str) < 60000) {
+      const d = new Date(Math.round((Number(str) - 25569) * 86400 * 1000));
+      return d.toISOString().split('T')[0];
+    }
+
+    if (str.includes('/') || str.includes('-')) {
+      const sep = str.includes('/') ? '/' : '-';
+      const parts = str.split('T')[0].split(sep);
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+        } else if (parts[2].length === 4) {
+          return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+      }
+    }
+
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString().split('T')[0];
+    }
+
+    return new Date().toISOString().split('T')[0];
+  };
+
   // Executar Importação em Lote com Sincronização em Ambos os Formatos (JSON + Tabelas Relacionais)
   const executarImportacao = async () => {
     if (parsedRdos.length === 0) return;
@@ -567,49 +597,55 @@ export const RdoList: React.FC = () => {
 
     for (let i = 0; i < parsedRdos.length; i++) {
       const item = parsedRdos[i];
+      const isoDate = formatIsoDate(item.data);
       try {
-        const createRes = await api.post('/rdos', { dataReferencia: item.data }, { headers });
-        const createdId = createRes.data.id;
-
         const dadosExtras = {
           versao: 1,
-          data: item.data,
-          responsavel: item.responsavel,
-          climaManha: item.climaManha,
-          climaTarde: item.climaTarde,
-          climaNoite: item.climaNoite,
-          tempMin: item.tempMin,
-          tempMax: item.tempMax,
-          pessoas: [{ nome: '', funcao: '', empresa: '' }],
-          profissionais: item.profissionais,
-          materiais: item.materiais,
-          equipamentos: item.equipamentos,
-          atividadesExecutadas: item.atividadesExecutadas,
-          atividadesPendentes: item.atividadesPendentes,
-          observacoes: item.observacoes,
+          data: isoDate,
+          responsavel: item.responsavel || '',
+          climaManha: item.climaManha || 'Sol',
+          climaTarde: item.climaTarde || 'Sol',
+          climaNoite: item.climaNoite || 'Sem Chuva',
+          tempMin: item.tempMin || '',
+          tempMax: item.tempMax || '',
+          pessoas: item.pessoas || [{ nome: '', funcao: '', empresa: '' }],
+          profissionais: item.profissionais || [],
+          materiais: item.materiais || [],
+          equipamentos: item.equipamentos || [],
+          atividadesExecutadas: item.atividadesExecutadas || [],
+          atividadesPendentes: item.atividadesPendentes || '',
+          observacoes: item.observacoes || '',
         };
 
-        // 1. Salvar JSON completo no campo dadosExtras
+        // 1. Criar RDO já enviando dadosExtras no POST
+        const createRes = await api.post('/rdos', {
+          dataReferencia: isoDate,
+          dadosExtras,
+        }, { headers });
+
+        const createdId = createRes.data.id;
+
+        // 2. Salvar rascunho completo via PUT
         await api.put(`/rdos/${createdId}/rascunho`, { dadosExtras }, { headers });
 
-        // 2. Sincronizar Atividades na Tabela Relacional Backend (para garantir leitura universal)
+        // 3. Sincronizar Atividades na Tabela Relacional Backend (para garantir leitura universal)
         if (Array.isArray(item.atividadesExecutadas) && item.atividadesExecutadas.length > 0) {
           for (const atv of item.atividadesExecutadas) {
             try {
               await api.post(`/rdos/${createdId}/atividades`, {
-                descricao: atv.descricao || String(atv),
+                descricao: typeof atv === 'string' ? atv : atv.descricao || String(atv),
                 status: 'CONCLUIDO'
               }, { headers });
             } catch {/* silencioso */}
           }
         }
 
-        // 3. Sincronizar Efetivos na Tabela Relacional Backend
+        // 4. Sincronizar Efetivos na Tabela Relacional Backend
         if (Array.isArray(item.profissionais) && item.profissionais.length > 0) {
           for (const prof of item.profissionais) {
             try {
               await api.post(`/rdos/${createdId}/efetivos`, {
-                funcao: prof.nome,
+                funcao: prof.nome || 'Profissional',
                 quantidade: prof.quantidade || 1
               }, { headers });
             } catch {/* silencioso */}
@@ -618,7 +654,7 @@ export const RdoList: React.FC = () => {
 
         sucessos++;
       } catch (err) {
-        console.error(`Erro ao importar RDO de ${item.data}:`, err);
+        console.error(`Erro ao importar RDO de ${isoDate}:`, err);
       }
       setImportProgress(Math.round(((i + 1) / parsedRdos.length) * 100));
     }
