@@ -19,20 +19,22 @@ export const UpdateNotification: React.FC = () => {
 
     navigator.serviceWorker.addEventListener('message', handleMessage);
 
-    // Also check for waiting SW on load
+    // Force update check on mount
     navigator.serviceWorker.getRegistration().then(reg => {
-      if (reg?.waiting) {
-        setShowUpdate(true);
-      }
-      // Listen for new SW installing
-      reg?.addEventListener('updatefound', () => {
-        const newSW = reg.installing;
-        newSW?.addEventListener('statechange', () => {
-          if (newSW.state === 'activated') {
-            setShowUpdate(true);
-          }
+      if (reg) {
+        reg.update().catch(() => {});
+        if (reg.waiting) {
+          setShowUpdate(true);
+        }
+        reg.addEventListener('updatefound', () => {
+          const newSW = reg.installing;
+          newSW?.addEventListener('statechange', () => {
+            if (newSW.state === 'installed' || newSW.state === 'activated') {
+              setShowUpdate(true);
+            }
+          });
         });
-      });
+      }
     });
 
     return () => {
