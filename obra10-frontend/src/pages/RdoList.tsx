@@ -305,6 +305,30 @@ export const RdoList: React.FC = () => {
     XLSX.writeFile(wb, 'Modelo_Importacao_RDO.xlsx');
   };
 
+  // Correção de Codificação de Caracteres Especiais / Acentuação UTF-8
+  const fixEncoding = (str: string): string => {
+    if (!str) return '';
+    let clean = String(str).trim();
+    try {
+      if (/[\u00C2\u00C3]/.test(clean)) {
+        clean = decodeURIComponent(escape(clean));
+      }
+    } catch (e) {}
+    return clean
+      .replace(/TÃ©cnica/gi, 'Técnica')
+      .replace(/Ã©/g, 'é')
+      .replace(/Ã¡/g, 'á')
+      .replace(/Ã³/g, 'ó')
+      .replace(/Ã­/g, 'í')
+      .replace(/Ãº/g, 'ú')
+      .replace(/Ã§/g, 'ç')
+      .replace(/Ã£/g, 'ã')
+      .replace(/Ãµ/g, 'õ')
+      .replace(/Ã /g, 'à')
+      .replace(/Ã‰/g, 'É')
+      .replace(/Ã/g, 'Á');
+  };
+
   // Processar Arquivo Uploaded para Importação (Excel/CSV/JSON)
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -327,18 +351,18 @@ export const RdoList: React.FC = () => {
             const rawAtv = extras.atividadesExecutadas || extras.atividades || item.atividades;
             if (Array.isArray(rawAtv)) {
               atvList = rawAtv.map((a: any) => ({
-                descricao: typeof a === 'string' ? a : a.descricao || a.atividade || a.nome || '',
-                status: a.status || 'em andamento'
+                descricao: fixEncoding(typeof a === 'string' ? a : a.descricao || a.atividade || a.nome || ''),
+                status: a.status || 'concluido'
               })).filter(a => a.descricao);
             } else if (typeof rawAtv === 'string') {
-              atvList = rawAtv.split(/\r?\n|;/).map(s => s.trim().replace(/^[-*•\d.]+\s*/, '')).filter(Boolean).map(desc => ({ descricao: desc, status: 'em andamento' }));
+              atvList = rawAtv.split(/\r?\n|;/).map(s => fixEncoding(s.trim().replace(/^[-*•\d.]+\s*/, ''))).filter(Boolean).map(desc => ({ descricao: desc, status: 'concluido' }));
             }
 
             let profList: any[] = [];
             const rawProf = extras.profissionais || extras.efetivo || extras.maoDeObra || item.efetivos;
             if (Array.isArray(rawProf)) {
               profList = rawProf.map((p: any) => ({
-                nome: p.nome || p.funcao || p.profissional || 'Profissional',
+                nome: fixEncoding(p.nome || p.funcao || p.profissional || 'Profissional'),
                 quantidade: Number(p.quantidade || p.qtd || 1)
               }));
             }
@@ -347,7 +371,7 @@ export const RdoList: React.FC = () => {
             const rawMat = extras.materiais || item.materiais;
             if (Array.isArray(rawMat)) {
               matList = rawMat.map((m: any) => ({
-                material: m.material || m.nome || m.item || '',
+                material: fixEncoding(m.material || m.nome || m.item || ''),
                 qtd: String(m.qtd || m.quantidade || '1'),
                 unidade: m.unidade || 'un'
               })).filter(m => m.material);
@@ -357,7 +381,7 @@ export const RdoList: React.FC = () => {
             const rawEq = extras.equipamentos || item.equipamentos;
             if (Array.isArray(rawEq)) {
               eqList = rawEq.map((e: any) => ({
-                equipamento: e.equipamento || e.nome || e.item || '',
+                equipamento: fixEncoding(e.equipamento || e.nome || e.item || ''),
                 qtd: String(e.qtd || e.quantidade || '1'),
                 status: e.status || 'Operando'
               })).filter(e => e.equipamento);
@@ -367,7 +391,7 @@ export const RdoList: React.FC = () => {
             return {
               id: `imp-${idx}`,
               data: formatIsoDate(rawDate),
-              responsavel: extras.responsavel || item.criador?.nome || item.aprovadorNome || '',
+              responsavel: fixEncoding(extras.responsavel || item.criador?.nome || item.aprovadorNome || ''),
               climaManha: extras.climaManha || extras.clima || 'Sol',
               climaTarde: extras.climaTarde || extras.clima || 'Sol',
               climaNoite: extras.climaNoite || 'Sem Chuva',
@@ -377,8 +401,8 @@ export const RdoList: React.FC = () => {
               materiais: matList,
               equipamentos: eqList,
               atividadesExecutadas: atvList,
-              atividadesPendentes: extras.atividadesPendentes || '',
-              observacoes: extras.observacoes || item.observacoes || '',
+              atividadesPendentes: fixEncoding(extras.atividadesPendentes || ''),
+              observacoes: fixEncoding(extras.observacoes || item.observacoes || ''),
             };
           });
           setParsedRdos(formatted);
@@ -416,7 +440,7 @@ export const RdoList: React.FC = () => {
 
             if (!rawRows || rawRows.length === 0) return;
 
-            // 1. Procurar Data e Responsável nas primeiras 15 linhas (Bloco de Cabeçalho Superior)
+            // 1. Procurar Data e Responsável nas primeiras 15 linhas
             let sheetDate: string | null = null;
             let sheetResp = '';
             let sheetClima = 'Sol';
@@ -425,7 +449,7 @@ export const RdoList: React.FC = () => {
               const row = rawRows[r] || [];
               row.forEach((cell) => {
                 if (!cell) return;
-                const str = String(cell).trim();
+                const str = fixEncoding(String(cell).trim());
 
                 const dateMatch = str.match(/\b(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4}|\d{4}[\/\.-]\d{1,2}[\/\.-]\d{1,2})\b/);
                 if (dateMatch && !sheetDate) {
@@ -449,7 +473,7 @@ export const RdoList: React.FC = () => {
               sheetDate = sheetNameDate[1];
             }
 
-            // 2. Encontrar a linha de cabeçalho da tabela de tarefas
+            // 2. Encontrar a linha de cabeçalho da tabela
             let headerIdx = -1;
             for (let r = 0; r < Math.min(rawRows.length, 20); r++) {
               const rowStr = (rawRows[r] || []).map((c) => String(c || '').toLowerCase()).join(' ');
@@ -522,7 +546,7 @@ export const RdoList: React.FC = () => {
                 allGroupedRdos[isoDate] = {
                   id: `imp-${Object.keys(allGroupedRdos).length}`,
                   data: isoDate,
-                  responsavel: sheetResp || (colMap.resp !== undefined ? String(row[colMap.resp] || '').trim() : ''),
+                  responsavel: sheetResp || (colMap.resp !== undefined ? fixEncoding(String(row[colMap.resp] || '')).trim() : ''),
                   climaManha: colMap.clima !== undefined ? String(row[colMap.clima] || sheetClima).trim() : sheetClima,
                   climaTarde: colMap.clima !== undefined ? String(row[colMap.clima] || sheetClima).trim() : sheetClima,
                   climaNoite: 'Sem Chuva',
@@ -540,50 +564,60 @@ export const RdoList: React.FC = () => {
               const target = allGroupedRdos[isoDate];
 
               if (!target.responsavel && colMap.resp !== undefined && row[colMap.resp]) {
-                target.responsavel = String(row[colMap.resp]).trim();
+                target.responsavel = fixEncoding(String(row[colMap.resp]).trim());
               }
 
               row.forEach((cell, cIdx) => {
                 if (!cell) return;
-                const str = String(cell).trim();
+                const rawStr = String(cell).trim();
+                const cleanStr = fixEncoding(rawStr);
+
+                // Filtros de Segurança de Metadados
+                const isDateCell = /\b(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4}|\d{4}[\/\.-]\d{1,2}[\/\.-]\d{1,2})\b/.test(cleanStr);
+                const isStatusCell = /^(aprovado|aprovada|submetido|rejeitado|em andamento|pendente|concluido|concluida|rascunho|status)$/i.test(cleanStr);
+                const isObraCell =
+                  (obraAtiva?.nome && cleanStr.toLowerCase().includes(obraAtiva.nome.toLowerCase())) ||
+                  /^(residencial|condominio|edificio|loteamento|obra|torre|bloco)/i.test(cleanStr);
 
                 if (
-                  str.length < 2 ||
-                  str.match(/^\d+$/) ||
-                  str.toLowerCase().startsWith('item') ||
-                  str.toLowerCase().startsWith('data') ||
-                  str.toLowerCase().startsWith('relat') ||
-                  str === isoDate
+                  cleanStr.length < 2 ||
+                  cleanStr.match(/^\d+$/) ||
+                  cleanStr.toLowerCase().startsWith('item') ||
+                  cleanStr.toLowerCase().startsWith('data') ||
+                  cleanStr.toLowerCase().startsWith('relat') ||
+                  isDateCell ||
+                  isStatusCell ||
+                  isObraCell
                 ) {
                   return;
                 }
 
                 const isProf =
                   cIdx === colMap.prof ||
-                  str.toLowerCase().includes('pedreiro') ||
-                  str.toLowerCase().includes('servente') ||
-                  str.toLowerCase().includes('eletricista') ||
-                  str.toLowerCase().includes('encarregado') ||
-                  str.toLowerCase().includes('pintor') ||
-                  str.toLowerCase().includes('azulejista') ||
-                  str.toLowerCase().includes('armador') ||
-                  str.toLowerCase().includes('carpinteiro') ||
-                  str.toLowerCase().includes('ajudante');
+                  cleanStr.toLowerCase().includes('pedreiro') ||
+                  cleanStr.toLowerCase().includes('servente') ||
+                  cleanStr.toLowerCase().includes('eletricista') ||
+                  cleanStr.toLowerCase().includes('encarregado') ||
+                  cleanStr.toLowerCase().includes('pintor') ||
+                  cleanStr.toLowerCase().includes('azulejista') ||
+                  cleanStr.toLowerCase().includes('armador') ||
+                  cleanStr.toLowerCase().includes('carpinteiro') ||
+                  cleanStr.toLowerCase().includes('ajudante');
 
                 if (isProf) {
-                  if (!target.profissionais.some((p: any) => p.nome === str)) {
-                    const parts = str.split(':');
+                  if (!target.profissionais.some((p: any) => p.nome === cleanStr)) {
+                    const parts = cleanStr.split(':');
                     const nome = parts[0].trim();
                     const qtd = parts.length >= 2 ? parseInt(parts[1].trim(), 10) || 1 : 1;
                     target.profissionais.push({ nome, quantidade: qtd });
                   }
-                } else if (cIdx === colMap.obs || str.toLowerCase().startsWith('obs:') || str.toLowerCase().startsWith('nota:')) {
-                  if (!target.observacoesList.includes(str)) {
-                    target.observacoesList.push(str);
+                } else if (cIdx === colMap.obs || cleanStr.toLowerCase().startsWith('obs:') || cleanStr.toLowerCase().startsWith('nota:')) {
+                  if (!target.observacoesList.includes(cleanStr)) {
+                    target.observacoesList.push(cleanStr);
                   }
                 } else {
-                  if (!target.atividadesExecutadas.some((a: any) => a.descricao === str)) {
-                    target.atividadesExecutadas.push({ descricao: str, status: 'em andamento' });
+                  if (!target.atividadesExecutadas.some((a: any) => a.descricao === cleanStr)) {
+                    target.atividadesExecutadas.push({ descricao: cleanStr, status: 'concluido' });
                   }
                 }
               });
