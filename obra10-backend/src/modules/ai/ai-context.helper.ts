@@ -328,12 +328,78 @@ export function detectarIntencaoFactual(pergunta: string): IntencaoFactual {
   return null;
 }
 
+export type ChatTurn = { role: 'user' | 'assistant'; content: string };
+
+/** Extrai URLs de um texto. */
+export function extrairUrls(texto: string): string[] {
+  const matches = (texto || '').match(/https?:\/\/[^\s)\]>'"]+/gi) || [];
+  return matches.map((u) => u.replace(/[.,;:!?]+$/g, ''));
+}
+
+/** Últimas mensagens citam tema/fonte externa (ABNT, URL, consulta online). */
+export function historicoTemTemaExterno(history: ChatTurn[] = []): boolean {
+  const recent = (history || []).slice(-8);
+  return recent.some((h) => {
+    const c = h.content || '';
+    return /fonte:|consulta online|abnt|wikipedia\.org|nbr\s*\d|https?:\/\/|catalogo da abnt|norma tecnica/i.test(
+      c,
+    );
+  });
+}
+
 /** Detecta pedido explícito de consulta online / internet. */
 export function detectarConsultaOnline(pergunta: string): boolean {
   const n = normalizarTexto(pergunta);
-  return /na internet|online|pesquise|pesquisar|busca na web|buscar na web|consultar? (na )?web|busca externa|consulta externa|cotacao (do|da|de)|preco (do|da|de) |norma (tecnica|nbr)|nbr \d/.test(
+  return /na internet|online|pesquise|pesquisar|busca na web|buscar na web|consultar? (na )?web|busca externa|consulta externa|cotacao (do|da|de)|preco (do|da|de) |norma (tecnica|nbr)|nbr \d|abnt|site oficial|fonte confiavel/.test(
     n,
   );
+}
+
+/**
+ * Continuação de papo sobre fonte externa (ex.: "extrai desse catálogo da ABNT").
+ * Usa o histórico — sem isso a Luna caía no resumo genérico de RDO.
+ */
+export function detectarFollowUpExterno(
+  pergunta: string,
+  history: ChatTurn[] = [],
+): boolean {
+  if (!historicoTemTemaExterno(history)) return false;
+  const n = normalizarTexto(pergunta);
+  const intencao = detectarIntencaoFactual(pergunta);
+  // Pergunta clara de obra/RDO sem menção externa → não é follow-up externo
+  if (
+    intencao &&
+    !/abnt|nbr|norma|catalogo|fonte|site|internet|wikipedia|extrai/.test(n)
+  ) {
+    return false;
+  }
+  return (
+    /extrai|extrair|desse catalogo|dessa fonte|desse site|me passa|mais detalhe|mais informac|pode me|poderia me|continua|aprofund|resuma|resumo|da abnt|do catalogo|da norma|o texto|as informacoes|essa norma/.test(
+      n,
+    ) ||
+    ((/^(ok|certo|beleza|sim|pode|claro)\b/.test(n) || n.length < 80) &&
+      /abnt|catalogo|norma|fonte|site|extrai|informac/.test(n)) ||
+    /abnt|catalogo da abnt|nbr \d/.test(n)
+  );
+}
+
+/** Monta consulta enriquecida com URLs/tema do histórico. */
+export function montarConsultaComHistorico(
+  pergunta: string,
+  history: ChatTurn[] = [],
+): { consulta: string; urls: string[] } {
+  const urls = new Set<string>(extrairUrls(pergunta));
+  let tema = '';
+  for (const h of (history || []).slice(-6).reverse()) {
+    extrairUrls(h.content || '').forEach((u) => urls.add(u));
+    if (!tema) {
+      const nbr = (h.content || '').match(/nbr\s*\d+[-\d]*/i)?.[0];
+      if (nbr) tema = nbr;
+      else if (/abnt/i.test(h.content || '')) tema = 'ABNT catálogo normas técnicas';
+    }
+  }
+  const consulta = [pergunta.trim(), tema].filter(Boolean).join(' — ');
+  return { consulta, urls: Array.from(urls) };
 }
 
 export function textoClimaDeExtras(d: any): {
@@ -598,7 +664,7 @@ AMOSTRA DE DIÁRIOS (mais recentes):
 ${amostra || 'Nenhum diário no período.'}`;
 }
 
-/** Resposta factual determinística a partir do contexto agregado. */
+/** Resposta factual determinística — tom natural, números precisos. */
 export function responderFactual(
   intencao: IntencaoFactual,
   ctx: ContextoAgregado,
@@ -607,120 +673,158 @@ export function responderFactual(
 ): string | null {
   if (!intencao) return null;
 
-  const onde =
+  const obraLabel =
     ctx.escopo === 'obra'
-      ? `na obra ${ctx.obraNome || 'ativa'}`
-      : 'nas obras da empresa';
-  const periodo = `no período ${ctx.dataInicio} a ${ctx.dataFim} (${ctx.periodoLabel})`;
+      ? ctx.obraNome || 'obra ativa'
+      : 'suas obras';
+  const periodoCurto = ctx.periodoLabel || `${ctx.dataInicio} a ${ctx.dataFim}`;
 
   if (intencao === 'obras') {
     const lista =
       extras?.obrasAtivas?.length
-        ? extras.obrasAtivas.map((n) => `- ${n}`).join('\n')
-        : ctx.obrasNomes.map((n) => `- ${n}`).join('\n');
+        ? extras.obrasAtivas.map((n) => `• ${n}`).join('\n')
+        : ctx.obrasNomes.map((n) => `• ${n}`).join('\n');
     return lista
-      ? `Obras ativas no momento:\n${lista}`
-      : 'Não há obras ativas cadastradas no momento.';
+      ? `Agora tenho estas obras ativas:\n${lista}\n\nQuer que eu foque em alguma?`
+      : 'No momento não há obras ativas cadastradas.';
   }
 
   if (ctx.totalRdos === 0) {
-    return `Não encontrei diários de obra ${onde} ${periodo}. Se precisar, ajuste o período ou confira se já existem RDOs registrados.`;
+    return (
+      `Não achei diários em ${obraLabel} para ${periodoCurto} (${ctx.dataInicio} a ${ctx.dataFim}). ` +
+      `Se quiser, tenta outro período — ou me confirma se já existem RDOs lançados.`
+    );
   }
 
   if (intencao === 'chuva_clima') {
     const datas =
       ctx.datasChuva.length > 0
-        ? `\nDatas com chuva: ${ctx.datasChuva.join(', ')}.`
+        ? ` Dias com chuva: ${ctx.datasChuva.join(', ')}.`
         : '';
     return (
-      `${onde.charAt(0).toUpperCase() + onde.slice(1)}, ${periodo}, analisei ${ctx.totalRdos} diário(s) ` +
-      `(${ctx.aprovados} aprovado(s)).\n` +
-      `Chuva ou tempo instável: ${ctx.diasChuva} dia(s).${datas}\n` +
-      `Sol: ${ctx.diasSol} | Nublado: ${ctx.diasNublado} | Outros/não informado: ${ctx.diasOutros}.`
+      `Olhei ${ctx.totalRdos} diário(s) de ${obraLabel} (${periodoCurto}). ` +
+      `Chuva ou tempo instável em ${ctx.diasChuva} dia(s); sol em ${ctx.diasSol}; nublado em ${ctx.diasNublado}.` +
+      datas +
+      (ctx.diasOutros
+        ? ` Em ${ctx.diasOutros} dia(s) o clima não veio bem informado.`
+        : '') +
+      ` Quer o detalhe de algum dia?`
     );
   }
 
   if (intencao === 'efetivo') {
     const lista = Object.entries(ctx.profissionaisMap)
       .sort((a, b) => b[1] - a[1])
-      .map(([nome, qtd]) => `- ${nome}: ${qtd} (acumulado no período)`)
+      .slice(0, 8)
+      .map(([nome, qtd]) => `• ${nome}: ${qtd} (acumulado)`)
       .join('\n');
     return (
-      `${onde.charAt(0).toUpperCase() + onde.slice(1)}, ${periodo}:\n` +
-      `- Efetivo acumulado: ${ctx.totalEfetivoAcumulado}\n` +
-      `- Média diária: ${ctx.mediaEfetivo} profissional(is)\n` +
-      (lista ? `Distribuição:\n${lista}` : '- Sem profissionais detalhados nos diários.')
+      `Em ${obraLabel}, ${periodoCurto}: média de cerca de ${ctx.mediaEfetivo} profissional(is)/dia ` +
+      `(${ctx.totalEfetivoAcumulado} no acumulado, em ${ctx.totalRdos} diários).` +
+      (lista ? `\n${lista}` : ' Os diários não detalham as funções.') +
+      `\nQuer filtrar por função ou por data?`
     );
   }
 
   if (intencao === 'atividades') {
     if (ctx.topAtividades.length === 0) {
-      return `Não há atividades executadas registradas ${onde} ${periodo}.`;
+      return `Não vi atividades executadas registradas em ${obraLabel} (${periodoCurto}).`;
     }
     const lista = ctx.topAtividades
       .slice(0, 10)
-      .map((a) => `- ${a.item} (${a.count}x)`)
+      .map((a) => `• ${a.item} (${a.count}x)`)
       .join('\n');
-    return `Principais atividades executadas ${onde} ${periodo} (${ctx.totalRdos} diários):\n${lista}`;
+    return (
+      `Pelos diários de ${obraLabel} (${periodoCurto}), estas atividades aparecem com mais frequência:\n${lista}\n` +
+      `Quer que eu aprofunde alguma delas?`
+    );
   }
 
   if (intencao === 'pendencias') {
     if (ctx.topPendencias.length === 0) {
-      return `Não há pendências registradas ${onde} ${periodo}.`;
+      return `Boa notícia: não achei pendências registradas em ${obraLabel} nesse período (${periodoCurto}).`;
     }
     const lista = ctx.topPendencias
       .slice(0, 10)
-      .map((a) => `- ${a.item} (${a.count}x)`)
+      .map((a) => `• ${a.item} (${a.count}x)`)
       .join('\n');
-    return `Pendências mais citadas ${onde} ${periodo}:\n${lista}`;
+    return (
+      `Em ${obraLabel} (${periodoCurto}), estas pendências aparecem nos diários:\n${lista}\n` +
+      `Quer priorizar alguma?`
+    );
   }
 
   if (intencao === 'status_rdos') {
     const pendEmpresa =
       extras?.totalPendentesEmpresa != null
-        ? `\nPendentes de aprovação na empresa agora: ${extras.totalPendentesEmpresa}.`
+        ? ` Na empresa agora há ${extras.totalPendentesEmpresa} aguardando aprovação.`
         : '';
     return (
-      `${onde.charAt(0).toUpperCase() + onde.slice(1)}, ${periodo}:\n` +
-      `- Total de diários: ${ctx.totalRdos}\n` +
-      `- Aprovados: ${ctx.aprovados}\n` +
-      `- Submetidos (aguardando): ${ctx.submetidos}\n` +
-      `- Rascunhos/em preenchimento: ${ctx.rascunhos}\n` +
-      `- Rejeitados: ${ctx.rejeitados}` +
-      pendEmpresa
+      `Em ${obraLabel}, ${periodoCurto}, tenho ${ctx.totalRdos} diário(s): ` +
+      `${ctx.aprovados} aprovado(s), ${ctx.submetidos} submetido(s), ` +
+      `${ctx.rascunhos} em rascunho/preenchimento e ${ctx.rejeitados} rejeitado(s).` +
+      pendEmpresa +
+      ` Precisa do detalhe de algum status?`
     );
   }
 
-  // fallback genérico com fatos
   void pergunta;
   return null;
 }
 
-/** Resposta local limpa quando a API externa falha (sem mencionar chave/créditos). */
+/**
+ * Fallback local. NÃO despeja resumo de RDO em papo externo/conversacional.
+ */
 export function respostaLocalAmigavel(
   ctx: ContextoAgregado | null,
   extras?: {
     obrasAtivas?: string[];
     totalRdosMes?: number;
     totalPendentes?: number;
+    mensagem?: string;
+    assuntoExterno?: boolean;
   },
 ): string {
-  if (ctx && ctx.totalRdos > 0) {
+  if (extras?.assuntoExterno) {
     return (
-      `Consultei os diários ${ctx.escopo === 'obra' ? `da obra ${ctx.obraNome || 'ativa'}` : 'da empresa'} ` +
-      `(${ctx.dataInicio} a ${ctx.dataFim}): ${ctx.totalRdos} registro(s), ` +
-      `${ctx.diasChuva} dia(s) com chuva, média de ${ctx.mediaEfetivo} profissional(is)/dia, ` +
-      `${ctx.aprovados} aprovado(s) e ${ctx.submetidos} aguardando aprovação.\n\n` +
-      `Se quiser, pergunte de forma específica (ex.: dias de chuva, efetivo ou atividades no período).`
+      'Sobre esse tema externo: posso consultar fontes abertas e confiáveis (normas com escopo público, Wikipedia, sites .gov.br), ' +
+      'mas não consigo puxar o texto completo de catálogos pagos como o da ABNT. ' +
+      'Me diga a NBR ou o link que você quer que eu olhe — e se preferir, volto aos dados da sua obra.'
+    );
+  }
+
+  const n = normalizarTexto(extras?.mensagem || '');
+  const pareceObra =
+    !n ||
+    /rdo|diario|relatorio|chuva|efetivo|obra|pendenc|atividade|canteiro|aprovad|submetid/.test(
+      n,
+    );
+
+  if (!pareceObra) {
+    const obras = extras?.obrasAtivas?.slice(0, 3).join(', ') || 'suas obras';
+    return (
+      `Posso te ajudar com os diários de ${obras}, ou com uma busca em fonte aberta (norma, conceito técnico). ` +
+      `É só falar o que você precisa — por exemplo: “quantos RDOs até hoje?” ou “o que é a NBR 6118?”.`
+    );
+  }
+
+  if (ctx && ctx.totalRdos > 0) {
+    const onde =
+      ctx.escopo === 'obra'
+        ? ctx.obraNome || 'a obra ativa'
+        : 'suas obras';
+    return (
+      `Dando uma olhada rápida em ${onde} (${ctx.periodoLabel}): ` +
+      `${ctx.totalRdos} diário(s), ${ctx.diasChuva} dia(s) com chuva, média de ${ctx.mediaEfetivo} profissional(is)/dia, ` +
+      `${ctx.aprovados} aprovado(s). ` +
+      `Quer que eu foque em chuva, efetivo, atividades ou pendências?`
     );
   }
 
   const obras = extras?.obrasAtivas?.join(', ') || 'nenhuma obra ativa';
   return (
-    `Olá! Sou a Luna, sua assistente no Obra 10. Neste momento consigo te adiantar:\n` +
-    `- Obras ativas: ${obras}\n` +
-    `- RDOs este mês: ${extras?.totalRdosMes ?? 0}\n` +
-    `- Pendentes de aprovação: ${extras?.totalPendentes ?? 0}\n\n` +
-    `Pergunte sobre chuva, efetivo ou atividades da obra ativa que eu consulto os diários no banco.`
+    `Estou por aqui. Obras ativas: ${obras}. Este mês: ${extras?.totalRdosMes ?? 0} RDO(s); ` +
+    `${extras?.totalPendentes ?? 0} aguardando aprovação. ` +
+    `Pergunta o que quiser sobre os diários — ou manda uma dúvida técnica que eu consulto fonte aberta.`
   );
 }

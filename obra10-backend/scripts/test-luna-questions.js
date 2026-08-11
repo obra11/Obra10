@@ -87,7 +87,7 @@ async function main() {
   console.log(`Obra: ${obra.nome} (${obra.id})`);
   console.log('---');
 
-  async function ask(message, obraId) {
+  async function ask(message, obraId, history = []) {
     const res = await fetch(`${API}/ai/chat`, {
       method: 'POST',
       headers: {
@@ -97,7 +97,7 @@ async function main() {
         'x-xsrf-token': xsrf || '',
         Cookie: `obra10_token=${token}; XSRF-TOKEN=${xsrf || ''}`,
       },
-      body: JSON.stringify({ message, history: [] }),
+      body: JSON.stringify({ message, history }),
     });
     const data = await res.json().catch(() => ({}));
     return { ok: res.ok, statusCode: res.status, reply: data.reply || JSON.stringify(data) };
@@ -117,7 +117,7 @@ async function main() {
     }
     if (
       /até hoje/i.test(message) &&
-      /Não encontrei diários/i.test(reply) &&
+      /Não (encontrei|achei) diários/i.test(reply) &&
       /\(hoje\)/.test(reply)
     ) {
       status = 'FAIL';
@@ -125,13 +125,12 @@ async function main() {
     if (
       /até hoje/i.test(message) &&
       /VICTORIA/i.test(obra.nome) &&
-      /Total de diários:\s*0|Não encontrei/.test(reply)
+      /Total de diários:\s*0|Não (encontrei|achei)/i.test(reply)
     ) {
-      // VICTORIA tem RDOs — resposta vazia é regressão
       status = 'FAIL';
     }
     if (/obras ativas/i.test(message) && /Acme|Drunn|Complexo Comercial Delta/i.test(reply)) {
-      status = 'FAIL'; // vazamento multi-tenant
+      status = 'FAIL';
     }
 
     const short = reply.length > 280 ? `${reply.slice(0, 280)}…` : reply;
@@ -140,13 +139,36 @@ async function main() {
     results.push({ status, message, reply: short });
   }
 
+  // Sequência ABNT: follow-up NÃO pode virar resumo de diários
+  {
+    const q1 = 'pesquise online o que é NBR 6118';
+    const a1 = await ask(q1, obra.id);
+    const q2 = 'Ok poderia me extrair desse catálogo da ABNT as informações';
+    const history = [
+      { role: 'user', content: q1 },
+      { role: 'assistant', content: a1.reply },
+    ];
+    const a2 = await ask(q2, obra.id, history);
+    let status = a2.ok ? 'OK' : 'ERR';
+    if (/Consultei os diários/i.test(a2.reply)) status = 'FAIL';
+    if (/VICTORIA RESIDENCE.*chuva|média de \d+ profissional/i.test(a2.reply)) {
+      status = 'FAIL';
+    }
+    if (!/abnt|norma|6118|catálogo|catalogo|pago|restrito|oficial/i.test(a2.reply)) {
+      status = 'FAIL';
+    }
+    const short = a2.reply.length > 320 ? `${a2.reply.slice(0, 320)}…` : a2.reply;
+    console.log(`\n[${status}] [follow-up ABNT] ${q2}`);
+    console.log(short);
+    results.push({ status, message: `[follow-up ABNT] ${q2}`, reply: short });
+  }
+
   // Isolamento: obra de outra empresa com x-obra-id estranho
   {
     const message = 'quantos RDOs até hoje?';
     const { reply } = await ask(message, OBRA_OUTRA_EMPRESA);
     let status = 'OK';
     if (/Acme|Complexo Comercial Delta|MVP Lumière/i.test(reply)) status = 'FAIL';
-    // Deve cair para empresa do usuário (Lunardeli 95ab...) sem vazar Acme
     const short = reply.length > 280 ? `${reply.slice(0, 280)}…` : reply;
     console.log(`\n[${status}] [tenant] obra de outra empresa → ${message}`);
     console.log(short);

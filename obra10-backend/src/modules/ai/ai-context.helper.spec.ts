@@ -1,12 +1,16 @@
 import {
   detectarConsultaOnline,
   detectarEscopo,
+  detectarFollowUpExterno,
   detectarIntencaoFactual,
   formatarDataISO,
   inferirPeriodo,
+  montarConsultaComHistorico,
   responderFactual,
+  respostaLocalAmigavel,
   type ContextoAgregado,
 } from './ai-context.helper';
+import { formatarRespostaOnline, urlEhConfiavel } from './ai-online.helper';
 
 const AGORA = new Date(2026, 7, 11, 15, 0, 0); // 11/08/2026
 
@@ -124,25 +128,85 @@ describe('detectarConsultaOnline', () => {
   });
 });
 
-describe('responderFactual — perguntas comuns', () => {
+describe('detectarFollowUpExterno', () => {
+  const historyAbnt = [
+    {
+      role: 'assistant' as const,
+      content:
+        'A NBR 6118 trata de estruturas de concreto.\n\nFonte: https://www.abntcatalogo.com.br/',
+    },
+  ];
+
+  it('detecta follow-up de extração do catálogo ABNT', () => {
+    expect(
+      detectarFollowUpExterno(
+        'Ok poderia me extrair desse catálogo da ABNT as informações',
+        historyAbnt,
+      ),
+    ).toBe(true);
+  });
+
+  it('não trata contagem de RDO como follow-up externo', () => {
+    expect(
+      detectarFollowUpExterno('quantos RDOs até hoje?', historyAbnt),
+    ).toBe(false);
+  });
+
+  it('sem histórico externo → false', () => {
+    expect(
+      detectarFollowUpExterno('extrai as informações desse catálogo', []),
+    ).toBe(false);
+  });
+
+  it('montarConsultaComHistorico pega URL e NBR', () => {
+    const { consulta, urls } = montarConsultaComHistorico(
+      'extrai desse catálogo',
+      historyAbnt,
+    );
+    expect(urls.some((u) => u.includes('abntcatalogo'))).toBe(true);
+    expect(consulta.toLowerCase()).toMatch(/nbr|abnt|extrai/);
+  });
+});
+
+describe('urlEhConfiavel / formatarRespostaOnline', () => {
+  it('allowlist', () => {
+    expect(urlEhConfiavel('https://www.abntcatalogo.com.br/')).toBe(true);
+    expect(urlEhConfiavel('https://pt.wikipedia.org/wiki/Test')).toBe(true);
+    expect(urlEhConfiavel('https://evil.example.com/x')).toBe(false);
+  });
+
+  it('formatação natural sem prefixo rígido', () => {
+    const t = formatarRespostaOnline({
+      ok: true,
+      resumo: 'Texto útil',
+      fonte: 'https://www.abntcatalogo.com.br/',
+    });
+    expect(t).toContain('Texto útil');
+    expect(t).toContain('Fonte:');
+    expect(t).not.toMatch(/^Consulta online:/);
+  });
+});
+
+describe('responderFactual — tom natural', () => {
   it('contagem até hoje', () => {
     const r = responderFactual(
       'status_rdos',
       ctxBase(),
       'quantos relatórios foram executados até hoje',
     );
-    expect(r).toContain('Total de diários: 3');
+    expect(r).toContain('3 diário');
     expect(r).toContain('VICTORIA RESIDENCE');
+    expect(r).not.toMatch(/^- Total de diários:/m);
   });
 
   it('chuva', () => {
     const r = responderFactual('chuva_clima', ctxBase(), 'quantos dias de chuva?');
-    expect(r).toContain('0 dia(s)');
+    expect(r).toMatch(/0 dia/);
   });
 
   it('efetivo', () => {
     const r = responderFactual('efetivo', ctxBase(), 'qual o efetivo?');
-    expect(r).toContain('Média diária: 5');
+    expect(r).toMatch(/5 profissional/);
     expect(r).toContain('Pedreiro');
   });
 
@@ -152,6 +216,24 @@ describe('responderFactual — perguntas comuns', () => {
       ctxBase({ totalRdos: 0, aprovados: 0, rascunhos: 0 }),
       'quantos RDOs hoje',
     );
-    expect(r).toMatch(/Não encontrei diários/);
+    expect(r).toMatch(/Não achei diários|Não encontrei/i);
+  });
+});
+
+describe('respostaLocalAmigavel', () => {
+  it('assunto externo NÃO vira dump de diários', () => {
+    const r = respostaLocalAmigavel(ctxBase(), {
+      mensagem: 'extrai desse catálogo da ABNT',
+      assuntoExterno: true,
+    });
+    expect(r).not.toContain('Consultei os diários');
+    expect(r.toLowerCase()).toMatch(/abnt|norma|fonte/);
+  });
+
+  it('pergunta de obra pode resumir diários', () => {
+    const r = respostaLocalAmigavel(ctxBase(), {
+      mensagem: 'como estão os diários?',
+    });
+    expect(r).toMatch(/diário|VICTORIA|chuva/i);
   });
 });

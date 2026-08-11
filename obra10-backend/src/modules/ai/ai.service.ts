@@ -14,12 +14,14 @@ import {
   classificarClima,
   detectarConsultaOnline,
   detectarEscopo,
+  detectarFollowUpExterno,
   detectarIntencaoFactual,
   extrairEfetivoDoRdo,
   extrairLinhasDeTexto,
   formatarContextoParaPrompt,
   formatarDataISO,
   inferirPeriodo,
+  montarConsultaComHistorico,
   responderFactual,
   respostaLocalAmigavel,
   textoClimaDeExtras,
@@ -634,11 +636,17 @@ ${JSON.stringify(ctx.dias.slice(0, 40), null, 2)}`;
     const periodo = inferirPeriodo(message, agora);
     const escopo = detectarEscopo(message, obraIdHeader);
     const intencao = detectarIntencaoFactual(message);
-    const querOnline = detectarConsultaOnline(message);
+    const followUpExterno = detectarFollowUpExterno(message, history || []);
+    const querOnline =
+      detectarConsultaOnline(message) || followUpExterno;
 
-    // Consulta online explícita (informação pública — sem dados de outras empresas)
-    if (querOnline && !intencao) {
-      const online = await consultarOnline(message);
+    // 1) Online / follow-up externo — NÃO cair em resumo de RDO
+    if (querOnline && (!intencao || followUpExterno)) {
+      const { consulta, urls } = montarConsultaComHistorico(
+        message,
+        history || [],
+      );
+      const online = await consultarOnline(consulta, { urls });
       return { reply: formatarRespostaOnline(online) };
     }
 
@@ -653,8 +661,6 @@ ${JSON.stringify(ctx.dias.slice(0, 40), null, 2)}`;
         periodoLabel: periodo.label,
       });
 
-      // Se a janela padrão (30 dias) veio vazia — e o usuário NÃO pediu
-      // explicitamente "últimos N dias" — amplia para o histórico.
       const pediuJanelaExplicita = /ultimos?\s+\d+\s+dias?/.test(
         (message || '')
           .toLowerCase()
@@ -690,15 +696,19 @@ ${JSON.stringify(ctx.dias.slice(0, 40), null, 2)}`;
       );
     }
 
-    // 1) Respostas factuais diretas do banco (sempre filtradas por empresaId)
+    // 2) Fatos do banco (tenant-scoped), tom natural
     if (intencao && ctx) {
       const factual = responderFactual(intencao, ctx, message, {
         obrasAtivas: listaObrasNomes,
         totalPendentesEmpresa: totalPendentes,
       });
       if (factual) {
-        if (querOnline) {
-          const online = await consultarOnline(message);
+        if (querOnline && !followUpExterno) {
+          const { consulta, urls } = montarConsultaComHistorico(
+            message,
+            history || [],
+          );
+          const online = await consultarOnline(consulta, { urls });
           return {
             reply: `${factual}\n\n${formatarRespostaOnline(online)}`,
           };
@@ -708,32 +718,36 @@ ${JSON.stringify(ctx.dias.slice(0, 40), null, 2)}`;
     }
     if (intencao === 'obras') {
       return {
-        reply: responderFactual('obras', ctx || ({
-          escopo: 'empresa',
-          dataInicio: formatarDataISO(periodo.dataInicio),
-          dataFim: formatarDataISO(periodo.dataFim),
-          periodoLabel: periodo.label,
-          totalRdos: 0,
-          aprovados: 0,
-          submetidos: 0,
-          rascunhos: 0,
-          rejeitados: 0,
-          porStatus: {},
-          diasChuva: 0,
-          datasChuva: [],
-          diasSol: 0,
-          diasNublado: 0,
-          diasOutros: 0,
-          mediaEfetivo: 0,
-          totalEfetivoAcumulado: 0,
-          profissionaisMap: {},
-          topAtividades: [],
-          topPendencias: [],
-          dias: [],
-          obrasNomes: listaObrasNomes,
-        } as ContextoAgregado), message, {
-          obrasAtivas: listaObrasNomes,
-        }),
+        reply: responderFactual(
+          'obras',
+          ctx ||
+            ({
+              escopo: 'empresa',
+              dataInicio: formatarDataISO(periodo.dataInicio),
+              dataFim: formatarDataISO(periodo.dataFim),
+              periodoLabel: periodo.label,
+              totalRdos: 0,
+              aprovados: 0,
+              submetidos: 0,
+              rascunhos: 0,
+              rejeitados: 0,
+              porStatus: {},
+              diasChuva: 0,
+              datasChuva: [],
+              diasSol: 0,
+              diasNublado: 0,
+              diasOutros: 0,
+              mediaEfetivo: 0,
+              totalEfetivoAcumulado: 0,
+              profissionaisMap: {},
+              topAtividades: [],
+              topPendencias: [],
+              dias: [],
+              obrasNomes: listaObrasNomes,
+            } as ContextoAgregado),
+          message,
+          { obrasAtivas: listaObrasNomes },
+        ),
       };
     }
 
@@ -741,31 +755,35 @@ ${JSON.stringify(ctx.dias.slice(0, 40), null, 2)}`;
       ? formatarContextoParaPrompt(ctx)
       : 'Sem diários disponíveis no período.';
 
-    const systemPrompt = `Você é a Luna, assistente de IA do Obra 10, plataforma de gestão de obras.
-Responda sempre em português brasileiro. Seja objetiva, direta e profissional, mas com tom acolhedor.
-Nunca invente dados — use apenas as informações abaixo.
-Se não tiver a informação, diga que não tem acesso no momento.
-Para ações que não pode executar (aprovar, criar registros), oriente o usuário a fazer manualmente.
-NUNCA mencione, invente ou misture dados de outras empresas. Você só tem acesso aos dados da empresa do usuário logado.
-Quando o usuário pedir informação geral (normas, conceitos, preços públicos), você pode usar conhecimento geral, mas deixe claro o que veio do banco da obra e o que é informação externa.
+    const systemPrompt = `Você é a Luna, assistente do Obra 10 — plataforma de gestão de obras.
+Fale em português brasileiro, de forma natural e espontânea: profissional, calorosa, como uma colega de confiança no canteiro. Evite tom de robô, listagens secas e jargão de sistema.
+Use o histórico da conversa: se o usuário continuar um assunto (ex.: norma ABNT), responda a esse fio — não mude para resumo de diários sem pedido.
+Nunca invente números de obra. Dados da empresa vêm só do contexto abaixo (somente o tenant do usuário).
+Separe com clareza: o que veio dos diários da obra vs. informação de fonte externa/aberta.
+Para normas ABNT, não invente cláusulas; diga o escopo público e aponte o catálogo oficial se o texto for pago.
+Se faltar dado, diga com naturalidade e ofereça o próximo passo (uma pergunta curta de continuidade).
+Não execute ações (aprovar RDO, criar registros): oriente o usuário a fazer no sistema.
 
-DADOS RÁPIDOS DA EMPRESA (somente desta empresa):
+DADOS RÁPIDOS (só desta empresa):
 - Obras ativas: ${listaObras}
 - RDOs este mês: ${totalRdosMes}
-- RDOs pendentes de aprovação agora: ${totalPendentes}
+- Pendentes de aprovação: ${totalPendentes}
 
-CONTEXTO DETALHADO DOS DIÁRIOS (banco — somente desta empresa):
+CONTEXTO DOS DIÁRIOS (banco — só desta empresa):
 ${contextoRico}`;
+
+    const fallbackLocal = () =>
+      respostaLocalAmigavel(ctx, {
+        obrasAtivas: listaObrasNomes,
+        totalRdosMes,
+        totalPendentes,
+        mensagem: message,
+        assuntoExterno: querOnline || followUpExterno,
+      });
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey || !Anthropic) {
-      return {
-        reply: respostaLocalAmigavel(ctx, {
-          obrasAtivas: listaObrasNomes,
-          totalRdosMes,
-          totalPendentes,
-        }),
-      };
+      return { reply: fallbackLocal() };
     }
 
     const client = new Anthropic.default({ apiKey });
@@ -821,19 +839,9 @@ ${contextoRico}`;
 
       const reply =
         response.content[0]?.type === 'text' ? response.content[0].text : '';
-      return {
-        reply:
-          reply ||
-          respostaLocalAmigavel(ctx, {
-            obrasAtivas: listaObrasNomes,
-            totalRdosMes,
-            totalPendentes,
-          }),
-      };
+      return { reply: reply || fallbackLocal() };
     } catch (err: any) {
-      this.logger.error(
-        `[AiService] Erro no chat Luna: ${err?.message}`,
-      );
+      this.logger.error(`[AiService] Erro no chat Luna: ${err?.message}`);
 
       if (ctx && intencao) {
         const factual = responderFactual(intencao, ctx, message, {
@@ -843,13 +851,7 @@ ${contextoRico}`;
         if (factual) return { reply: factual };
       }
 
-      return {
-        reply: respostaLocalAmigavel(ctx, {
-          obrasAtivas: listaObrasNomes,
-          totalRdosMes,
-          totalPendentes,
-        }),
-      };
+      return { reply: fallbackLocal() };
     }
   }
 }

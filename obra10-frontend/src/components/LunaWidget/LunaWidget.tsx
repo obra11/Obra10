@@ -32,7 +32,7 @@ export default function LunaWidget() {
     {
       role: 'assistant',
       content:
-        'Olá! Sou a Luna, sua assistente no Obra 10. Posso consultar os diários da obra ativa (chuva, efetivo, atividades, pendências) e te ajudar a navegar pelo sistema. Como posso ajudar?',
+        'Oi! Sou a Luna. Posso olhar os diários da obra (chuva, efetivo, atividades…) ou te ajudar com uma dúvida técnica em fonte aberta. O que você precisa?',
     },
   ]);
   const [input, setInput] = useState('');
