@@ -489,13 +489,25 @@ export class PdfService {
 
     // ── ATIVIDADES PENDENTES ─────────────────────────────────────────────────────
     const atividadesPendentes = extras.atividadesPendentes || '';
-    if (atividadesPendentes) {
+    if (atividadesPendentes && (Array.isArray(atividadesPendentes) ? atividadesPendentes.length > 0 : true)) {
       drawSectionTitle('ATIVIDADES PENDENTES / PROXIMAS');
-      const lines = wrapText(atividadesPendentes, CONTENT_W - 8, 8, reg);
-      for (const line of lines) {
-        ensureSpace(12);
-        drawText(line, m.l + 4, ctx.y, 8, reg, DARK);
-        ctx.y -= 12;
+      if (Array.isArray(atividadesPendentes)) {
+        for (const a of atividadesPendentes) {
+          const desc = typeof a === 'string' ? a : a?.descricao || '';
+          const resp = typeof a === 'string' ? '' : a?.responsavel || '';
+          if (!desc && !resp) continue;
+          const label = resp
+            ? `- ${desc} (Responsavel: ${resp})`
+            : `- ${desc}`;
+          drawMultiLineText(label, m.l + 4, 8, reg, 12);
+        }
+      } else {
+        const lines = wrapText(String(atividadesPendentes), CONTENT_W - 8, 8, reg);
+        for (const line of lines) {
+          ensureSpace(12);
+          drawText(line, m.l + 4, ctx.y, 8, reg, DARK);
+          ctx.y -= 12;
+        }
       }
       ctx.y -= 6;
     }
@@ -512,13 +524,21 @@ export class PdfService {
 
     // ── OBSERVACOES GERAIS ───────────────────────────────────────────────────────
     const observacoes = extras.observacoes || extras.observacoesGerais || '';
-    if (observacoes) {
+    if (observacoes && (Array.isArray(observacoes) ? observacoes.length > 0 : true)) {
       drawSectionTitle('OBSERVACOES GERAIS');
-      const lines = wrapText(observacoes, CONTENT_W - 8, 8, reg);
-      for (const line of lines) {
-        ensureSpace(12);
-        drawText(line, m.l + 4, ctx.y, 8, reg, DARK);
-        ctx.y -= 12;
+      if (Array.isArray(observacoes)) {
+        for (const o of observacoes) {
+          const desc = typeof o === 'string' ? o : o?.descricao || '';
+          if (!desc) continue;
+          drawMultiLineText(`- ${desc}`, m.l + 4, 8, reg, 12);
+        }
+      } else {
+        const lines = wrapText(String(observacoes), CONTENT_W - 8, 8, reg);
+        for (const line of lines) {
+          ensureSpace(12);
+          drawText(line, m.l + 4, ctx.y, 8, reg, DARK);
+          ctx.y -= 12;
+        }
       }
       ctx.y -= 6;
     }

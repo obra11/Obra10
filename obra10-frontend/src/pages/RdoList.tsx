@@ -25,11 +25,13 @@ import {
   FileSpreadsheet,
   FileCode,
   Trash2,
+  File,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MediaGalleryModal } from '../components/MediaGalleryModal';
 import api from '../services/api';
 import { RdoShareBar } from '../components/RdoShareBar';
+import { downloadRdosPdfZip } from '../utils/rdoPdfZip';
 import {
   ResponsiveContainer,
   BarChart,
@@ -114,21 +116,28 @@ export const RdoList: React.FC = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState('');
+  const [exportSelectedIds, setExportSelectedIds] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importError, setImportError] = useState('');
   const [parsedRdos, setParsedRdos] = useState<any[]>([]);
 
+  const getSelectedRdosForExport = () =>
+    rdos.filter((r) => exportSelectedIds.includes(r.id));
+
   // Exportar para Excel (.xlsx)
   const exportToExcel = async () => {
-    if (!rdos || rdos.length === 0) {
-      alert('Não há relatórios para exportar nesta obra.');
+    const selecionados = getSelectedRdosForExport();
+    if (selecionados.length === 0) {
+      alert('Selecione ao menos um diário para exportar.');
       return;
     }
     try {
       setExporting(true);
+      setExportProgress('Montando planilha...');
       const rdosCompletos = await Promise.all(
-        rdos.map(async (r) => {
+        selecionados.map(async (r) => {
           try {
             const res = await api.get(`/rdos/${r.id}`, { headers: { 'x-obra-id': obraAtiva?.id } });
             return res.data;
@@ -153,8 +162,22 @@ export const RdoList: React.FC = () => {
           'Atividades Executadas': Array.isArray(extras.atividadesExecutadas)
             ? extras.atividadesExecutadas.map((a: any) => a.descricao).join('; ')
             : extras.atividadesExecutadas || '',
-          'Atividades Pendentes': extras.atividadesPendentes || '',
-          'Observações Gerais': extras.observacoes || '',
+          'Atividades Pendentes': Array.isArray(extras.atividadesPendentes)
+            ? extras.atividadesPendentes
+                .map((a: any) => {
+                  const desc = typeof a === 'string' ? a : a?.descricao || '';
+                  const resp = typeof a === 'string' ? '' : a?.responsavel || '';
+                  return resp ? `${desc} (Responsável: ${resp})` : desc;
+                })
+                .filter(Boolean)
+                .join('; ')
+            : extras.atividadesPendentes || '',
+          'Observações Gerais': Array.isArray(extras.observacoes)
+            ? extras.observacoes
+                .map((o: any) => (typeof o === 'string' ? o : o?.descricao || ''))
+                .filter(Boolean)
+                .join('; ')
+            : extras.observacoes || '',
         };
       });
 
@@ -220,19 +243,22 @@ export const RdoList: React.FC = () => {
       alert('Erro ao gerar planilha Excel: ' + (err?.message || err));
     } finally {
       setExporting(false);
+      setExportProgress('');
     }
   };
 
   // Exportar para JSON (Backup)
   const exportToJson = async () => {
-    if (!rdos || rdos.length === 0) {
-      alert('Não há relatórios para exportar nesta obra.');
+    const selecionados = getSelectedRdosForExport();
+    if (selecionados.length === 0) {
+      alert('Selecione ao menos um diário para exportar.');
       return;
     }
     try {
       setExporting(true);
+      setExportProgress('Montando backup JSON...');
       const rdosCompletos = await Promise.all(
-        rdos.map(async (r) => {
+        selecionados.map(async (r) => {
           try {
             const res = await api.get(`/rdos/${r.id}`, { headers: { 'x-obra-id': obraAtiva?.id } });
             return res.data;
@@ -255,6 +281,38 @@ export const RdoList: React.FC = () => {
       alert('Erro ao gerar arquivo JSON: ' + (err?.message || err));
     } finally {
       setExporting(false);
+      setExportProgress('');
+    }
+  };
+
+  const exportToPdfZip = async (comFotos = false) => {
+    const selecionados = getSelectedRdosForExport();
+    if (selecionados.length === 0) {
+      alert('Selecione ao menos um diário para exportar.');
+      return;
+    }
+    if (!obraAtiva?.id) return;
+    try {
+      setExporting(true);
+      const items = selecionados.map((r) => ({
+        id: r.id,
+        label: `RDO_${format(parseUTCDate(r.dataReferencia), 'yyyy-MM-dd')}_${r.sequencial ?? r.id.slice(-6)}`,
+      }));
+      await downloadRdosPdfZip({
+        obraId: obraAtiva.id,
+        items,
+        comFotos,
+        zipName: `Relatorios_PDF_${obraAtiva.nome || 'Obra'}_${new Date().toISOString().split('T')[0]}${comFotos ? '_ComFotos' : ''}.zip`,
+        onProgress: (current, total) => {
+          setExportProgress(`Gerando PDF ${current}/${total}...`);
+        },
+      });
+      setShowExportModal(false);
+    } catch (err: any) {
+      alert('Erro ao gerar ZIP de PDFs: ' + (err?.message || err));
+    } finally {
+      setExporting(false);
+      setExportProgress('');
     }
   };
 
@@ -401,8 +459,24 @@ export const RdoList: React.FC = () => {
               materiais: matList,
               equipamentos: eqList,
               atividadesExecutadas: atvList,
-              atividadesPendentes: fixEncoding(extras.atividadesPendentes || ''),
-              observacoes: fixEncoding(extras.observacoes || item.observacoes || ''),
+              atividadesPendentes: Array.isArray(extras.atividadesPendentes)
+                ? extras.atividadesPendentes.map((a: any) =>
+                    typeof a === 'string'
+                      ? { descricao: fixEncoding(a), responsavel: '' }
+                      : { descricao: fixEncoding(a?.descricao || ''), responsavel: fixEncoding(a?.responsavel || '') },
+                  )
+                : (extras.atividadesPendentes
+                    ? String(extras.atividadesPendentes).split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean).map((descricao: string) => ({ descricao: fixEncoding(descricao), responsavel: '' }))
+                    : []),
+              observacoes: Array.isArray(extras.observacoes)
+                ? extras.observacoes.map((o: any) =>
+                    typeof o === 'string'
+                      ? { descricao: fixEncoding(o) }
+                      : { descricao: fixEncoding(o?.descricao || '') },
+                  )
+                : (extras.observacoes || item.observacoes
+                    ? String(extras.observacoes || item.observacoes).split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean).map((descricao: string) => ({ descricao: fixEncoding(descricao) }))
+                    : []),
             };
           });
           setParsedRdos(formatted);
@@ -626,7 +700,13 @@ export const RdoList: React.FC = () => {
 
           const formatted = Object.values(allGroupedRdos).map((rdo: any) => ({
             ...rdo,
-            observacoes: rdo.observacoesList.join('; '),
+            observacoes: (rdo.observacoesList || []).map((descricao: string) => ({ descricao })),
+            atividadesPendentes: Array.isArray(rdo.atividadesPendentes)
+              ? rdo.atividadesPendentes
+              : (rdo.atividadesPendentes
+                  ? String(rdo.atividadesPendentes).split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean).map((descricao: string) => ({ descricao, responsavel: '' }))
+                  : []),
+            observacoesList: undefined,
           }));
 
           if (formatted.length === 0) {
@@ -726,8 +806,16 @@ export const RdoList: React.FC = () => {
           materiais: item.materiais || [],
           equipamentos: item.equipamentos || [],
           atividadesExecutadas: item.atividadesExecutadas || [],
-          atividadesPendentes: item.atividadesPendentes || '',
-          observacoes: item.observacoes || '',
+          atividadesPendentes: Array.isArray(item.atividadesPendentes)
+            ? item.atividadesPendentes
+            : (item.atividadesPendentes
+                ? String(item.atividadesPendentes).split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean).map((descricao: string) => ({ descricao, responsavel: '' }))
+                : []),
+          observacoes: Array.isArray(item.observacoes)
+            ? item.observacoes
+            : (item.observacoes
+                ? String(item.observacoes).split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean).map((descricao: string) => ({ descricao }))
+                : []),
         };
 
         // 1. Criar RDO já enviando dadosExtras no POST
@@ -939,6 +1027,28 @@ export const RdoList: React.FC = () => {
       return 0;
     });
 
+  const openExportModal = () => {
+    setExportSelectedIds(rdosFiltrados.map((r) => r.id));
+    setExportProgress('');
+    setShowExportModal(true);
+  };
+
+  const toggleExportId = (id: string) => {
+    setExportSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const selectAllExportFiltered = () => {
+    setExportSelectedIds(rdosFiltrados.map((r) => r.id));
+  };
+
+  const selectAllExportObra = () => {
+    setExportSelectedIds(rdos.map((r) => r.id));
+  };
+
+  const clearExportSelection = () => setExportSelectedIds([]);
+
   return (
     <div className="p-4 md:p-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 md:mb-8 gap-3">
@@ -968,9 +1078,9 @@ export const RdoList: React.FC = () => {
             </button>
           )}
           <button
-            onClick={() => setShowExportModal(true)}
+            onClick={openExportModal}
             className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors"
-            title="Exportar Relatórios (Excel ou JSON)"
+            title="Exportar Relatórios (Excel, JSON ou PDF)"
           >
             <Download size={16} className="text-gray-600" />
             <span>Exportar</span>
@@ -1788,62 +1898,159 @@ export const RdoList: React.FC = () => {
       {/* Modal Exportar Relatórios */}
       {showExportModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-6 space-y-6">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden p-6 space-y-5 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-4 shrink-0">
               <div className="flex items-center gap-2 text-gray-900 font-bold text-lg">
                 <Download className="text-lunardeli-red" size={22} />
-                <span>Exportar Relatórios de Obra</span>
+                <span>Exportar Relatórios</span>
               </div>
               <button
-                onClick={() => setShowExportModal(false)}
+                onClick={() => { if (!exporting) setShowExportModal(false); }}
                 className="text-gray-400 hover:text-gray-600 text-xl font-bold p-1"
+                disabled={exporting}
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-sm text-gray-600">
-              Selecione o formato desejado para exportar todos os Diários de Obra cadastrados nesta obra:
-            </p>
+            <div className="space-y-3 overflow-y-auto pr-1 flex-1 min-h-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-gray-600">
+                  Escolha os diários e o formato de exportação.
+                </p>
+                <span className="text-xs font-semibold text-gray-500 bg-gray-50 border border-gray-200 px-2 py-1 rounded-full">
+                  {exportSelectedIds.length} selecionado(s)
+                </span>
+              </div>
 
-            <div className="grid grid-cols-1 gap-3">
-              <button
-                onClick={exportToExcel}
-                disabled={exporting}
-                className="flex items-center gap-4 p-4 rounded-xl border border-gray-200 hover:border-green-500 hover:bg-green-50/50 transition-all text-left group"
-              >
-                <div className="p-3 bg-green-100 text-green-700 rounded-xl group-hover:scale-105 transition-transform">
-                  <FileSpreadsheet size={24} />
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-900 text-sm">Planilha Excel (.xlsx)</h4>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Exporta abas organizadas com Resumo, Efetivo, Materiais e Atividades.
-                  </p>
-                </div>
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={selectAllExportObra}
+                  disabled={exporting || rdos.length === 0}
+                  className="text-xs font-bold px-3 py-1.5 rounded-lg bg-lunardeli-red text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  Exportar todos
+                </button>
+                <button
+                  type="button"
+                  onClick={selectAllExportFiltered}
+                  disabled={exporting || rdosFiltrados.length === 0}
+                  className="text-xs font-bold px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Só filtrados ({rdosFiltrados.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={clearExportSelection}
+                  disabled={exporting || exportSelectedIds.length === 0}
+                  className="text-xs font-bold px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Limpar
+                </button>
+              </div>
 
-              <button
-                onClick={exportToJson}
-                disabled={exporting}
-                className="flex items-center gap-4 p-4 rounded-xl border border-gray-200 hover:border-blue-500 hover:bg-blue-50/50 transition-all text-left group"
-              >
-                <div className="p-3 bg-blue-100 text-blue-700 rounded-xl group-hover:scale-105 transition-transform">
-                  <FileCode size={24} />
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-900 text-sm">Backup Estruturado (.json)</h4>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Exporta backup completo dos RDOs para restauração ou migração.
-                  </p>
-                </div>
-              </button>
+              <div className="border border-gray-200 rounded-xl max-h-48 overflow-y-auto divide-y divide-gray-100">
+                {rdos.length === 0 ? (
+                  <p className="p-4 text-sm text-gray-400 text-center">Nenhum diário nesta obra.</p>
+                ) : (
+                  rdos.map((rdo) => {
+                    const st = getStatus(rdo.status);
+                    const checked = exportSelectedIds.includes(rdo.id);
+                    return (
+                      <label
+                        key={rdo.id}
+                        className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50 ${checked ? 'bg-red-50/40' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300 text-lunardeli-red focus:ring-lunardeli-red"
+                          checked={checked}
+                          disabled={exporting}
+                          onChange={() => toggleExportId(rdo.id)}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-lunardeli-red">
+                              #{rdo.sequencial ?? rdo.id.slice(-6).toUpperCase()}
+                            </span>
+                            <span className="text-sm text-gray-700">
+                              {format(parseUTCDate(rdo.dataReferencia), 'dd/MM/yyyy')}
+                            </span>
+                          </div>
+                          <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${st.color}`}>
+                            {st.label}
+                          </span>
+                        </div>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-2.5 pt-1">
+                <button
+                  onClick={exportToExcel}
+                  disabled={exporting || exportSelectedIds.length === 0}
+                  className="flex items-center gap-4 p-3.5 rounded-xl border border-gray-200 hover:border-green-500 hover:bg-green-50/50 transition-all text-left group disabled:opacity-50"
+                >
+                  <div className="p-2.5 bg-green-100 text-green-700 rounded-xl">
+                    <FileSpreadsheet size={22} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900 text-sm">Planilha Excel (.xlsx)</h4>
+                    <p className="text-xs text-gray-500 mt-0.5">Resumo, efetivo, materiais e equipamentos.</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={exportToJson}
+                  disabled={exporting || exportSelectedIds.length === 0}
+                  className="flex items-center gap-4 p-3.5 rounded-xl border border-gray-200 hover:border-blue-500 hover:bg-blue-50/50 transition-all text-left group disabled:opacity-50"
+                >
+                  <div className="p-2.5 bg-blue-100 text-blue-700 rounded-xl">
+                    <FileCode size={22} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900 text-sm">Backup JSON (.json)</h4>
+                    <p className="text-xs text-gray-500 mt-0.5">Backup estruturado dos diários selecionados.</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => exportToPdfZip(false)}
+                  disabled={exporting || exportSelectedIds.length === 0}
+                  className="flex items-center gap-4 p-3.5 rounded-xl border border-gray-200 hover:border-lunardeli-red hover:bg-red-50/40 transition-all text-left group disabled:opacity-50"
+                >
+                  <div className="p-2.5 bg-red-100 text-lunardeli-red rounded-xl">
+                    <File size={22} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900 text-sm">PDF (ZIP)</h4>
+                    <p className="text-xs text-gray-500 mt-0.5">Um PDF por diário, compactados em um arquivo.</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => exportToPdfZip(true)}
+                  disabled={exporting || exportSelectedIds.length === 0}
+                  className="flex items-center gap-4 p-3.5 rounded-xl border border-gray-200 hover:border-orange-400 hover:bg-orange-50/40 transition-all text-left group disabled:opacity-50"
+                >
+                  <div className="p-2.5 bg-orange-100 text-orange-700 rounded-xl">
+                    <ImageIcon size={22} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900 text-sm">PDF com fotos (ZIP)</h4>
+                    <p className="text-xs text-gray-500 mt-0.5">PDFs com álbum fotográfico, em um ZIP.</p>
+                  </div>
+                </button>
+              </div>
             </div>
 
             {exporting && (
-              <div className="flex items-center justify-center gap-2 text-sm text-gray-600 font-semibold pt-2">
+              <div className="flex items-center justify-center gap-2 text-sm text-gray-600 font-semibold pt-1 border-t border-gray-100 shrink-0">
                 <Loader2 size={18} className="animate-spin text-lunardeli-red" />
-                <span>Gerando arquivo de exportação...</span>
+                <span>{exportProgress || 'Gerando arquivo de exportação...'}</span>
               </div>
             )}
           </div>
@@ -1937,7 +2144,11 @@ export const RdoList: React.FC = () => {
                           <span className="text-gray-500 truncate">{item.responsavel ? `Resp: ${item.responsavel}` : ''}</span>
                         </div>
                         <div className="text-gray-500 text-[11px] truncate max-w-[200px]">
-                          {item.atividadesExecutadas?.length > 0 ? `${item.atividadesExecutadas.length} atividades` : item.observacoes || 'Sem notas'}
+                          {item.atividadesExecutadas?.length > 0
+                            ? `${item.atividadesExecutadas.length} atividades`
+                            : (Array.isArray(item.observacoes)
+                                ? (item.observacoes[0]?.descricao || 'Sem notas')
+                                : item.observacoes || 'Sem notas')}
                         </div>
                       </div>
                     ))}

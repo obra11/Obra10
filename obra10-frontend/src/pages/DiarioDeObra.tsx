@@ -90,6 +90,53 @@ interface AtividadeExecutadaItem {
   status: 'em andamento' | 'pausado' | 'finalizada';
 }
 
+interface ObservacaoItem {
+  descricao: string;
+}
+
+interface AtividadePendenteItem {
+  descricao: string;
+  responsavel: string;
+}
+
+/** Converte texto legado (string) ou array no formato estruturado de observações. */
+function parseObservacoes(raw: unknown): ObservacaoItem[] {
+  if (typeof raw === 'string') {
+    return raw
+      .split(/\r?\n/)
+      .map(line => line.trim().replace(/^[-*•\d.]+\s*/, '').trim())
+      .filter(Boolean)
+      .map(descricao => ({ descricao }));
+  }
+  if (Array.isArray(raw)) {
+    return raw.map((item: any) =>
+      typeof item === 'string'
+        ? { descricao: item }
+        : { descricao: item?.descricao || '' },
+    );
+  }
+  return [];
+}
+
+/** Converte texto legado (string) ou array no formato estruturado de pendências. */
+function parseAtividadesPendentes(raw: unknown): AtividadePendenteItem[] {
+  if (typeof raw === 'string') {
+    return raw
+      .split(/\r?\n/)
+      .map(line => line.trim().replace(/^[-*•\d.]+\s*/, '').trim())
+      .filter(Boolean)
+      .map(descricao => ({ descricao, responsavel: '' }));
+  }
+  if (Array.isArray(raw)) {
+    return raw.map((item: any) =>
+      typeof item === 'string'
+        ? { descricao: item, responsavel: '' }
+        : { descricao: item?.descricao || '', responsavel: item?.responsavel || '' },
+    );
+  }
+  return [];
+}
+
 /* ═══════════════════════════════════════════════════════════════
    Constants
    ═══════════════════════════════════════════════════════════════ */
@@ -303,8 +350,8 @@ export const DiarioDeObra: React.FC = () => {
           }
           setAtividadesExecutadas(parsedAtividades);
 
-          setAtividadesPendentes(extras.atividadesPendentes || '');
-          setObservacoes(extras.observacoes || '');
+          setAtividadesPendentes(parseAtividadesPendentes(extras.atividadesPendentes));
+          setObservacoes(parseObservacoes(extras.observacoes || extras.observacoesGerais));
           setAprovadorIdSelecionado(rdo.aprovadorId || '');
           setSavedFiles(rdo.anexos || []);
 
@@ -363,10 +410,10 @@ export const DiarioDeObra: React.FC = () => {
   // ── Seção 6 ── Atividades executadas
   const [atividadesExecutadas, setAtividadesExecutadas] = useState<AtividadeExecutadaItem[]>([]);
 
-  // ── Seção 7 ── Atividades pendentes
-  const [atividadesPendentes, setAtividadesPendentes] = useState('');
+  // ── Seção 8 ── Atividades pendentes
+  const [atividadesPendentes, setAtividadesPendentes] = useState<AtividadePendenteItem[]>([]);
 
-  // ── Seção 8 ── Mídias
+  // ── Seção 9 ── Mídias
   const [fotos, setFotos] = useState<Foto[]>([]);
   const [videos, setVideos] = useState<VideoFile[]>([]);
   const [anexos, setAnexos] = useState<Anexo[]>([]);
@@ -379,8 +426,8 @@ export const DiarioDeObra: React.FC = () => {
   const [previousRdos, setPreviousRdos] = useState<any[]>([]);
   const [selectedBaseRdoId, setSelectedBaseRdoId] = useState('');
 
-  // ── Seção 9 ── Observações
-  const [observacoes, setObservacoes] = useState('');
+  // ── Seção 7 ── Observações gerais
+  const [observacoes, setObservacoes] = useState<ObservacaoItem[]>([]);
 
   // ── Seção 10 ── Validação
   const [motivoRejeicao, setMotivoRejeicao] = useState('');
@@ -542,7 +589,7 @@ export const DiarioDeObra: React.FC = () => {
       setProfissionais(extras.profissionais || []);
       setMateriais(extras.materiais || []);
       setEquipamentos(extras.equipamentos || []);
-      setObservacoes(extras.observacoes || '');
+      setObservacoes(parseObservacoes(extras.observacoes || extras.observacoesGerais));
 
       let parsedAtividades: AtividadeExecutadaItem[] = [];
       const rawAtv = extras.atividadesExecutadas;
@@ -556,7 +603,7 @@ export const DiarioDeObra: React.FC = () => {
         parsedAtividades = rawAtv;
       }
       setAtividadesExecutadas(parsedAtividades);
-      setAtividadesPendentes(extras.atividadesPendentes || '');
+      setAtividadesPendentes(parseAtividadesPendentes(extras.atividadesPendentes));
 
       showToast('⚡ Dados importados com sucesso do RDO base!');
     } catch (err: any) {
@@ -1363,7 +1410,45 @@ export const DiarioDeObra: React.FC = () => {
                isCollapsed={!!collapsedSections.sec7}
                onToggle={() => toggleSection('sec7')}
              >
-               <textarea rows={4} className="w-full border border-gray-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red" placeholder="Detalhes adicionais, comentários, paralisações..." value={observacoes} onChange={e => setObservacoes(e.target.value)} disabled={isReadOnly}></textarea>
+               <div className="space-y-3">
+                 {observacoes.map((obs, i) => (
+                   <div key={i} className="flex flex-col sm:flex-row gap-2 items-start p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                     <textarea
+                       rows={2}
+                       className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white resize-y"
+                       placeholder="Detalhes adicionais, comentários, paralisações..."
+                       value={obs.descricao}
+                       onChange={e => {
+                         const newVal = e.target.value;
+                         setObservacoes(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: newVal } : item));
+                       }}
+                       disabled={isReadOnly}
+                     />
+                     <button
+                       type="button"
+                       onClick={() => setObservacoes(prev => prev.filter((_, idx) => idx !== i))}
+                       className="p-1.5 text-red-500 hover:bg-red-50 rounded shrink-0"
+                       title="Remover observação"
+                       disabled={isReadOnly}
+                     >
+                       <Trash2 size={16}/>
+                     </button>
+                   </div>
+                 ))}
+                 {observacoes.length === 0 && (
+                   <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-lg text-gray-400 text-sm">
+                     Nenhuma observação adicionada. Clique abaixo para acrescentar.
+                   </div>
+                 )}
+                 <button
+                   type="button"
+                   onClick={() => setObservacoes(prev => [...prev, { descricao: '' }])}
+                   className="text-sm font-semibold text-lunardeli-red hover:text-red-700 flex items-center gap-1 mt-1 disabled:opacity-50"
+                   disabled={isReadOnly}
+                 >
+                   + Adicionar observação
+                 </button>
+               </div>
              </CollapsibleSection>
            )}
 
@@ -1374,7 +1459,57 @@ export const DiarioDeObra: React.FC = () => {
                isCollapsed={!!collapsedSections.sec8}
                onToggle={() => toggleSection('sec8')}
              >
-               <textarea rows={8} className="w-full border border-gray-300 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red resize-y" placeholder="O que faltou concluir..." value={atividadesPendentes} onChange={e => setAtividadesPendentes(e.target.value)} disabled={isReadOnly}></textarea>
+               <div className="space-y-3">
+                 {atividadesPendentes.map((atv, i) => (
+                   <div key={i} className="flex flex-col gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                     <div className="flex flex-col sm:flex-row gap-2 items-start">
+                       <textarea
+                         rows={2}
+                         className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white resize-y"
+                         placeholder="Descrição da atividade pendente..."
+                         value={atv.descricao}
+                         onChange={e => {
+                           const newVal = e.target.value;
+                           setAtividadesPendentes(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: newVal } : item));
+                         }}
+                         disabled={isReadOnly}
+                       />
+                       <button
+                         type="button"
+                         onClick={() => setAtividadesPendentes(prev => prev.filter((_, idx) => idx !== i))}
+                         className="p-1.5 text-red-500 hover:bg-red-50 rounded shrink-0"
+                         title="Remover atividade pendente"
+                         disabled={isReadOnly}
+                       >
+                         <Trash2 size={16}/>
+                       </button>
+                     </div>
+                     <input
+                       className="w-full sm:w-72 border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white disabled:bg-gray-50"
+                       placeholder="Responsável pela atividade..."
+                       value={atv.responsavel}
+                       onChange={e => {
+                         const newVal = e.target.value;
+                         setAtividadesPendentes(prev => prev.map((item, idx) => idx === i ? { ...item, responsavel: newVal } : item));
+                       }}
+                       disabled={isReadOnly}
+                     />
+                   </div>
+                 ))}
+                 {atividadesPendentes.length === 0 && (
+                   <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-lg text-gray-400 text-sm">
+                     Nenhuma atividade pendente. Clique abaixo para acrescentar.
+                   </div>
+                 )}
+                 <button
+                   type="button"
+                   onClick={() => setAtividadesPendentes(prev => [...prev, { descricao: '', responsavel: '' }])}
+                   className="text-sm font-semibold text-lunardeli-red hover:text-red-700 flex items-center gap-1 mt-1 disabled:opacity-50"
+                   disabled={isReadOnly}
+                 >
+                   + Adicionar atividade pendente
+                 </button>
+               </div>
              </CollapsibleSection>
            )}
         </div>
@@ -1805,8 +1940,15 @@ export const DiarioDeObra: React.FC = () => {
                       </div>
                       {/* Barra de exportação / compartilhamento */}
                       {rdoIdAtual && obraId && (
-                        <div className="flex flex-col gap-2">
-                          <p className="text-xs font-bold uppercase tracking-wide text-gray-400">Exportar ou Compartilhar</p>
+                        <div className="mt-1 pt-4 border-t border-gray-200 space-y-3">
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                              Exportar ou compartilhar este diário
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              Ações apenas do RDO atual. Para vários diários, use Exportar na lista.
+                            </p>
+                          </div>
                           <RdoShareBar
                             rdoId={rdoIdAtual}
                             obraId={obraId}
@@ -1815,7 +1957,7 @@ export const DiarioDeObra: React.FC = () => {
                         </div>
                       )}
                       {isGestorOrAdmin && (
-                        <div className="flex gap-3 pt-2 border-t border-gray-200 mt-2">
+                        <div className="flex gap-3 pt-4 border-t border-gray-200 mt-1">
                           <button
                             onClick={handleSalvarRascunho}
                             disabled={saving}

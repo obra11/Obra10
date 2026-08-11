@@ -242,61 +242,77 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
     );
   }
 
-  // ── Modo expandido ─────────────────────────────────────────────────────────────
+  // ── Modo expandido (painel organizado no diário) ──────────────────────────────
   return (
-    <div className="flex items-center gap-2">
-      {/* Download PDF simples */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
       <button
         id="rdo-download-pdf-btn"
         onClick={handleDownloadPdf}
         disabled={pdfLoading || pdfFotosLoading}
         title="Baixar PDF sem fotos"
-        className="flex items-center gap-2 px-3 md:px-4 py-2.5 bg-lunardeli-red text-white text-sm font-bold rounded-xl hover:bg-red-700 active:bg-red-800 shadow-sm transition-colors disabled:opacity-60"
+        className="flex items-start gap-3 p-3.5 bg-white border border-gray-200 rounded-xl hover:border-lunardeli-red hover:bg-red-50/40 active:bg-red-50 transition-colors disabled:opacity-60 text-left"
       >
-        {pdfLoading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-        <span className="hidden sm:inline">PDF</span>
+        <div className="p-2 rounded-lg bg-lunardeli-red text-white shrink-0">
+          {pdfLoading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-gray-900">Baixar PDF</p>
+          <p className="text-xs text-gray-500 mt-0.5">Arquivo sem álbum de fotos</p>
+        </div>
       </button>
 
-      {/* Download com Fotos */}
       <button
         id="rdo-download-pdf-fotos-btn"
         onClick={handleDownloadComFotos}
         disabled={pdfLoading || pdfFotosLoading}
         title="Baixar PDF com álbum fotográfico"
-        className="flex items-center gap-2 px-3 md:px-4 py-2.5 bg-white border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-60"
+        className="flex items-start gap-3 p-3.5 bg-white border border-gray-200 rounded-xl hover:border-orange-400 hover:bg-orange-50/40 active:bg-orange-50 transition-colors disabled:opacity-60 text-left"
       >
-        {pdfFotosLoading ? <Loader2 size={16} className="animate-spin text-gray-500" /> : <Image size={16} />}
-        <span className="hidden sm:inline">+Fotos</span>
+        <div className="p-2 rounded-lg bg-orange-100 text-orange-700 shrink-0">
+          {pdfFotosLoading ? <Loader2 size={16} className="animate-spin" /> : <Image size={16} />}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-gray-900">PDF com fotos</p>
+          <p className="text-xs text-gray-500 mt-0.5">Inclui o álbum fotográfico</p>
+        </div>
       </button>
 
-      {/* Imprimir */}
       <button
         id="rdo-print-btn"
         onClick={handlePrint}
         disabled={pdfLoading}
         title="Imprimir RDO"
-        className="flex items-center gap-2 px-3 md:px-4 py-2.5 bg-white border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-60"
+        className="flex items-start gap-3 p-3.5 bg-white border border-gray-200 rounded-xl hover:border-gray-400 hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-60 text-left"
       >
-        <Printer size={16} />
-        <span className="hidden sm:inline">Imprimir</span>
+        <div className="p-2 rounded-lg bg-gray-100 text-gray-700 shrink-0">
+          <Printer size={16} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-gray-900">Imprimir</p>
+          <p className="text-xs text-gray-500 mt-0.5">Abre o PDF e a impressão</p>
+        </div>
       </button>
 
-      {/* Compartilhar */}
       <button
         id="rdo-share-btn"
         onClick={handleShare}
         disabled={shareLoading}
         title={copied ? 'Link copiado!' : 'Compartilhar via WhatsApp, e-mail…'}
-        className="flex items-center gap-2 px-3 md:px-4 py-2.5 bg-white border border-gray-200 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-60"
+        className="flex items-start gap-3 p-3.5 bg-white border border-gray-200 rounded-xl hover:border-blue-400 hover:bg-blue-50/40 active:bg-blue-50 transition-colors disabled:opacity-60 text-left"
       >
-        {copied
-          ? <CheckCircle size={16} className="text-green-500" />
-          : shareLoading
-            ? <Loader2 size={16} className="animate-spin" />
-            : <Share2 size={16} />}
-        <span className="hidden sm:inline">
-          {copied ? 'Copiado!' : 'Compartilhar'}
-        </span>
+        <div className="p-2 rounded-lg bg-blue-100 text-blue-700 shrink-0">
+          {copied
+            ? <CheckCircle size={16} className="text-green-600" />
+            : shareLoading
+              ? <Loader2 size={16} className="animate-spin" />
+              : <Share2 size={16} />}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-gray-900">
+            {copied ? 'Link copiado!' : 'Compartilhar'}
+          </p>
+          <p className="text-xs text-gray-500 mt-0.5">WhatsApp, e-mail ou copiar link</p>
+        </div>
       </button>
     </div>
   );
