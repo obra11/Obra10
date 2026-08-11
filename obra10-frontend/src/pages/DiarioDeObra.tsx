@@ -5,7 +5,7 @@ import {
   ClipboardList, CloudSun, Users, Hammer, Drill,
   CheckSquare, FileSpreadsheet, Paperclip, MessageSquare, ShieldCheck,
   Plus, Trash2, Video, FileText, Image as ImageIcon, Save, Send, RotateCcw, ArrowLeft,
-  ChevronDown, ChevronUp, Maximize2, Minimize2
+  ChevronDown, ChevronUp, Maximize2, Minimize2, Camera, FolderOpen, Images
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { parseUTCDate } from '../utils/date';
@@ -418,9 +418,14 @@ export const DiarioDeObra: React.FC = () => {
   const [videos, setVideos] = useState<VideoFile[]>([]);
   const [anexos, setAnexos] = useState<Anexo[]>([]);
   const [savedFiles, setSavedFiles] = useState<SavedFile[]>([]);
-  const fotoInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
+  const fotoCameraInputRef = useRef<HTMLInputElement>(null);
+  const fotoGalleryInputRef = useRef<HTMLInputElement>(null);
+  const fotoFilesInputRef = useRef<HTMLInputElement>(null);
+  const videoCameraInputRef = useRef<HTMLInputElement>(null);
+  const videoGalleryInputRef = useRef<HTMLInputElement>(null);
+  const videoFilesInputRef = useRef<HTMLInputElement>(null);
   const anexoInputRef = useRef<HTMLInputElement>(null);
+  const [mediaPicker, setMediaPicker] = useState<null | 'foto' | 'video'>(null);
 
   // ── Clonagem/Cópia de RDO Anterior ──
   const [previousRdos, setPreviousRdos] = useState<any[]>([]);
@@ -702,7 +707,10 @@ export const DiarioDeObra: React.FC = () => {
     setFotos(prev => [...prev, ...files.map(f => ({ file: f, preview: URL.createObjectURL(f), legenda: '' }))]);
   };
   const handleFotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFotosDrop(Array.from(e.target.files || []));
+    const files = Array.from(e.target.files || []).filter(
+      (f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|gif|bmp)$/i.test(f.name),
+    );
+    handleFotosDrop(files);
     e.target.value = '';
   };
 
@@ -740,7 +748,10 @@ export const DiarioDeObra: React.FC = () => {
     setVideos(prev => [...prev, ...files.map(f => ({ file: f, legenda: '' }))]);
   };
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleVideosDrop(Array.from(e.target.files || []));
+    const files = Array.from(e.target.files || []).filter(
+      (f) => f.type.startsWith('video/') || /\.(mp4|mov|webm|avi|mkv|3gp)$/i.test(f.name),
+    );
+    handleVideosDrop(files);
     e.target.value = '';
   };
 
@@ -1530,10 +1541,59 @@ export const DiarioDeObra: React.FC = () => {
                   onDragOver={onDragOver}
                   onDrop={(e) => { e.preventDefault(); if (isReadOnly) return; handleFotosDrop(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))); }}
                >
-                  <div className="flex justify-between items-center mb-4">
+                  <div className="flex justify-between items-center mb-4 relative">
                      <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><ImageIcon size={16}/> Fotos</h3>
-                     <input type="file" multiple accept="image/*" ref={fotoInputRef} className="hidden" onChange={handleFotoUpload} capture="environment" />
-                     <button onClick={() => fotoInputRef.current?.click()} className="text-xs font-semibold text-lunardeli-red hover:underline disabled:opacity-50" disabled={isReadOnly}>+ Upload</button>
+                     <input type="file" accept="image/*" ref={fotoCameraInputRef} className="hidden" onChange={handleFotoUpload} capture="environment" />
+                     <input type="file" multiple accept="image/*" ref={fotoGalleryInputRef} className="hidden" onChange={handleFotoUpload} />
+                     <input type="file" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.gif,image/*" ref={fotoFilesInputRef} className="hidden" onChange={handleFotoUpload} />
+                     <button
+                       type="button"
+                       onClick={() => setMediaPicker(prev => prev === 'foto' ? null : 'foto')}
+                       className="text-xs font-semibold text-lunardeli-red hover:underline disabled:opacity-50"
+                       disabled={isReadOnly}
+                     >
+                       + Upload
+                     </button>
+                     {mediaPicker === 'foto' && (
+                       <>
+                         <button type="button" className="fixed inset-0 z-[90] bg-black/30" aria-label="Fechar" onClick={() => setMediaPicker(null)} />
+                         <div className="absolute right-0 top-8 z-[100] w-56 rounded-xl bg-white shadow-xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
+                           <button
+                             type="button"
+                             className="w-full flex items-center gap-2.5 px-3.5 py-3 text-left text-sm text-gray-800 hover:bg-gray-50"
+                             onClick={() => { setMediaPicker(null); fotoCameraInputRef.current?.click(); }}
+                           >
+                             <Camera size={16} className="text-lunardeli-red shrink-0" />
+                             <span>
+                               <span className="font-semibold block">Tirar foto</span>
+                               <span className="text-[11px] text-gray-500">Abrir a câmera</span>
+                             </span>
+                           </button>
+                           <button
+                             type="button"
+                             className="w-full flex items-center gap-2.5 px-3.5 py-3 text-left text-sm text-gray-800 hover:bg-gray-50"
+                             onClick={() => { setMediaPicker(null); fotoGalleryInputRef.current?.click(); }}
+                           >
+                             <Images size={16} className="text-lunardeli-red shrink-0" />
+                             <span>
+                               <span className="font-semibold block">Galeria</span>
+                               <span className="text-[11px] text-gray-500">Fotos do aparelho</span>
+                             </span>
+                           </button>
+                           <button
+                             type="button"
+                             className="w-full flex items-center gap-2.5 px-3.5 py-3 text-left text-sm text-gray-800 hover:bg-gray-50"
+                             onClick={() => { setMediaPicker(null); fotoFilesInputRef.current?.click(); }}
+                           >
+                             <FolderOpen size={16} className="text-lunardeli-red shrink-0" />
+                             <span>
+                               <span className="font-semibold block">Arquivos / nuvem</span>
+                               <span className="text-[11px] text-gray-500">Pastas, Drive, etc.</span>
+                             </span>
+                           </button>
+                         </div>
+                       </>
+                     )}
                   </div>
                   <div className="space-y-3">
                      {/* Saved Fotos */}
@@ -1624,10 +1684,59 @@ export const DiarioDeObra: React.FC = () => {
                   onDragOver={onDragOver}
                   onDrop={(e) => { e.preventDefault(); if (isReadOnly) return; handleVideosDrop(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('video/'))); }}
                >
-                  <div className="flex justify-between items-center mb-4">
+                  <div className="flex justify-between items-center mb-4 relative">
                      <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><Video size={16}/> Vídeos</h3>
-                     <input type="file" multiple accept="video/*" ref={videoInputRef} className="hidden" onChange={handleVideoUpload} capture="environment" />
-                     <button onClick={() => videoInputRef.current?.click()} className="text-xs font-semibold text-lunardeli-red hover:underline disabled:opacity-50" disabled={isReadOnly}>+ Upload</button>
+                     <input type="file" accept="video/*" ref={videoCameraInputRef} className="hidden" onChange={handleVideoUpload} capture="environment" />
+                     <input type="file" multiple accept="video/*" ref={videoGalleryInputRef} className="hidden" onChange={handleVideoUpload} />
+                     <input type="file" multiple accept=".mp4,.mov,.webm,.avi,.mkv,.3gp,video/*" ref={videoFilesInputRef} className="hidden" onChange={handleVideoUpload} />
+                     <button
+                       type="button"
+                       onClick={() => setMediaPicker(prev => prev === 'video' ? null : 'video')}
+                       className="text-xs font-semibold text-lunardeli-red hover:underline disabled:opacity-50"
+                       disabled={isReadOnly}
+                     >
+                       + Upload
+                     </button>
+                     {mediaPicker === 'video' && (
+                       <>
+                         <button type="button" className="fixed inset-0 z-[90] bg-black/30" aria-label="Fechar" onClick={() => setMediaPicker(null)} />
+                         <div className="absolute right-0 top-8 z-[100] w-56 rounded-xl bg-white shadow-xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
+                           <button
+                             type="button"
+                             className="w-full flex items-center gap-2.5 px-3.5 py-3 text-left text-sm text-gray-800 hover:bg-gray-50"
+                             onClick={() => { setMediaPicker(null); videoCameraInputRef.current?.click(); }}
+                           >
+                             <Camera size={16} className="text-lunardeli-red shrink-0" />
+                             <span>
+                               <span className="font-semibold block">Gravar vídeo</span>
+                               <span className="text-[11px] text-gray-500">Abrir a câmera</span>
+                             </span>
+                           </button>
+                           <button
+                             type="button"
+                             className="w-full flex items-center gap-2.5 px-3.5 py-3 text-left text-sm text-gray-800 hover:bg-gray-50"
+                             onClick={() => { setMediaPicker(null); videoGalleryInputRef.current?.click(); }}
+                           >
+                             <Images size={16} className="text-lunardeli-red shrink-0" />
+                             <span>
+                               <span className="font-semibold block">Galeria</span>
+                               <span className="text-[11px] text-gray-500">Vídeos do aparelho</span>
+                             </span>
+                           </button>
+                           <button
+                             type="button"
+                             className="w-full flex items-center gap-2.5 px-3.5 py-3 text-left text-sm text-gray-800 hover:bg-gray-50"
+                             onClick={() => { setMediaPicker(null); videoFilesInputRef.current?.click(); }}
+                           >
+                             <FolderOpen size={16} className="text-lunardeli-red shrink-0" />
+                             <span>
+                               <span className="font-semibold block">Arquivos / nuvem</span>
+                               <span className="text-[11px] text-gray-500">Pastas, Drive, etc.</span>
+                             </span>
+                           </button>
+                         </div>
+                       </>
+                     )}
                   </div>
                   <div className="space-y-2">
                      {/* Saved Videos */}
