@@ -12,6 +12,7 @@ import {
   agregarRdosParaContexto,
   capitalizarPrimeiraLetra,
   classificarClima,
+  detectarConsultaOnline,
   detectarEscopo,
   detectarIntencaoFactual,
   extrairEfetivoDoRdo,
@@ -24,6 +25,10 @@ import {
   textoClimaDeExtras,
   type ContextoAgregado,
 } from './ai-context.helper';
+import {
+  consultarOnline,
+  formatarRespostaOnline,
+} from './ai-online.helper';
 
 // Lazy-load Anthropic to avoid crash when API key not set
 let Anthropic: any;
@@ -80,10 +85,13 @@ export class AiService {
       obraIdResolvido = obra.id;
     }
 
+    // Sempre restringe à empresa do usuário (nunca cruza tenants).
+    // Em escopo obra, obraId + empresaId evitam ID de outra empresa.
     const where =
       escopo === 'obra' && obraIdResolvido
         ? {
             obraId: obraIdResolvido,
+            obra: { empresaId, deletedAt: null },
             dataReferencia: { gte: dataInicio, lte: dataFim },
             deletedAt: null,
           }
@@ -626,6 +634,13 @@ ${JSON.stringify(ctx.dias.slice(0, 40), null, 2)}`;
     const periodo = inferirPeriodo(message, agora);
     const escopo = detectarEscopo(message, obraIdHeader);
     const intencao = detectarIntencaoFactual(message);
+    const querOnline = detectarConsultaOnline(message);
+
+    // Consulta online explícita (informação pública — sem dados de outras empresas)
+    if (querOnline && !intencao) {
+      const online = await consultarOnline(message);
+      return { reply: formatarRespostaOnline(online) };
+    }
 
     let ctx: ContextoAgregado | null = null;
     try {
@@ -637,19 +652,57 @@ ${JSON.stringify(ctx.dias.slice(0, 40), null, 2)}`;
         dataFim: periodo.dataFim,
         periodoLabel: periodo.label,
       });
+
+      // Se a janela padrão (30 dias) veio vazia — e o usuário NÃO pediu
+      // explicitamente "últimos N dias" — amplia para o histórico.
+      const pediuJanelaExplicita = /ultimos?\s+\d+\s+dias?/.test(
+        (message || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, ''),
+      );
+      if (
+        ctx &&
+        ctx.totalRdos === 0 &&
+        periodo.label === 'últimos 30 dias' &&
+        !pediuJanelaExplicita &&
+        intencao &&
+        intencao !== 'obras'
+      ) {
+        const amplio = {
+          dataInicio: new Date(2015, 0, 1),
+          dataFim: periodo.dataFim,
+          label:
+            'desde o início até hoje (ampliado; sem registros nos últimos 30 dias)',
+        };
+        ctx = await this.carregarContextoRdos({
+          empresaId,
+          obraId: obraIdHeader,
+          escopo,
+          dataInicio: amplio.dataInicio,
+          dataFim: amplio.dataFim,
+          periodoLabel: amplio.label,
+        });
+      }
     } catch (err: any) {
       this.logger.warn(
         `[AiService] Falha ao carregar contexto RDO no chat: ${err?.message}`,
       );
     }
 
-    // 1) Respostas factuais diretas do banco
+    // 1) Respostas factuais diretas do banco (sempre filtradas por empresaId)
     if (intencao && ctx) {
       const factual = responderFactual(intencao, ctx, message, {
         obrasAtivas: listaObrasNomes,
         totalPendentesEmpresa: totalPendentes,
       });
       if (factual) {
+        if (querOnline) {
+          const online = await consultarOnline(message);
+          return {
+            reply: `${factual}\n\n${formatarRespostaOnline(online)}`,
+          };
+        }
         return { reply: factual };
       }
     }
@@ -693,13 +746,15 @@ Responda sempre em português brasileiro. Seja objetiva, direta e profissional, 
 Nunca invente dados — use apenas as informações abaixo.
 Se não tiver a informação, diga que não tem acesso no momento.
 Para ações que não pode executar (aprovar, criar registros), oriente o usuário a fazer manualmente.
+NUNCA mencione, invente ou misture dados de outras empresas. Você só tem acesso aos dados da empresa do usuário logado.
+Quando o usuário pedir informação geral (normas, conceitos, preços públicos), você pode usar conhecimento geral, mas deixe claro o que veio do banco da obra e o que é informação externa.
 
-DADOS RÁPIDOS DA EMPRESA:
+DADOS RÁPIDOS DA EMPRESA (somente desta empresa):
 - Obras ativas: ${listaObras}
 - RDOs este mês: ${totalRdosMes}
 - RDOs pendentes de aprovação agora: ${totalPendentes}
 
-CONTEXTO DETALHADO DOS DIÁRIOS (banco):
+CONTEXTO DETALHADO DOS DIÁRIOS (banco — somente desta empresa):
 ${contextoRico}`;
 
     const apiKey = process.env.ANTHROPIC_API_KEY;

@@ -127,7 +127,10 @@ export function extrairLinhasDeTexto(texto: any): string[] {
 }
 
 export function formatarDataISO(d: Date): string {
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function inicioDoDia(d: Date): Date {
@@ -142,11 +145,39 @@ function fimDoDia(d: Date): Date {
   return x;
 }
 
-/** Inferir período a partir da pergunta; padrão = últimos 30 dias. */
+/** Início amplo para perguntas cumulativas ("até hoje", "desde o início"). */
+function inicioHistorico(): Date {
+  return inicioDoDia(new Date(2015, 0, 1));
+}
+
+/**
+ * Inferir período a partir da pergunta.
+ * Ordem importa: "até hoje" NÃO deve virar só o dia de hoje.
+ */
 export function inferirPeriodo(pergunta: string, agora = new Date()): PeriodoInferido {
   const n = normalizarTexto(pergunta);
   const hoje = fimDoDia(agora);
 
+  const pediuHistorico =
+    /ate hoje|ate agora|desde o inicio|desde o comeco|do inicio|no total|ao todo|historico|todo o periodo|todos os (rdos?|diarios?|relatorios?)/.test(
+      n,
+    );
+  const pediuContagemSemJanela =
+    /quantos|quantidade|total de|quantas/.test(n) &&
+    /(rdo|diario|relatorio)/.test(n) &&
+    !/ultimos?\s+\d+|este mes|mes passado|esta semana|\bontem\b/.test(n) &&
+    // "quantos X hoje" (sem "até") = só o dia; "até hoje" já está em pediuHistorico
+    !(/\bhoje\b/.test(n) && !pediuHistorico);
+
+  if (pediuHistorico || pediuContagemSemJanela) {
+    return {
+      dataInicio: inicioHistorico(),
+      dataFim: hoje,
+      label: 'desde o início até hoje',
+    };
+  }
+
+  // "hoje" isolado (não "até hoje")
   if (/\bhoje\b/.test(n)) {
     const ini = inicioDoDia(agora);
     return { dataInicio: ini, dataFim: hoje, label: 'hoje' };
@@ -159,6 +190,18 @@ export function inferirPeriodo(pergunta: string, agora = new Date()): PeriodoInf
       dataInicio: inicioDoDia(d),
       dataFim: fimDoDia(d),
       label: 'ontem',
+    };
+  }
+
+  if (/esta semana|nessa semana|nesta semana/.test(n)) {
+    const d = new Date(agora);
+    const diaSemana = d.getDay(); // 0=dom
+    const diff = diaSemana === 0 ? 6 : diaSemana - 1; // segunda como início
+    d.setDate(d.getDate() - diff);
+    return {
+      dataInicio: inicioDoDia(d),
+      dataFim: hoje,
+      label: 'esta semana',
     };
   }
 
@@ -240,6 +283,23 @@ export function detectarEscopo(
 export function detectarIntencaoFactual(pergunta: string): IntencaoFactual {
   const n = normalizarTexto(pergunta);
 
+  if (/obras? ativa|quais obras|lista de obras|canteiros/.test(n)) {
+    return 'obras';
+  }
+
+  // Contagem / status de diários — ANTES de "executados" (atividades)
+  if (
+    /quantos (rdos?|diarios?|relatorios?)|qtd de (rdos?|diarios?|relatorios?)|quantidade de (rdos?|diarios?|relatorios?)|total de (rdos?|diarios?|relatorios?)|status dos (rdos?|diarios?)|(rdos?|diarios?|relatorios?) pendente|aguardando aprovacao|quantos (foram )?(aprovados|submetidos|executados)|relatorios? (foram )?(executados|feitos|gerados|preenchidos)|diarios? (foram )?(executados|feitos|gerados|preenchidos)/.test(
+      n,
+    ) ||
+    (/(rdo|diario|relatorio)/.test(n) &&
+      /pendente|aprovad|submetid|rascunho|total|quantos|quantidade|ate hoje|desde/.test(
+        n,
+      ))
+  ) {
+    return 'status_rdos';
+  }
+
   if (
     /chuva|choveu|chovendo|clima|tempo|tempestade|garoa|ensolarado|nublado/.test(
       n,
@@ -254,28 +314,26 @@ export function detectarIntencaoFactual(pergunta: string): IntencaoFactual {
   ) {
     return 'efetivo';
   }
-  if (
-    /quantos rdo|qtd de rdo|quantidade de rdo|status dos rdo|rdos? pendente|aguardando aprovacao|aprovados|submetidos/.test(
-      n,
-    ) ||
-    (/rdo/.test(n) && /pendente|aprovad|submetid|rascunho|total/.test(n))
-  ) {
-    return 'status_rdos';
-  }
   if (/pendenc|atrasad|nao feito|cobranca|atividades pendentes/.test(n)) {
     return 'pendencias';
   }
   if (
-    /atividade|servico|feito|executad|andamento|o que foi feito|trabalhos realizados/.test(
+    /atividade|servico|o que foi feito|trabalhos realizados|andamento das? atividades|atividades executadas/.test(
       n,
-    )
+    ) ||
+    (/executad/.test(n) && !/(rdo|diario|relatorio)/.test(n))
   ) {
     return 'atividades';
   }
-  if (/obras? ativa|quais obras|lista de obras|canteiros/.test(n)) {
-    return 'obras';
-  }
   return null;
+}
+
+/** Detecta pedido explícito de consulta online / internet. */
+export function detectarConsultaOnline(pergunta: string): boolean {
+  const n = normalizarTexto(pergunta);
+  return /na internet|online|pesquise|pesquisar|busca na web|buscar na web|consultar? (na )?web|busca externa|consulta externa|cotacao (do|da|de)|preco (do|da|de) |norma (tecnica|nbr)|nbr \d/.test(
+    n,
+  );
 }
 
 export function textoClimaDeExtras(d: any): {

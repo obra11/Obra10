@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import api from '../services/api';
 import {
   Package,
@@ -14,7 +15,11 @@ import {
   Tag,
   X,
   Boxes,
-  ArrowLeft
+  ArrowLeft,
+  Download,
+  Upload,
+  FileSpreadsheet,
+  FileJson,
 } from 'lucide-react';
 
 export type TipoInsumo = 'MATERIAL' | 'EQUIPAMENTO' | 'MAO_DE_OBRA';
@@ -31,24 +36,88 @@ export interface CatalogoInsumo {
   createdAt: string;
 }
 
+type ImportRow = {
+  tipo: TipoInsumo;
+  nome: string;
+  unidade?: string;
+  codigo?: string;
+  observacao?: string;
+};
+
 const UNIDADES_SUGERIDAS = [
-  'un', 'kg', 'm', 'm²', 'm³', 'l', 'h', 'cx', 'pct', 'saco', 'rolo', 'barras', 'par', 'ton'
+  'un', 'kg', 'm', 'm²', 'm³', 'l', 'h', 'cx', 'pct', 'saco', 'rolo', 'barras', 'par', 'ton',
 ];
+
+const TIPOS_VALIDOS: TipoInsumo[] = ['MATERIAL', 'EQUIPAMENTO', 'MAO_DE_OBRA'];
+
+function normalizarTipo(raw: unknown): TipoInsumo | null {
+  const v = String(raw || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '_');
+
+  if (TIPOS_VALIDOS.includes(v as TipoInsumo)) return v as TipoInsumo;
+  if (['MATERIAL', 'MATERIAIS', 'MAT'].includes(v)) return 'MATERIAL';
+  if (['EQUIPAMENTO', 'EQUIPAMENTOS', 'EQP', 'EQUIP'].includes(v)) return 'EQUIPAMENTO';
+  if (
+    ['MAO_DE_OBRA', 'MAO_OBRA', 'MAO-DE-OBRA', 'FUNCAO', 'FUNCOES', 'MAO', 'MDO'].includes(v)
+  ) {
+    return 'MAO_DE_OBRA';
+  }
+  return null;
+}
+
+function pickField(row: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const found = Object.keys(row).find(
+      (k) => k.trim().toLowerCase() === key.toLowerCase(),
+    );
+    if (found != null && row[found] != null && String(row[found]).trim() !== '') {
+      return String(row[found]).trim();
+    }
+  }
+  return '';
+}
+
+function toExportRows(items: CatalogoInsumo[]) {
+  return items.map((i) => ({
+    tipo: i.tipo,
+    nome: i.nome,
+    unidade: i.unidade || '',
+    codigo: i.codigo || '',
+    observacao: i.observacao || '',
+  }));
+}
 
 export const CatalogoPage: React.FC = () => {
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<CatalogoInsumo[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TipoInsumo>('MATERIAL');
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CatalogoInsumo | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Form Fields
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importRows, setImportRows] = useState<ImportRow[]>([]);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [importFileName, setImportFileName] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [atualizarExistentes, setAtualizarExistentes] = useState(true);
+  const [importResult, setImportResult] = useState<{
+    criados: number;
+    atualizados: number;
+    ignorados: number;
+    erros: Array<{ linha: number; mensagem: string }>;
+  } | null>(null);
+
   const [formData, setFormData] = useState({
     tipo: 'MATERIAL' as TipoInsumo,
     nome: '',
@@ -84,7 +153,7 @@ export const CatalogoPage: React.FC = () => {
     setFormData({
       tipo,
       nome: '',
-      unidade: tipo === 'MATERIAL' ? 'un' : tipo === 'EQUIPAMENTO' ? 'un' : 'un',
+      unidade: 'un',
       codigo: '',
       observacao: '',
     });
@@ -165,12 +234,206 @@ export const CatalogoPage: React.FC = () => {
     };
   }, [items]);
 
+  const exportExcel = (scope: 'all' | 'tab' = 'all') => {
+    const source = scope === 'tab' ? items.filter((i) => i.tipo === activeTab) : items;
+    if (source.length === 0) {
+      showToast('Não há itens para exportar.', 'error');
+      return;
+    }
+    const rows = toExportRows(source);
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'Cadastro Base');
+    const stamp = new Date().toISOString().slice(0, 10);
+    const suffix = scope === 'tab' ? `_${activeTab.toLowerCase()}` : '';
+    XLSX.writeFile(wb, `Cadastro_Base${suffix}_${stamp}.xlsx`);
+    setExportMenuOpen(false);
+    showToast(`Exportados ${rows.length} item(ns) em Excel.`);
+  };
+
+  const exportJson = (scope: 'all' | 'tab' = 'all') => {
+    const source = scope === 'tab' ? items.filter((i) => i.tipo === activeTab) : items;
+    if (source.length === 0) {
+      showToast('Não há itens para exportar.', 'error');
+      return;
+    }
+    const payload = {
+      versao: 1,
+      origem: 'obra10-cadastro-base',
+      exportadoEm: new Date().toISOString(),
+      itens: toExportRows(source),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+    const suffix = scope === 'tab' ? `_${activeTab.toLowerCase()}` : '';
+    a.href = url;
+    a.download = `Cadastro_Base${suffix}_${stamp}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportMenuOpen(false);
+    showToast(`Exportados ${source.length} item(ns) em JSON.`);
+  };
+
+  const downloadTemplate = () => {
+    const sample = [
+      {
+        tipo: 'MATERIAL',
+        nome: 'Cimento CP II',
+        unidade: 'kg',
+        codigo: 'MAT-001',
+        observacao: 'Saco 50kg',
+      },
+      {
+        tipo: 'EQUIPAMENTO',
+        nome: 'Betoneira 400L',
+        unidade: 'un',
+        codigo: 'EQP-001',
+        observacao: '',
+      },
+      {
+        tipo: 'MAO_DE_OBRA',
+        nome: 'Pedreiro',
+        unidade: 'un',
+        codigo: 'MDO-001',
+        observacao: 'Oficial',
+      },
+    ];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(sample);
+    XLSX.utils.book_append_sheet(wb, ws, 'Modelo');
+    XLSX.writeFile(wb, 'Modelo_Importacao_Cadastro_Base.xlsx');
+  };
+
+  const parseImportRows = (rawList: any[]): { rows: ImportRow[]; errors: string[] } => {
+    const rows: ImportRow[] = [];
+    const errors: string[] = [];
+
+    rawList.forEach((raw, idx) => {
+      const linha = idx + 2; // + header
+      const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+      const tipo = normalizarTipo(
+        pickField(obj, ['tipo', 'type', 'categoria']) || raw?.tipo,
+      );
+      const nome = pickField(obj, ['nome', 'name', 'descricao', 'descrição', 'item']);
+      if (!tipo) {
+        errors.push(`Linha ${linha}: tipo inválido (use MATERIAL, EQUIPAMENTO ou MAO_DE_OBRA).`);
+        return;
+      }
+      if (!nome) {
+        errors.push(`Linha ${linha}: nome obrigatório.`);
+        return;
+      }
+      rows.push({
+        tipo,
+        nome,
+        unidade: pickField(obj, ['unidade', 'unit', 'un']) || undefined,
+        codigo: pickField(obj, ['codigo', 'código', 'code', 'sinapi']) || undefined,
+        observacao:
+          pickField(obj, ['observacao', 'observação', 'obs', 'detalhes', 'notes']) ||
+          undefined,
+      });
+    });
+
+    return { rows, errors };
+  };
+
+  const handleImportFile = async (file: File) => {
+    setImportResult(null);
+    setImportFileName(file.name);
+    const ext = file.name.split('.').pop()?.toLowerCase();
+
+    try {
+      if (ext === 'json') {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        const list = Array.isArray(parsed)
+          ? parsed
+          : Array.isArray(parsed?.itens)
+            ? parsed.itens
+            : Array.isArray(parsed?.items)
+              ? parsed.items
+              : null;
+        if (!list) {
+          setImportRows([]);
+          setImportErrors([
+            'JSON inválido. Use um array de itens ou { "itens": [...] } no formato do Obra 10.',
+          ]);
+          return;
+        }
+        const { rows, errors } = parseImportRows(list);
+        setImportRows(rows);
+        setImportErrors(errors);
+        return;
+      }
+
+      if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+        const { rows, errors } = parseImportRows(json as any[]);
+        setImportRows(rows);
+        setImportErrors(errors);
+        return;
+      }
+
+      setImportRows([]);
+      setImportErrors(['Formato não suportado. Use .xlsx, .xls, .csv ou .json.']);
+    } catch (err: any) {
+      setImportRows([]);
+      setImportErrors([err?.message || 'Falha ao ler o arquivo.']);
+    }
+  };
+
+  const confirmImport = async () => {
+    if (importRows.length === 0) {
+      showToast('Nenhum item válido para importar.', 'error');
+      return;
+    }
+    try {
+      setImporting(true);
+      const res = await api.post('/catalogo/importar', {
+        itens: importRows,
+        atualizarExistentes,
+      });
+      setImportResult(res.data);
+      await fetchItems();
+      const { criados, atualizados, ignorados, erros } = res.data;
+      showToast(
+        `Importação concluída: ${criados} criados, ${atualizados} atualizados` +
+          (ignorados ? `, ${ignorados} ignorados` : '') +
+          (erros?.length ? `, ${erros.length} erro(s)` : ''),
+      );
+    } catch (err: any) {
+      console.error('Erro na importação:', err);
+      showToast(
+        err?.response?.data?.message || 'Erro ao importar Cadastro Base',
+        'error',
+      );
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const openImportModal = () => {
+    setIsImportOpen(true);
+    setImportRows([]);
+    setImportErrors([]);
+    setImportFileName('');
+    setImportResult(null);
+    setAtualizarExistentes(true);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50/50 p-4 md:p-8 space-y-6">
-      {/* Toast Notification */}
       {toast && (
         <div
-          className={`fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-bold text-white transition-all ${
+          className={`fixed top-5 right-5 z-[200] flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-bold text-white transition-all ${
             toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
           }`}
         >
@@ -190,19 +453,76 @@ export const CatalogoPage: React.FC = () => {
             Cadastro Base
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Cadastre e gerencie o catálogo padronizado de Materiais, Equipamentos e Mão de Obra da sua empresa.
+            Cadastre, importe e exporte o catálogo padronizado de Materiais, Equipamentos e Mão de Obra.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             onClick={() => navigate(-1)}
             className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3.5 py-2.5 rounded-xl font-bold text-sm transition-all"
-            title="Voltar para a página anterior"
+            title="Voltar"
           >
             <ArrowLeft size={18} />
             <span>Voltar</span>
           </button>
+
+          <button
+            onClick={openImportModal}
+            className="flex items-center gap-2 bg-white border border-gray-200 hover:border-lunardeli-red/40 hover:bg-red-50 text-gray-800 px-3.5 py-2.5 rounded-xl font-bold text-sm transition-all"
+          >
+            <Upload size={18} className="text-lunardeli-red" />
+            <span>Importar</span>
+          </button>
+
+          <div className="relative">
+            <button
+              onClick={() => setExportMenuOpen((v) => !v)}
+              className="flex items-center gap-2 bg-white border border-gray-200 hover:border-lunardeli-red/40 hover:bg-red-50 text-gray-800 px-3.5 py-2.5 rounded-xl font-bold text-sm transition-all"
+            >
+              <Download size={18} className="text-lunardeli-red" />
+              <span>Exportar</span>
+            </button>
+            {exportMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-[90]"
+                  onClick={() => setExportMenuOpen(false)}
+                />
+                <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-[100] overflow-hidden">
+                  <button
+                    onClick={() => exportExcel('all')}
+                    className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm hover:bg-gray-50 font-medium text-gray-800"
+                  >
+                    <FileSpreadsheet size={16} className="text-green-600" />
+                    Excel — catálogo completo
+                  </button>
+                  <button
+                    onClick={() => exportExcel('tab')}
+                    className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm hover:bg-gray-50 font-medium text-gray-800"
+                  >
+                    <FileSpreadsheet size={16} className="text-green-600" />
+                    Excel — aba atual
+                  </button>
+                  <button
+                    onClick={() => exportJson('all')}
+                    className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm hover:bg-gray-50 font-medium text-gray-800 border-t border-gray-100"
+                  >
+                    <FileJson size={16} className="text-amber-600" />
+                    JSON — catálogo completo
+                  </button>
+                  <button
+                    onClick={() => exportJson('tab')}
+                    className="w-full flex items-center gap-2 px-4 py-3 text-left text-sm hover:bg-gray-50 font-medium text-gray-800"
+                  >
+                    <FileJson size={16} className="text-amber-600" />
+                    JSON — aba atual
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
           <button
             onClick={() => openCreateModal(activeTab)}
             className="flex items-center gap-2 bg-lunardeli-red hover:bg-red-700 active:bg-red-800 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-sm transition-all hover:shadow"
@@ -213,14 +533,14 @@ export const CatalogoPage: React.FC = () => {
               {activeTab === 'MATERIAL'
                 ? 'Material'
                 : activeTab === 'EQUIPAMENTO'
-                ? 'Equipamento'
-                : 'Função'}
+                  ? 'Equipamento'
+                  : 'Função'}
             </span>
           </button>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
+      {/* Tabs */}
       <div className="flex border-b border-gray-200 gap-2 md:gap-4 overflow-x-auto pb-1">
         <button
           onClick={() => setActiveTab('MATERIAL')}
@@ -280,7 +600,7 @@ export const CatalogoPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Controls & Search */}
+      {/* Search */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
         <div className="relative w-full sm:w-80">
           <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -291,8 +611,8 @@ export const CatalogoPage: React.FC = () => {
               activeTab === 'MATERIAL'
                 ? 'material...'
                 : activeTab === 'EQUIPAMENTO'
-                ? 'equipamento...'
-                : 'função ou profissional...'
+                  ? 'equipamento...'
+                  : 'função ou profissional...'
             }`}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -304,7 +624,7 @@ export const CatalogoPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Content List */}
+      {/* List */}
       {loading ? (
         <div className="p-12 text-center text-gray-400 font-medium">Carregando catálogo...</div>
       ) : filteredItems.length === 0 ? (
@@ -322,20 +642,22 @@ export const CatalogoPage: React.FC = () => {
           <p className="text-xs text-gray-500 max-w-sm mx-auto">
             {searchQuery
               ? 'Tente ajustar sua busca por palavra-chave.'
-              : `Ainda não há ${
-                  activeTab === 'MATERIAL'
-                    ? 'materiais'
-                    : activeTab === 'EQUIPAMENTO'
-                    ? 'equipamentos'
-                    : 'funções'
-                } cadastrados para esta empresa.`}
+              : `Ainda não há itens nesta aba. Cadastre manualmente ou importe um arquivo Excel/JSON.`}
           </p>
-          <button
-            onClick={() => openCreateModal(activeTab)}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-lunardeli-red bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg transition-colors"
-          >
-            <Plus size={14} /> Cadastrar primeiro item
-          </button>
+          <div className="flex items-center justify-center gap-2 flex-wrap">
+            <button
+              onClick={() => openCreateModal(activeTab)}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-lunardeli-red bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg transition-colors"
+            >
+              <Plus size={14} /> Cadastrar primeiro item
+            </button>
+            <button
+              onClick={openImportModal}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg transition-colors"
+            >
+              <Upload size={14} /> Importar arquivo
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -398,7 +720,7 @@ export const CatalogoPage: React.FC = () => {
 
       {/* Modal Create/Edit */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-lg overflow-hidden">
             <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
               <h2 className="font-bold text-gray-900 text-lg flex items-center gap-2">
@@ -422,7 +744,6 @@ export const CatalogoPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleSave} className="p-6 space-y-4">
-              {/* Tipo selector */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                   Tipo de Insumo
@@ -438,7 +759,6 @@ export const CatalogoPage: React.FC = () => {
                 </select>
               </div>
 
-              {/* Nome */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                   Nome / Descrição <span className="text-red-500">*</span>
@@ -451,35 +771,32 @@ export const CatalogoPage: React.FC = () => {
                     formData.tipo === 'MATERIAL'
                       ? 'Ex: Cimento CP II 50kg'
                       : formData.tipo === 'EQUIPAMENTO'
-                      ? 'Ex: Betoneira 400L'
-                      : 'Ex: Pedreiro'
+                        ? 'Ex: Betoneira 400L'
+                        : 'Ex: Pedreiro'
                   }
                   value={formData.nome}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                 />
               </div>
 
-              {/* Unidade & Código */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                     Unidade Padrão
                   </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      className="w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red"
-                      placeholder="Ex: kg, m³, un, h"
-                      value={formData.unidade}
-                      onChange={(e) => setFormData({ ...formData, unidade: e.target.value })}
-                      list="unidades-sugeridas"
-                    />
-                    <datalist id="unidades-sugeridas">
-                      {UNIDADES_SUGERIDAS.map((u) => (
-                        <option key={u} value={u} />
-                      ))}
-                    </datalist>
-                  </div>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red"
+                    placeholder="Ex: kg, m³, un, h"
+                    value={formData.unidade}
+                    onChange={(e) => setFormData({ ...formData, unidade: e.target.value })}
+                    list="unidades-sugeridas"
+                  />
+                  <datalist id="unidades-sugeridas">
+                    {UNIDADES_SUGERIDAS.map((u) => (
+                      <option key={u} value={u} />
+                    ))}
+                  </datalist>
                 </div>
 
                 <div>
@@ -496,7 +813,6 @@ export const CatalogoPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Observação */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                   Observações / Detalhes (Opcional)
@@ -510,7 +826,6 @@ export const CatalogoPage: React.FC = () => {
                 />
               </div>
 
-              {/* Action Buttons */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
                 <button
                   type="button"
@@ -528,6 +843,159 @@ export const CatalogoPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Import */}
+      {isImportOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 shrink-0">
+              <h2 className="font-bold text-gray-900 text-lg flex items-center gap-2">
+                <Upload className="text-lunardeli-red" size={20} />
+                Importar Cadastro Base
+              </h2>
+              <button
+                onClick={() => setIsImportOpen(false)}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <p className="text-sm text-gray-600">
+                Importe de outro sistema ou de um backup do próprio Obra 10.
+                Formatos: <strong>Excel (.xlsx/.xls)</strong>, <strong>CSV</strong> ou{' '}
+                <strong>JSON</strong>. Colunas: <code>tipo</code>, <code>nome</code>,{' '}
+                <code>unidade</code>, <code>codigo</code>, <code>observacao</code>.
+              </p>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={downloadTemplate}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg"
+                >
+                  <FileSpreadsheet size={14} /> Baixar modelo Excel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-lunardeli-red hover:bg-red-700 px-3 py-2 rounded-lg"
+                >
+                  <Upload size={14} /> Selecionar arquivo
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv,.json,application/json,text/csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleImportFile(f);
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+
+              {importFileName && (
+                <p className="text-xs text-gray-500">
+                  Arquivo: <span className="font-semibold text-gray-800">{importFileName}</span>
+                </p>
+              )}
+
+              <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={atualizarExistentes}
+                  onChange={(e) => setAtualizarExistentes(e.target.checked)}
+                />
+                <span>
+                  Atualizar itens já existentes (mesmo <strong>código</strong> ou mesmo{' '}
+                  <strong>tipo + nome</strong>). Se desmarcar, duplicatas são ignoradas.
+                </span>
+              </label>
+
+              {importErrors.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 space-y-1 max-h-28 overflow-y-auto">
+                  {importErrors.slice(0, 12).map((e, i) => (
+                    <div key={i}>• {e}</div>
+                  ))}
+                  {importErrors.length > 12 && (
+                    <div>… e mais {importErrors.length - 12} aviso(s).</div>
+                  )}
+                </div>
+              )}
+
+              {importRows.length > 0 && (
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 text-xs font-bold text-gray-700 flex justify-between">
+                    <span>Pré-visualização ({importRows.length} válidos)</span>
+                  </div>
+                  <div className="max-h-48 overflow-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-white sticky top-0">
+                        <tr className="text-left text-gray-500 border-b">
+                          <th className="px-3 py-2">Tipo</th>
+                          <th className="px-3 py-2">Nome</th>
+                          <th className="px-3 py-2">Un.</th>
+                          <th className="px-3 py-2">Cód.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importRows.slice(0, 50).map((r, i) => (
+                          <tr key={i} className="border-b border-gray-50">
+                            <td className="px-3 py-1.5 font-mono text-[10px]">{r.tipo}</td>
+                            <td className="px-3 py-1.5 font-medium text-gray-800">{r.nome}</td>
+                            <td className="px-3 py-1.5">{r.unidade || '—'}</td>
+                            <td className="px-3 py-1.5">{r.codigo || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {importRows.length > 50 && (
+                      <p className="text-[11px] text-gray-400 px-3 py-2">
+                        Mostrando 50 de {importRows.length}…
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {importResult && (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-sm text-green-900">
+                  <p className="font-bold mb-1">Resultado</p>
+                  <p>
+                    {importResult.criados} criados · {importResult.atualizados} atualizados ·{' '}
+                    {importResult.ignorados} ignorados
+                    {importResult.erros?.length
+                      ? ` · ${importResult.erros.length} erro(s)`
+                      : ''}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-gray-100 flex justify-end gap-2 shrink-0 bg-white">
+              <button
+                type="button"
+                onClick={() => setIsImportOpen(false)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-sm"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                disabled={importing || importRows.length === 0}
+                onClick={confirmImport}
+                className="px-5 py-2 bg-lunardeli-red hover:bg-red-700 text-white font-bold rounded-xl text-sm disabled:opacity-60"
+              >
+                {importing ? 'Importando...' : `Confirmar importação (${importRows.length})`}
+              </button>
+            </div>
           </div>
         </div>
       )}

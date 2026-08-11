@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateInsumoDto } from './dto/create-insumo.dto';
 import { UpdateInsumoDto } from './dto/update-insumo.dto';
+import { ImportInsumosDto } from './dto/import-insumos.dto';
 import { TipoInsumo } from '@prisma/client';
 
 const SEED_DEFAULT_ITEMS = [
@@ -115,5 +116,127 @@ export class CatalogoService {
       where: { id },
       data: { deletedAt: new Date(), ativo: false },
     });
+  }
+
+  /**
+   * Importação em lote do Cadastro Base (somente da empresa do usuário).
+   * Match: codigo (se informado) → senão tipo+nome (case-insensitive).
+   */
+  async importar(empresaId: string, dto: ImportInsumosDto) {
+    if (!empresaId) {
+      throw new BadRequestException('Empresa não identificada.');
+    }
+
+    const atualizar = dto.atualizarExistentes !== false;
+    const existentes = await this.prisma.catalogoInsumo.findMany({
+      where: { empresaId, deletedAt: null },
+      select: {
+        id: true,
+        tipo: true,
+        nome: true,
+        codigo: true,
+        unidade: true,
+        observacao: true,
+      },
+    });
+
+    const byCodigo = new Map<string, (typeof existentes)[0]>();
+    const byTipoNome = new Map<string, (typeof existentes)[0]>();
+    for (const e of existentes) {
+      if (e.codigo?.trim()) {
+        byCodigo.set(e.codigo.trim().toLowerCase(), e);
+      }
+      byTipoNome.set(`${e.tipo}|${e.nome.trim().toLowerCase()}`, e);
+    }
+
+    let criados = 0;
+    let atualizados = 0;
+    let ignorados = 0;
+    const erros: Array<{ linha: number; mensagem: string }> = [];
+
+    for (let i = 0; i < dto.itens.length; i++) {
+      const raw = dto.itens[i];
+      const linha = i + 1;
+      const tipo = raw.tipo;
+      const nome = (raw.nome || '').trim();
+      if (!nome) {
+        erros.push({ linha, mensagem: 'Nome obrigatório.' });
+        continue;
+      }
+      if (!Object.values(TipoInsumo).includes(tipo)) {
+        erros.push({ linha, mensagem: `Tipo inválido: ${tipo}` });
+        continue;
+      }
+
+      const unidade = raw.unidade?.trim() || null;
+      const codigo = raw.codigo?.trim() || null;
+      const observacao = raw.observacao?.trim() || null;
+
+      const match =
+        (codigo ? byCodigo.get(codigo.toLowerCase()) : undefined) ||
+        byTipoNome.get(`${tipo}|${nome.toLowerCase()}`);
+
+      try {
+        if (match) {
+          if (!atualizar) {
+            ignorados++;
+            continue;
+          }
+          await this.prisma.catalogoInsumo.update({
+            where: { id: match.id },
+            data: {
+              tipo,
+              nome,
+              unidade,
+              codigo,
+              observacao,
+              ativo: true,
+            },
+          });
+          atualizados++;
+          // Atualiza índices locais
+          if (match.codigo?.trim()) byCodigo.delete(match.codigo.trim().toLowerCase());
+          byTipoNome.delete(`${match.tipo}|${match.nome.trim().toLowerCase()}`);
+          const updated = { id: match.id, tipo, nome, codigo, unidade, observacao };
+          if (codigo) byCodigo.set(codigo.toLowerCase(), updated);
+          byTipoNome.set(`${tipo}|${nome.toLowerCase()}`, updated);
+        } else {
+          const created = await this.prisma.catalogoInsumo.create({
+            data: {
+              empresaId,
+              tipo,
+              nome,
+              unidade,
+              codigo,
+              observacao,
+            },
+          });
+          criados++;
+          const entry = {
+            id: created.id,
+            tipo,
+            nome,
+            codigo,
+            unidade,
+            observacao,
+          };
+          if (codigo) byCodigo.set(codigo.toLowerCase(), entry);
+          byTipoNome.set(`${tipo}|${nome.toLowerCase()}`, entry);
+        }
+      } catch (err: any) {
+        erros.push({
+          linha,
+          mensagem: err?.message || 'Falha ao salvar item.',
+        });
+      }
+    }
+
+    return {
+      totalRecebido: dto.itens.length,
+      criados,
+      atualizados,
+      ignorados,
+      erros,
+    };
   }
 }

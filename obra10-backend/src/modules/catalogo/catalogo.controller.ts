@@ -13,6 +13,7 @@ import {
 import { CatalogoService } from './catalogo.service';
 import { CreateInsumoDto } from './dto/create-insumo.dto';
 import { UpdateInsumoDto } from './dto/update-insumo.dto';
+import { ImportInsumosDto } from './dto/import-insumos.dto';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { TipoInsumo } from '@prisma/client';
 
@@ -25,6 +26,12 @@ export class CatalogoController {
   async findAll(@Req() req: any, @Query('tipo') tipo?: TipoInsumo) {
     const empresaId = req.user.empresaId || req.user.empresa_id;
     return this.catalogoService.findAll(empresaId, tipo);
+  }
+
+  @Post('importar')
+  async importar(@Req() req: any, @Body() dto: ImportInsumosDto) {
+    const empresaId = req.user.empresaId || req.user.empresa_id;
+    return this.catalogoService.importar(empresaId, dto);
   }
 
   @Get(':id')
