@@ -1,10 +1,51 @@
 import {
+  IsBoolean,
   IsEmail,
   IsEnum,
+  IsObject,
   IsOptional,
   IsString,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+
+const PERFIS_EMPRESA = ['GESTOR', 'USER', 'EXTERNO', 'PERSONALIZADO'] as const;
+const TIPOS_PAPEL = ['GESTOR', 'COLABORADOR', 'EXTERNO', 'PERSONALIZADO'] as const;
+
+export class CapabilitiesDto {
+  @IsBoolean()
+  @IsOptional()
+  gerenciarUsuarios?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  acessoTodasObras?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  aprovarRdo?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  criarEditarRdo?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  verTodosRdos?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  verSoAprovados?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  verParcialAprovados?: boolean;
+
+  @IsObject()
+  @IsOptional()
+  modulosPadrao?: Record<string, string>;
+}
 
 export class CreateUsuarioDto {
   @IsString({ message: 'Nome é obrigatório.' })
@@ -18,8 +59,9 @@ export class CreateUsuarioDto {
   @MinLength(6, { message: 'Senha deve ter no mínimo 6 caracteres.' })
   senha: string;
 
-  @IsEnum(['SUPER_ADMIN', 'GESTOR', 'USER'], {
-    message: 'perfilGlobal deve ser SUPER_ADMIN, GESTOR ou USER.',
+  @IsEnum(PERFIS_EMPRESA, {
+    message:
+      'perfilGlobal deve ser GESTOR, USER, EXTERNO ou PERSONALIZADO.',
   })
   @IsOptional()
   perfilGlobal?: string;
@@ -27,6 +69,16 @@ export class CreateUsuarioDto {
   @IsString()
   @IsOptional()
   telefone?: string;
+
+  @ValidateNested()
+  @Type(() => CapabilitiesDto)
+  @IsOptional()
+  capabilities?: CapabilitiesDto;
+
+  /** Permissões por obra a aplicar no create (PERSONALIZADO / template). */
+  @IsObject()
+  @IsOptional()
+  permissoesObras?: Record<string, Record<string, string>>;
 }
 
 export class UpdateUsuarioDto {
@@ -38,8 +90,9 @@ export class UpdateUsuarioDto {
   @IsOptional()
   email?: string;
 
-  @IsEnum(['SUPER_ADMIN', 'GESTOR', 'USER'], {
-    message: 'perfilGlobal deve ser SUPER_ADMIN, GESTOR ou USER.',
+  @IsEnum(PERFIS_EMPRESA, {
+    message:
+      'perfilGlobal deve ser GESTOR, USER, EXTERNO ou PERSONALIZADO.',
   })
   @IsOptional()
   perfilGlobal?: string;
@@ -47,6 +100,15 @@ export class UpdateUsuarioDto {
   @IsString()
   @IsOptional()
   telefone?: string;
+
+  @ValidateNested()
+  @Type(() => CapabilitiesDto)
+  @IsOptional()
+  capabilities?: CapabilitiesDto;
+
+  @IsObject()
+  @IsOptional()
+  permissoesObras?: Record<string, Record<string, string>>;
 }
 
 export class SetModulosDto {
@@ -76,3 +138,20 @@ export class UpdatePerfilDto {
   @IsOptional()
   senhaAtual?: string;
 }
+
+export class UpdatePapelEmpresaDto {
+  @IsString()
+  @IsOptional()
+  nome?: string;
+
+  @ValidateNested()
+  @Type(() => CapabilitiesDto)
+  @IsOptional()
+  capabilities?: CapabilitiesDto;
+
+  @IsObject()
+  @IsOptional()
+  permissoesPadrao?: Record<string, string>;
+}
+
+export { TIPOS_PAPEL, PERFIS_EMPRESA };

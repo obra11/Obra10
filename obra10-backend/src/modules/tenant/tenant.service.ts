@@ -11,6 +11,11 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import axios from 'axios';
 import { CryptoService } from '../../core/services/crypto.service';
+import {
+  DEFAULT_CAPABILITIES_BY_TIPO,
+  PAPEL_NOME_PADRAO,
+  PAPEIS_COM_DEFAULT_EDITAVEL,
+} from '../../core/capabilities/role-capabilities';
 
 // ===================== VALIDATORS =====================
 function validarCPF(cpf: string): boolean {
@@ -175,6 +180,21 @@ export class TenantService {
           ativo: true,
         },
       });
+
+      // Seed 4 papéis padrão da empresa
+      for (const tipo of ['GESTOR', 'COLABORADOR', 'EXTERNO', 'PERSONALIZADO'] as const) {
+        const caps = DEFAULT_CAPABILITIES_BY_TIPO[tipo];
+        await tx.papelEmpresa.create({
+          data: {
+            empresaId: empresa.id,
+            tipo,
+            nome: PAPEL_NOME_PADRAO[tipo],
+            capabilities: caps as any,
+            permissoesPadrao: caps.modulosPadrao as any,
+            editavel: PAPEIS_COM_DEFAULT_EDITAVEL.includes(tipo),
+          },
+        });
+      }
 
       // Grant RDO free trial module auto-activated for dev testing
       const moduloRdo = await tx.modulo.findUnique({ where: { slug: 'RDO' } });

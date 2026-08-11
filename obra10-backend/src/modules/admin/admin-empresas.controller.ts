@@ -7,6 +7,11 @@ import { AtualizarEmpresaAdminDto, ModulosEmpresaAdminDto, CriarEmpresaAdminDto,
 import * as bcrypt from 'bcrypt';
 import { EmailService } from '../email/email.service';
 import { CobrancaService } from '../cobranca/cobranca.service';
+import {
+  DEFAULT_CAPABILITIES_BY_TIPO,
+  PAPEL_NOME_PADRAO,
+  PAPEIS_COM_DEFAULT_EDITAVEL,
+} from '../../core/capabilities/role-capabilities';
 
 @Controller('admin/empresas')
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
@@ -111,6 +116,20 @@ export class AdminEmpresasController {
           ativo: true,
         }
       });
+
+      for (const tipo of ['GESTOR', 'COLABORADOR', 'EXTERNO', 'PERSONALIZADO'] as const) {
+        const caps = DEFAULT_CAPABILITIES_BY_TIPO[tipo];
+        await tx.papelEmpresa.create({
+          data: {
+            empresaId: empresa.id,
+            tipo,
+            nome: PAPEL_NOME_PADRAO[tipo],
+            capabilities: caps as any,
+            permissoesPadrao: caps.modulosPadrao as any,
+            editavel: PAPEIS_COM_DEFAULT_EDITAVEL.includes(tipo),
+          },
+        });
+      }
 
       // Ativar todos os módulos para a nova empresa
       const modulos = await tx.modulo.findMany({ where: { ativo: true } });

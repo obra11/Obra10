@@ -41,6 +41,7 @@ model Empresa {
   cobrancas           Cobranca[]
   cupons              EmpresaCupom[]
   obras               Obra[]
+  papeis              PapelEmpresa[]
   tenantModulos       TenantModulo[]
   usuarios            Usuario[]
   features            EmpresaFeature[]
@@ -86,6 +87,7 @@ model Usuario {
   deletedAt      DateTime?       @map("deleted_at")
   jwtVersion     Int             @default(0) @map("jwt_version")
   perfilGlobal   PerfilGlobal    @default(USER) @map("perfil_global")
+  capabilities   Json?
   fotoUrl        String?         @map("foto_url")
   loginAttempts  Int             @default(0) @map("login_attempts")
   lockedUntil    DateTime?       @map("locked_until")
@@ -107,6 +109,23 @@ model Usuario {
   @@unique([empresaId, email])
   @@index([empresaId])
   @@map("usuarios")
+}
+
+model PapelEmpresa {
+  id               String          @id @default(uuid())
+  empresaId        String          @map("empresa_id")
+  tipo             TipoPapelEmpresa
+  nome             String
+  capabilities     Json
+  permissoesPadrao Json?           @map("permissoes_padrao")
+  editavel         Boolean         @default(true)
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  empresa          Empresa         @relation(fields: [empresaId], references: [id])
+
+  @@unique([empresaId, tipo])
+  @@index([empresaId])
+  @@map("papeis_empresa")
 }
 
 model Perfil {
@@ -480,6 +499,15 @@ enum PerfilGlobal {
   SUPER_ADMIN
   GESTOR
   USER
+  EXTERNO
+  PERSONALIZADO
+}
+
+enum TipoPapelEmpresa {
+  GESTOR
+  COLABORADOR
+  EXTERNO
+  PERSONALIZADO
 }
 
 enum TipoPessoa {

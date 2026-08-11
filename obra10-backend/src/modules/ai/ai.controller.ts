@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Param, Req, Headers, UseGuards } from '@nestjs/common';
 import { AiService } from './ai.service';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { ObraContextGuard } from '../../core/guards/obra-context.guard';
@@ -37,7 +37,7 @@ export class AiController {
    * POST /obras/:obraId/relatorio-ia/perguntar
    * Body: { dataInicio: "YYYY-MM-DD", dataFim: "YYYY-MM-DD", pergunta: "pergunta" }
    *
-   * Responde a uma pergunta interativa do usuário baseando-se nos RDOs aprovados do período.
+   * Responde a uma pergunta interativa do usuário baseando-se nos RDOs do período.
    */
   @UseGuards(ObraContextGuard)
   @Post('obras/:obraId/relatorio-ia/perguntar')
@@ -59,16 +59,24 @@ export class AiController {
   /**
    * POST /ai/chat
    * Body: { message: "pergunta", history: [] }
+   * Header opcional: x-obra-id (obra ativa do canteiro)
    *
-   * Responde a perguntas gerais do chatbot Luna.
+   * Responde a perguntas gerais do chatbot Luna com contexto rico do banco.
    */
   @Post('ai/chat')
   async chat(
     @Body() body: { message: string; history: Array<{ role: 'user' | 'assistant'; content: string }> },
     @Req() req: any,
+    @Headers('x-obra-id') obraIdHeader?: string,
   ) {
     const empresaId = req.user.empresaId;
     const userId = req.user.sub || req.user.id;
-    return this.aiService.chat(empresaId, userId, body.message, body.history);
+    return this.aiService.chat(
+      empresaId,
+      userId,
+      body.message,
+      body.history || [],
+      obraIdHeader || null,
+    );
   }
 }

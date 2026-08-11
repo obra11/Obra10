@@ -32,7 +32,10 @@ export const ObraLayout: React.FC = () => {
   const [uploadingUserPhoto, setUploadingUserPhoto] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
 
-  const canEditLogo = user?.perfilGlobal === 'GESTOR' || (obraAtiva?.minhasPermissoes && (obraAtiva.minhasPermissoes.includes('SUPER') || obraAtiva.minhasPermissoes.includes('CONFIGURACOES')));
+  const canEditLogo =
+    user?.capabilities?.gerenciarUsuarios === true ||
+    user?.perfilGlobal === 'GESTOR' ||
+    (obraAtiva?.minhasPermissoes && (obraAtiva.minhasPermissoes.includes('SUPER') || obraAtiva.minhasPermissoes.includes('CONFIGURACOES')));
 
   // Hide bottom nav when the user is inside DiarioDeObra (it has its own floating action bar)
   const isInsideDiario = /\/rdos\/(novo|[a-f0-9-]+)$/i.test(location.pathname);

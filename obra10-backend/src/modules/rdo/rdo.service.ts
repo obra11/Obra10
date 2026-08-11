@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 import { RdoStatus, StatusExecucaoTarefa } from '@prisma/client';
 
 /**
@@ -32,7 +33,26 @@ export class RdoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
+    private readonly capabilities: CapabilitiesService,
   ) {}
+
+  private async isPrivilegedEditor(user?: {
+    sub?: string;
+    id?: string;
+    role?: string;
+    perfilGlobal?: string;
+  }): Promise<boolean> {
+    if (!user) return false;
+    if (user.perfilGlobal === 'SUPER_ADMIN' || user.role === 'SUPER_ADMIN') {
+      return true;
+    }
+    const userId = user.sub || user.id;
+    if (!userId) {
+      return user.perfilGlobal === 'GESTOR' || user.role === 'GESTOR';
+    }
+    const caps = await this.capabilities.resolveByUserId(userId);
+    return caps.aprovarRdo || caps.acessoTodasObras;
+  }
 
   // ===================== LEITURA / SETUP =====================
   async getSetupInfo(obraId: string) {
@@ -159,16 +179,15 @@ export class RdoService {
   }
 
   // ===================== BLOQUEAR EDIÇÃO SE IMUTÁVEL =====================
-  private async getRdoBlockChecked(rdoId: string, obraId: string, user?: { role?: string; perfilGlobal?: string }) {
+  private async getRdoBlockChecked(rdoId: string, obraId: string, user?: { role?: string; perfilGlobal?: string; sub?: string; id?: string }) {
     const rdo = await this.prisma.rdo.findFirst({
       where: { id: rdoId, obraId, deletedAt: null },
     });
     if (!rdo) throw new NotFoundException('RDO não encontrado.');
 
-    const roleVal = user?.role || user?.perfilGlobal;
-    const isGestorOrAdmin = roleVal === 'GESTOR' || roleVal === 'SUPER_ADMIN';
+    const isPrivileged = await this.isPrivilegedEditor(user);
 
-    if (isGestorOrAdmin) {
+    if (isPrivileged) {
       return rdo;
     }
 
@@ -237,12 +256,11 @@ export class RdoService {
     // Injetar versão canônica para garantir compatibilidade futura
     const extrasVersioned = { ...dadosExtras, versao: DADOS_EXTRAS_VERSAO };
 
-    const roleVal = user?.role || user?.perfilGlobal;
-    const isGestorOrAdmin = roleVal === 'GESTOR' || roleVal === 'SUPER_ADMIN';
+    const isPrivileged = await this.isPrivilegedEditor(user);
 
     let status: RdoStatus = RdoStatus.EM_PREENCHIMENTO;
     if (
-      isGestorOrAdmin &&
+      isPrivileged &&
       (rdo.status === RdoStatus.APROVADO || rdo.status === RdoStatus.SUBMETIDO)
     ) {
       status = rdo.status;
@@ -480,9 +498,17 @@ export class RdoService {
     userObraRole: any,
     aprovadorId: string,
   ) {
-    if (userObraRole.perfilId < 3) {
+    const caps =
+      userObraRole?.capabilities ||
+      (await this.capabilities.resolveByUserId(aprovadorId));
+    const podeAprovar =
+      caps?.aprovarRdo === true ||
+      userObraRole?.perfilId === 99 ||
+      (typeof userObraRole?.perfilId === 'number' && userObraRole.perfilId >= 3);
+
+    if (!podeAprovar) {
       throw new ForbiddenException(
-        'Apenas gestores/engenheiros (perfil 3+) podem APROVAR um RDO.',
+        'Você não tem permissão para aprovar RDOs.',
       );
     }
 
@@ -593,11 +619,10 @@ export class RdoService {
       throw new ForbiddenException('Acesso negado: RDO não pertence à sua empresa.');
     }
 
-    const roleVal = user?.role || user?.perfilGlobal;
-    const isGestorOrAdmin = roleVal === 'GESTOR' || roleVal === 'SUPER_ADMIN';
-    if (!isGestorOrAdmin) {
+    const isPrivileged = await this.isPrivilegedEditor(user);
+    if (!isPrivileged) {
       throw new ForbiddenException(
-        'Apenas gestores ou administradores podem reabrir um RDO.',
+        'Você não tem permissão para reabrir um RDO.',
       );
     }
 

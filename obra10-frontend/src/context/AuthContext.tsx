@@ -8,6 +8,16 @@ export interface Usuario {
   empresaId: string;
   perfilGlobal: string;
   fotoUrl?: string;
+  capabilities?: {
+    gerenciarUsuarios?: boolean;
+    acessoTodasObras?: boolean;
+    aprovarRdo?: boolean;
+    criarEditarRdo?: boolean;
+    verTodosRdos?: boolean;
+    verSoAprovados?: boolean;
+    verParcialAprovados?: boolean;
+    modulosPadrao?: Record<string, string>;
+  };
 }
 
 export interface Empresa {

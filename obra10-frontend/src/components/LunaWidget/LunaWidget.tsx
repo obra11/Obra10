@@ -6,22 +6,55 @@ interface Message {
   content: string;
 }
 
+function getSpeechRecognitionCtor(): any | null {
+  if (typeof window === 'undefined') return null;
+  return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
+}
+
+/** Garante permissão de microfone antes do SpeechRecognition (melhor em mobile/PWA). */
+async function ensureMicrophonePermission(): Promise<'granted' | 'denied' | 'unsupported'> {
+  if (!navigator?.mediaDevices?.getUserMedia) return 'unsupported';
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((t) => t.stop());
+    return 'granted';
+  } catch (err: any) {
+    const name = err?.name || '';
+    if (name === 'NotAllowedError' || name === 'PermissionDeniedError') return 'denied';
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') return 'denied';
+    return 'denied';
+  }
+}
+
 export default function LunaWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: 'Olá! Sou a Luna, sua assistente no Obra 10. Posso consultar RDOs, verificar pendências e te ajudar a navegar pelo sistema. Como posso ajudar?' }
+    {
+      role: 'assistant',
+      content:
+        'Olá! Sou a Luna, sua assistente no Obra 10. Posso consultar os diários da obra ativa (chuva, efetivo, atividades, pendências) e te ajudar a navegar pelo sistema. Como posso ajudar?',
+    },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
+  const [micHint, setMicHint] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
 
-  const hasSpeech = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+  const hasSpeech = !!getSpeechRecognitionCtor();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
+
+  useEffect(() => {
+    return () => {
+      try {
+        recognitionRef.current?.stop();
+      } catch { /* ignore */ }
+    };
+  }, []);
 
   const sendMessage = async (text: string) => {
     if (!text.trim()) return;
@@ -35,50 +68,117 @@ export default function LunaWidget() {
       const { data } = await api.post('/ai/chat', { message: text, history });
       setMessages([...newMessages, { role: 'assistant', content: data.reply }]);
     } catch {
-      setMessages([...newMessages, { role: 'assistant', content: 'Não consegui me conectar agora. Tente novamente em instantes.' }]);
+      setMessages([
+        ...newMessages,
+        {
+          role: 'assistant',
+          content:
+            'Não consegui consultar os diários agora. Tente novamente em instantes.',
+        },
+      ]);
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleVoice = () => {
-    if (!hasSpeech) return;
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  const toggleVoice = async () => {
+    const SR = getSpeechRecognitionCtor();
+    if (!SR) {
+      setMicHint('Seu navegador não suporta ditado por voz. Use Chrome ou Edge.');
+      return;
+    }
+
     if (listening) {
-      recognitionRef.current?.stop();
+      try {
+        recognitionRef.current?.stop();
+      } catch { /* ignore */ }
       setListening(false);
       return;
     }
-    const rec = new SR();
-    rec.lang = 'pt-BR';
-    rec.interimResults = false;
-    rec.onresult = (e: any) => {
-      const transcript = e.results[0][0].transcript;
+
+    setMicHint(null);
+
+    // Em HTTPS/PWA, pedir o microfone explicitamente evita "not-allowed" silencioso
+    if (!window.isSecureContext) {
+      setMicHint('O microfone só funciona em conexão segura (HTTPS). Abra o site pelo endereço oficial.');
+      return;
+    }
+
+    const permission = await ensureMicrophonePermission();
+    if (permission === 'denied') {
+      setMicHint(
+        'Permissão do microfone bloqueada. No celular: toque no cadeado/ícone do site na barra de endereço → Permissões → Microfone → Permitir, e tente de novo.',
+      );
+      return;
+    }
+
+    try {
+      const rec = new SR();
+      rec.lang = 'pt-BR';
+      rec.interimResults = true;
+      rec.continuous = false;
+      rec.maxAlternatives = 1;
+
+      rec.onstart = () => {
+        setListening(true);
+        setMicHint('Ouvindo… fale agora');
+      };
+
+      rec.onresult = (e: any) => {
+        let finalText = '';
+        let interim = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const piece = e.results[i][0]?.transcript || '';
+          if (e.results[i].isFinal) finalText += piece;
+          else interim += piece;
+        }
+        if (interim) setInput(interim);
+        if (finalText.trim()) {
+          setListening(false);
+          setMicHint(null);
+          setInput('');
+          sendMessage(finalText.trim());
+        }
+      };
+
+      rec.onerror = (event: any) => {
+        console.error('Speech recognition error:', event);
+        const code = event?.error || '';
+        if (code === 'not-allowed' || code === 'service-not-allowed') {
+          setMicHint(
+            'Acesso ao microfone negado. Libere o microfone nas permissões do site (cadeado na barra de endereço) e toque de novo no microfone.',
+          );
+        } else if (code === 'no-speech') {
+          setMicHint('Não ouvi nada. Toque no microfone e fale um pouco mais perto.');
+        } else if (code === 'audio-capture') {
+          setMicHint('Não foi possível capturar áudio. Verifique se outro app está usando o microfone.');
+        } else if (code === 'network') {
+          setMicHint('Falha de rede no reconhecimento de voz. Verifique a conexão e tente novamente.');
+        } else if (code !== 'aborted') {
+          setMicHint(`Erro no microfone (${code}). Tente novamente.`);
+        }
+        setListening(false);
+      };
+
+      rec.onend = () => {
+        setListening(false);
+        setMicHint((prev) => (prev === 'Ouvindo… fale agora' ? null : prev));
+      };
+
+      recognitionRef.current = rec;
+      rec.start();
+    } catch (err) {
+      console.error('Falha ao iniciar SpeechRecognition:', err);
       setListening(false);
-      sendMessage(transcript);
-    };
-    rec.onerror = (event: any) => {
-      console.error('Speech recognition error:', event);
-      if (event.error === 'not-allowed') {
-        alert('Acesso ao microfone negado. Por favor, ative a permissão de microfone nas configurações do seu navegador para usar esta função.');
-      } else if (event.error === 'no-speech') {
-        alert('Nenhuma voz foi detectada. Verifique se o microfone está funcionando e fale um pouco mais alto.');
-      } else {
-        alert(`Erro de voz (${event.error}). Verifique as conexões do microfone.`);
-      }
-      setListening(false);
-    };
-    rec.onend = () => setListening(false);
-    recognitionRef.current = rec;
-    rec.start();
-    setListening(true);
+      setMicHint('Não foi possível iniciar o microfone. Atualize a página e tente novamente.');
+    }
   };
 
   return (
     <>
       {open && (
         <div style={{
-          position: 'fixed', bottom: '90px', right: '24px', width: '380px', height: '560px',
+          position: 'fixed', bottom: '90px', right: '24px', width: 'min(380px, calc(100vw - 24px))', height: '560px',
           background: 'white', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
           display: 'flex', flexDirection: 'column', zIndex: 9999, overflow: 'hidden',
           fontFamily: 'Inter, sans-serif'
@@ -131,29 +231,46 @@ export default function LunaWidget() {
             <div ref={bottomRef} />
           </div>
 
-          <div style={{ padding: '12px', background: 'white', borderTop: '1px solid #f0f0f0', display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <input
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage(input)}
-              placeholder="Digite sua pergunta..."
-              style={{
-                flex: 1, padding: '10px 14px', borderRadius: '24px', border: '1px solid #e0e0e0',
-                fontSize: 14, outline: 'none', fontFamily: 'Inter, sans-serif'
-              }}
-            />
-            {hasSpeech && (
-              <button onClick={toggleVoice} style={{
-                width: 38, height: 38, borderRadius: '50%', border: 'none', cursor: 'pointer',
-                background: listening ? '#E5192C' : '#f0f0f0',
-                color: listening ? 'white' : '#666', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                animation: listening ? 'luna-pulse 1s infinite' : 'none'
-              }}>🎤</button>
+          <div style={{ padding: '12px', background: 'white', borderTop: '1px solid #f0f0f0' }}>
+            {micHint && (
+              <div style={{
+                marginBottom: 8, padding: '8px 10px', borderRadius: 10,
+                background: listening ? '#fef2f2' : '#fff7ed',
+                color: listening ? '#991b1b' : '#9a3412',
+                fontSize: 12, lineHeight: 1.4,
+              }}>
+                {micHint}
+              </div>
             )}
-            <button onClick={() => sendMessage(input)} style={{
-              width: 38, height: 38, borderRadius: '50%', border: 'none', cursor: 'pointer',
-              background: '#E5192C', color: 'white', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>➤</button>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage(input)}
+                placeholder={listening ? 'Ouvindo…' : 'Digite sua pergunta...'}
+                style={{
+                  flex: 1, padding: '10px 14px', borderRadius: '24px', border: '1px solid #e0e0e0',
+                  fontSize: 14, outline: 'none', fontFamily: 'Inter, sans-serif'
+                }}
+              />
+              {hasSpeech && (
+                <button
+                  type="button"
+                  onClick={toggleVoice}
+                  title={listening ? 'Parar de ouvir' : 'Falar com a Luna'}
+                  style={{
+                    width: 38, height: 38, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                    background: listening ? '#E5192C' : '#f0f0f0',
+                    color: listening ? 'white' : '#666', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    animation: listening ? 'luna-pulse 1s infinite' : 'none'
+                  }}
+                >🎤</button>
+              )}
+              <button type="button" onClick={() => sendMessage(input)} style={{
+                width: 38, height: 38, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                background: '#E5192C', color: 'white', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>➤</button>
+            </div>
           </div>
         </div>
       )}

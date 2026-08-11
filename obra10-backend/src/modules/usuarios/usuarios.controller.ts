@@ -12,27 +12,48 @@ import {
 } from '@nestjs/common';
 import { UsuariosService } from './usuarios.service';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
+import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 import {
   CreateUsuarioDto,
   UpdateUsuarioDto,
   SetModulosDto,
   UpdatePerfilDto,
+  UpdatePapelEmpresaDto,
 } from './dto/usuarios.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('usuarios')
 export class UsuariosController {
-  constructor(private readonly usuariosService: UsuariosService) {}
+  constructor(
+    private readonly usuariosService: UsuariosService,
+    private readonly capabilities: CapabilitiesService,
+  ) {}
 
   @Get()
   async listar(@Req() req: any) {
-    this.assertGestorOuAdmin(req);
+    await this.assertPodeGerenciarUsuarios(req);
     return this.usuariosService.findAllByEmpresa(req.user.empresaId);
+  }
+
+  @Get('papeis')
+  async listarPapeis(@Req() req: any) {
+    await this.assertPodeGerenciarUsuarios(req);
+    return this.usuariosService.listPapeis(req.user.empresaId);
+  }
+
+  @Patch('papeis/:tipo')
+  async atualizarPapel(
+    @Param('tipo') tipo: string,
+    @Body() dto: UpdatePapelEmpresaDto,
+    @Req() req: any,
+  ) {
+    await this.assertPodeGerenciarUsuarios(req);
+    return this.usuariosService.updatePapel(req.user.empresaId, tipo, dto);
   }
 
   @Post()
   async criar(@Body() dto: CreateUsuarioDto, @Req() req: any) {
-    this.assertGestorOuAdmin(req);
+    await this.assertPodeGerenciarUsuarios(req);
     return this.usuariosService.create(req.user.empresaId, dto);
   }
 
@@ -48,7 +69,7 @@ export class UsuariosController {
     @Body() dto: UpdateUsuarioDto,
     @Req() req: any,
   ) {
-    this.assertGestorOuAdmin(req);
+    await this.assertPodeGerenciarUsuarios(req);
     return this.usuariosService.update(req.user.empresaId, id, dto);
   }
 
@@ -58,21 +79,28 @@ export class UsuariosController {
     @Body() dto: SetModulosDto,
     @Req() req: any,
   ) {
-    this.assertGestorOuAdmin(req);
+    await this.assertPodeGerenciarUsuarios(req);
     return this.usuariosService.setModulos(req.user.empresaId, id, dto.modulos);
   }
 
   @Delete(':id')
   async remover(@Param('id') id: string, @Req() req: any) {
-    this.assertGestorOuAdmin(req);
+    await this.assertPodeGerenciarUsuarios(req);
     return this.usuariosService.softDelete(req.user.empresaId, id);
   }
 
-  private assertGestorOuAdmin(req: any) {
+  private async assertPodeGerenciarUsuarios(req: any) {
     const perfil = req.user?.perfilGlobal;
-    if (perfil !== 'SUPER_ADMIN' && perfil !== 'GESTOR') {
+    if (perfil === 'SUPER_ADMIN') return;
+
+    const userId = req.user?.sub;
+    const pode = await this.capabilities.hasCapability(
+      userId,
+      'gerenciarUsuarios',
+    );
+    if (!pode) {
       throw new ForbiddenException(
-        'Apenas Gestores e Super Admins podem gerenciar usuários.',
+        'Você não tem permissão para gerenciar usuários.',
       );
     }
   }

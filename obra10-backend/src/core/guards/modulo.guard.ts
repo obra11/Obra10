@@ -3,10 +3,10 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
-  SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CapabilitiesService } from '../capabilities/capabilities.service';
 import { MODULO_KEY } from '../decorators/modulo.decorator';
 
 @Injectable()
@@ -14,6 +14,7 @@ export class ModuloGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly prisma: PrismaService,
+    private readonly capabilities: CapabilitiesService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -59,7 +60,6 @@ export class ModuloGuard implements CanActivate {
     });
 
     if (!tenantModulo) {
-      // Registra tentativa de acesso negado no AuditLog
       await this.logAcessoNegado(
         userId,
         empresaId,
@@ -72,18 +72,22 @@ export class ModuloGuard implements CanActivate {
     }
 
     // 2. Verifica se o USUÁRIO tem permissão individual para o módulo
-    // Super Admins e Gestores têm acesso irrestrito dentro dos módulos do tenant
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: userId, deletedAt: null },
-      select: { perfilGlobal: true },
+      select: { perfilGlobal: true, capabilities: true },
     });
 
     if (!usuario)
       throw new ForbiddenException('Usuário não encontrado ou inativo.');
 
+    const caps = await this.capabilities.resolveForUser({
+      empresaId,
+      perfilGlobal: usuario.perfilGlobal,
+      capabilitiesOverride: usuario.capabilities,
+    });
+
     const isPrivilegiado =
-      usuario.perfilGlobal === 'SUPER_ADMIN' ||
-      usuario.perfilGlobal === 'GESTOR';
+      usuario.perfilGlobal === 'SUPER_ADMIN' || caps.acessoTodasObras;
 
     if (!isPrivilegiado) {
       const usuarioModulo = await this.prisma.usuarioModulo.findUnique({

@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { parseUTCDate } from '../utils/date';
 import { RdoShareBar } from '../components/RdoShareBar';
 import { useAuth } from '../context/AuthContext';
+import { persistCapturedMediaList } from '../utils/persistCapturedMedia';
 import {
   generateUUID,
   saveOfflineAttachment,
@@ -18,7 +19,13 @@ import {
   deleteOfflineAttachment,
   updateRdoId,
   incrementarTentativa,
-  updateOfflineAttachmentLegenda
+  updateOfflineAttachmentLegenda,
+  saveOfflineRdoDraft,
+  getOfflineRdoDraft,
+  deleteOfflineRdoDraft,
+  getPendingOfflineRdoDrafts,
+  offlineDraftKey,
+  type OfflineRdoDraft,
 } from '../utils/offlineStorage';
 
 /* ═══════════════════════════════════════════════════════════════
@@ -235,6 +242,13 @@ export const DiarioDeObra: React.FC = () => {
   const [initLoading, setInitLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [rdoIdAtual, setRdoIdAtual] = useState<string | null>(rdoId || null);
+  const [isOnline, setIsOnline] = useState(
+    typeof navigator !== 'undefined' ? navigator.onLine : true,
+  );
+  const [draftPendingSync, setDraftPendingSync] = useState(false);
+  const [lastLocalSaveAt, setLastLocalSaveAt] = useState<string | null>(null);
+  const autosaveReady = useRef(false);
+  const syncingDraftRef = useRef(false);
 
   const [status, setStatus] = useState<RdoStatus>('rascunho');
   const [toast, setToast] = useState<string | null>(null);
@@ -252,7 +266,13 @@ export const DiarioDeObra: React.FC = () => {
 
   const obraAtual = (user as any)?.obrasPermitidas?.find((o: any) => (o.obraId || o.id) === obraId) || obras?.find((o: any) => o.id === obraId);
   const permRdo = obraAtual?.permissoes?.RDO || obraAtual?.permissoes?.rdo;
-  const isGestorOrAdmin = user?.perfilGlobal === 'GESTOR' || user?.perfilGlobal === 'SUPER_ADMIN' || (user as any)?.role === 'GESTOR' || (user as any)?.role === 'SUPER_ADMIN';
+  const isGestorOrAdmin =
+    user?.perfilGlobal === 'SUPER_ADMIN' ||
+    user?.capabilities?.aprovarRdo === true ||
+    user?.capabilities?.acessoTodasObras === true ||
+    user?.perfilGlobal === 'GESTOR' ||
+    (user as any)?.role === 'GESTOR' ||
+    (user as any)?.role === 'SUPER_ADMIN';
   const isReadOnly = permRdo === 'VIEW' || permRdo === 'VIEW_APPROVED' || permRdo === 'VIEW_PARTIAL_APPROVED' || (status !== 'rascunho' && !isGestorOrAdmin);
   const isPartialView = permRdo === 'VIEW_PARTIAL_APPROVED';
 
@@ -320,7 +340,7 @@ export const DiarioDeObra: React.FC = () => {
     if (rdoId) {
       // Carregar RDO existente
       api.get(`/rdos/${rdoId}`, { headers })
-        .then(res => {
+        .then(async (res) => {
           const rdo = res.data;
           const extras = rdo.dadosExtras || {};
           setNomeObra(rdo.obra?.nome || '');
@@ -362,22 +382,109 @@ export const DiarioDeObra: React.FC = () => {
           };
           setStatus(statusMap[rdo.status] || 'rascunho');
           if (rdo.rejeitadoMotivo) setMotivoRejeicaoBackend(rdo.rejeitadoMotivo);
+
+          // Se houver rascunho local pendente de sync, prevalece o do aparelho
+          try {
+            const local = await getOfflineRdoDraft(offlineDraftKey(obraId, rdoId));
+            if (local?.pendingSync && local.dadosExtras) {
+              const le = local.dadosExtras;
+              setData(le.data || extras.data || today);
+              setResponsavel(le.responsavel || '');
+              setClimaManha(le.climaManha || '');
+              setClimaTarde(le.climaTarde || '');
+              setClimaNoite(le.climaNoite || '');
+              setTempMin(le.tempMin || '');
+              setTempMax(le.tempMax || '');
+              setPessoas(le.pessoas?.length ? le.pessoas : [{ nome: '', funcao: '', empresa: '' }]);
+              setProfissionais(le.profissionais || []);
+              setMateriais(le.materiais || []);
+              setEquipamentos(le.equipamentos || []);
+              const rawLocalAtv = le.atividadesExecutadas;
+              if (Array.isArray(rawLocalAtv)) setAtividadesExecutadas(rawLocalAtv);
+              setAtividadesPendentes(parseAtividadesPendentes(le.atividadesPendentes));
+              setObservacoes(parseObservacoes(le.observacoes || le.observacoesGerais));
+              if (local.aprovadorId) setAprovadorIdSelecionado(local.aprovadorId);
+              setDraftPendingSync(true);
+              setLastLocalSaveAt(local.updatedAt);
+            }
+          } catch { /* ignore */ }
+
           setInitLoading(false);
+          autosaveReady.current = true;
         })
-        .catch(err => {
+        .catch(async (err) => {
           console.error('Erro ao carregar RDO:', err);
+          try {
+            const local = await getOfflineRdoDraft(offlineDraftKey(obraId, rdoId));
+            if (local?.dadosExtras) {
+              const le = local.dadosExtras;
+              setData(le.data || today);
+              setResponsavel(le.responsavel || '');
+              setClimaManha(le.climaManha || '');
+              setClimaTarde(le.climaTarde || '');
+              setClimaNoite(le.climaNoite || '');
+              setTempMin(le.tempMin || '');
+              setTempMax(le.tempMax || '');
+              setPessoas(le.pessoas?.length ? le.pessoas : [{ nome: '', funcao: '', empresa: '' }]);
+              setProfissionais(le.profissionais || []);
+              setMateriais(le.materiais || []);
+              setEquipamentos(le.equipamentos || []);
+              if (Array.isArray(le.atividadesExecutadas)) setAtividadesExecutadas(le.atividadesExecutadas);
+              setAtividadesPendentes(parseAtividadesPendentes(le.atividadesPendentes));
+              setObservacoes(parseObservacoes(le.observacoes || le.observacoesGerais));
+              if (local.aprovadorId) setAprovadorIdSelecionado(local.aprovadorId);
+              if (local.rdoNumberStr) setRdoNumberStr(local.rdoNumberStr);
+              if (local.nomeObra) setNomeObra(local.nomeObra);
+              setDraftPendingSync(!!local.pendingSync);
+              setLastLocalSaveAt(local.updatedAt);
+              setInitLoading(false);
+              autosaveReady.current = true;
+              setToast('📴 Sem conexão — abrindo cópia salva no aparelho.');
+              return;
+            }
+          } catch { /* ignore */ }
           alert(err?.response?.data?.message || 'Erro ao carregar RDO.');
           navigate(`/obras/${obraId}/rdos`);
         });
     } else {
       // Novo RDO — buscar apenas o setup e RDOs anteriores
+      const finishNew = async (obraNome?: string, nextSeq?: number) => {
+        if (obraNome) setNomeObra(obraNome);
+        if (nextSeq) setRdoNumberStr(`RDO #${nextSeq}`);
+        try {
+          const local = await getOfflineRdoDraft(offlineDraftKey(obraId, null));
+          if (local?.dadosExtras) {
+            const le = local.dadosExtras;
+            setData(le.data || today);
+            setResponsavel(le.responsavel || '');
+            setClimaManha(le.climaManha || '');
+            setClimaTarde(le.climaTarde || '');
+            setClimaNoite(le.climaNoite || '');
+            setTempMin(le.tempMin || '');
+            setTempMax(le.tempMax || '');
+            setPessoas(le.pessoas?.length ? le.pessoas : [{ nome: '', funcao: '', empresa: '' }]);
+            setProfissionais(le.profissionais || []);
+            setMateriais(le.materiais || []);
+            setEquipamentos(le.equipamentos || []);
+            if (Array.isArray(le.atividadesExecutadas)) setAtividadesExecutadas(le.atividadesExecutadas);
+            setAtividadesPendentes(parseAtividadesPendentes(le.atividadesPendentes));
+            setObservacoes(parseObservacoes(le.observacoes || le.observacoesGerais));
+            if (local.aprovadorId) setAprovadorIdSelecionado(local.aprovadorId);
+            if (local.rdoNumberStr) setRdoNumberStr(local.rdoNumberStr);
+            if (local.nomeObra) setNomeObra(local.nomeObra);
+            if (local.tempId) tempRdoId.current = local.tempId;
+            setDraftPendingSync(!!local.pendingSync);
+            setLastLocalSaveAt(local.updatedAt);
+            setToast('📴 Rascunho local restaurado neste aparelho.');
+          }
+        } catch { /* ignore */ }
+        setInitLoading(false);
+        autosaveReady.current = true;
+      };
+
       api.get('/rdos/setup', { headers })
-        .then(res => {
-          setNomeObra(res.data.obraNome);
-          setRdoNumberStr(`RDO #${res.data.nextSequencial}`);
-          setInitLoading(false);
-        })
-        .catch(() => setInitLoading(false));
+        .then(res => finishNew(res.data.obraNome, res.data.nextSequencial))
+        .catch(() => finishNew());
 
       api.get('/rdos', { headers })
         .then(res => {
@@ -714,6 +821,26 @@ export const DiarioDeObra: React.FC = () => {
     e.target.value = '';
   };
 
+  /** Upload pela câmera: também grava cópia no aparelho (galeria/arquivos). */
+  const handleFotoCameraUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter(
+      (f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|gif|bmp)$/i.test(f.name),
+    );
+    e.target.value = '';
+    if (files.length === 0) return;
+
+    const result = await persistCapturedMediaList(files, 'image');
+    handleFotosDrop(files);
+
+    if (result === 'shared') {
+      showToast('📷 Use "Salvar Imagem" para guardar na Galeria.');
+    } else if (result === 'downloaded') {
+      showToast('📷 Cópia da foto salva no aparelho.');
+    } else if (result === 'failed') {
+      showToast('⚠️ Não foi possível salvar a foto na Galeria do aparelho.');
+    }
+  };
+
   const handleVideosDrop = async (files: File[]) => {
     if (!navigator.onLine) {
       for (const file of files) {
@@ -753,6 +880,26 @@ export const DiarioDeObra: React.FC = () => {
     );
     handleVideosDrop(files);
     e.target.value = '';
+  };
+
+  /** Gravação pela câmera: também grava cópia no aparelho (galeria/arquivos). */
+  const handleVideoCameraUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter(
+      (f) => f.type.startsWith('video/') || /\.(mp4|mov|webm|avi|mkv|3gp)$/i.test(f.name),
+    );
+    e.target.value = '';
+    if (files.length === 0) return;
+
+    const result = await persistCapturedMediaList(files, 'video');
+    handleVideosDrop(files);
+
+    if (result === 'shared') {
+      showToast('🎥 Use "Salvar Vídeo" para guardar na Galeria.');
+    } else if (result === 'downloaded') {
+      showToast('🎥 Cópia do vídeo salva no aparelho.');
+    } else if (result === 'failed') {
+      showToast('⚠️ Não foi possível salvar o vídeo na Galeria do aparelho.');
+    }
   };
 
   const handleAnexosDrop = async (files: File[]) => {
@@ -815,6 +962,127 @@ export const DiarioDeObra: React.FC = () => {
     atividadesPendentes,
     observacoes,
   });
+
+  const persistDraftLocal = useCallback(async (opts?: { pendingSync?: boolean }) => {
+    if (!obraId || isReadOnly || status !== 'rascunho') return;
+    const pendingSync = opts?.pendingSync ?? draftPendingSync;
+    const localKey = offlineDraftKey(obraId, rdoIdAtual);
+    const draft: OfflineRdoDraft = {
+      localKey,
+      obraId,
+      rdoId: rdoIdAtual,
+      tempId: tempRdoId.current,
+      dadosExtras: buildDadosExtras(),
+      aprovadorId: aprovadorIdSelecionado || undefined,
+      pendingSync,
+      updatedAt: new Date().toISOString(),
+      rdoNumberStr,
+      nomeObra,
+    };
+    await saveOfflineRdoDraft(draft);
+    setLastLocalSaveAt(draft.updatedAt);
+    if (pendingSync) setDraftPendingSync(true);
+  }, [
+    obraId, isReadOnly, status, draftPendingSync, rdoIdAtual,
+    aprovadorIdSelecionado, rdoNumberStr, nomeObra,
+    data, responsavel, climaManha, climaTarde, climaNoite, tempMin, tempMax,
+    pessoas, profissionais, materiais, equipamentos,
+    atividadesExecutadas, atividadesPendentes, observacoes,
+  ]);
+
+  // Autosave contínuo no aparelho (protege perda sem sinal / fechamento acidental)
+  useEffect(() => {
+    if (!autosaveReady.current || !obraId || isReadOnly || status !== 'rascunho' || initLoading) return;
+    const timer = window.setTimeout(() => {
+      persistDraftLocal().catch((err) => console.warn('Autosave local falhou:', err));
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [
+    persistDraftLocal, obraId, isReadOnly, status, initLoading,
+    data, responsavel, climaManha, climaTarde, climaNoite, tempMin, tempMax,
+    pessoas, profissionais, materiais, equipamentos,
+    atividadesExecutadas, atividadesPendentes, observacoes, aprovadorIdSelecionado,
+  ]);
+
+  // Monitorar conexão e sincronizar rascunhos pendentes
+  useEffect(() => {
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
+  const syncPendingDraftToServer = useCallback(async (draft: OfflineRdoDraft) => {
+    if (!draft.obraId || syncingDraftRef.current) return false;
+    syncingDraftRef.current = true;
+    try {
+      const headers = { 'x-obra-id': draft.obraId };
+      const dataRef = draft.dadosExtras?.data || new Date().toISOString().split('T')[0];
+      let serverId = draft.rdoId;
+
+      if (!serverId) {
+        const res = await api.post('/rdos', { dataReferencia: dataRef, dadosExtras: draft.dadosExtras }, { headers });
+        serverId = res.data.id;
+        await updateRdoId(draft.tempId, serverId!);
+        await deleteOfflineRdoDraft(draft.localKey);
+        await saveOfflineRdoDraft({
+          ...draft,
+          localKey: offlineDraftKey(draft.obraId, serverId),
+          rdoId: serverId!,
+          pendingSync: false,
+          updatedAt: new Date().toISOString(),
+        });
+        if (obraId === draft.obraId && (!rdoIdAtual || rdoIdAtual === draft.rdoId)) {
+          setRdoIdAtual(serverId!);
+          setDraftPendingSync(false);
+          navigate(`/obras/${draft.obraId}/rdos/${serverId}`, { replace: true });
+        }
+      } else {
+        await api.put(`/rdos/${serverId}/rascunho`, { dadosExtras: draft.dadosExtras }, { headers });
+        await saveOfflineRdoDraft({
+          ...draft,
+          pendingSync: false,
+          updatedAt: new Date().toISOString(),
+        });
+        if (rdoIdAtual === serverId) setDraftPendingSync(false);
+      }
+
+      await syncOfflineFiles(serverId!);
+      return true;
+    } catch (err) {
+      console.error('Falha ao sincronizar rascunho offline:', err);
+      return false;
+    } finally {
+      syncingDraftRef.current = false;
+    }
+  }, [obraId, rdoIdAtual, navigate]);
+
+  useEffect(() => {
+    if (!isOnline || !obraId) return;
+    (async () => {
+      try {
+        const pending = await getPendingOfflineRdoDrafts();
+        const mine = pending.filter((d) => d.obraId === obraId);
+        if (mine.length === 0) return;
+        let ok = 0;
+        for (const draft of mine) {
+          const synced = await syncPendingDraftToServer(draft);
+          if (synced) ok += 1;
+        }
+        if (ok > 0) {
+          showToast(`☁️ ${ok} rascunho(s) do aparelho sincronizado(s) com a plataforma.`);
+          if (rdoIdAtual) await syncOfflineFiles(rdoIdAtual);
+        }
+      } catch (err) {
+        console.warn('Sync automático de rascunhos falhou:', err);
+      }
+    })();
+  }, [isOnline, obraId, rdoIdAtual, syncPendingDraftToServer, showToast]);
+
   const uploadMidas = async (rdoIdAlvo: string) => {
     if (!obraId) return;
 
@@ -908,6 +1176,13 @@ export const DiarioDeObra: React.FC = () => {
     if (!obraId) return;
     setSaving(true);
     try {
+      // Sem sinal: grava no aparelho e marca para sync posterior
+      if (!navigator.onLine) {
+        await persistDraftLocal({ pendingSync: true });
+        showToast('📴 Sem sinal — rascunho salvo no aparelho. Será enviado ao voltar a conexão.');
+        return;
+      }
+
       const headers = { 'x-obra-id': obraId };
       const dadosExtras = buildDadosExtras();
 
@@ -919,6 +1194,20 @@ export const DiarioDeObra: React.FC = () => {
         await updateRdoId(tempRdoId.current, newId);
         await uploadMidas(newId);
         await syncOfflineFiles(newId);
+        await deleteOfflineRdoDraft(offlineDraftKey(obraId, null));
+        await saveOfflineRdoDraft({
+          localKey: offlineDraftKey(obraId, newId),
+          obraId,
+          rdoId: newId,
+          tempId: tempRdoId.current,
+          dadosExtras,
+          aprovadorId: aprovadorIdSelecionado || undefined,
+          pendingSync: false,
+          updatedAt: new Date().toISOString(),
+          rdoNumberStr,
+          nomeObra,
+        });
+        setDraftPendingSync(false);
         navigate(`/obras/${obraId}/rdos/${newId}`, { replace: true });
         showToast('💾 Rascunho criado!');
       } else {
@@ -926,10 +1215,29 @@ export const DiarioDeObra: React.FC = () => {
         await api.put(`/rdos/${rdoIdAtual}/rascunho`, { dadosExtras }, { headers });
         await uploadMidas(rdoIdAtual!);
         await syncOfflineFiles(rdoIdAtual!);
+        await saveOfflineRdoDraft({
+          localKey: offlineDraftKey(obraId, rdoIdAtual),
+          obraId,
+          rdoId: rdoIdAtual,
+          tempId: tempRdoId.current,
+          dadosExtras,
+          aprovadorId: aprovadorIdSelecionado || undefined,
+          pendingSync: false,
+          updatedAt: new Date().toISOString(),
+          rdoNumberStr,
+          nomeObra,
+        });
+        setDraftPendingSync(false);
         showToast('💾 Rascunho salvo!');
       }
     } catch (err: any) {
-      showToast(`❌ Erro ao salvar: ${err?.response?.data?.message || 'tente novamente'}`);
+      // Rede falhou no meio: salva localmente mesmo assim
+      try {
+        await persistDraftLocal({ pendingSync: true });
+        showToast('📴 Sem conexão estável — rascunho guardado no aparelho para sincronizar depois.');
+      } catch {
+        showToast(`❌ Erro ao salvar: ${err?.response?.data?.message || 'tente novamente'}`);
+      }
     } finally {
       setSaving(false);
     }
@@ -938,6 +1246,11 @@ export const DiarioDeObra: React.FC = () => {
   // ── Enviar para aprovação ──
   const handleEnviar = async () => {
     if (!obraId) return;
+    if (!navigator.onLine) {
+      await persistDraftLocal({ pendingSync: true });
+      showToast('📴 Sem sinal — rascunho salvo no aparelho. Conecte-se para enviar à aprovação.');
+      return;
+    }
     setSaving(true);
     try {
       const headers = { 'x-obra-id': obraId };
@@ -949,6 +1262,7 @@ export const DiarioDeObra: React.FC = () => {
         idParaSubmeter = res.data.id;
         setRdoIdAtual(idParaSubmeter);
         await updateRdoId(tempRdoId.current, idParaSubmeter!);
+        await deleteOfflineRdoDraft(offlineDraftKey(obraId, null));
       } else {
         await api.put(`/rdos/${idParaSubmeter}/rascunho`, { dadosExtras: buildDadosExtras() }, { headers });
       }
@@ -962,9 +1276,16 @@ export const DiarioDeObra: React.FC = () => {
         { headers },
       );
       setStatus('pendente');
+      setDraftPendingSync(false);
+      await deleteOfflineRdoDraft(offlineDraftKey(obraId, idParaSubmeter));
       showToast('📤 Enviado para aprovação!');
     } catch (err: any) {
-      showToast(`❌ ${err?.response?.data?.message || 'Erro ao enviar'}`);
+      try {
+        await persistDraftLocal({ pendingSync: true });
+        showToast('📴 Falha de rede — rascunho guardado no aparelho. Tente enviar de novo com sinal.');
+      } catch {
+        showToast(`❌ ${err?.response?.data?.message || 'Erro ao enviar'}`);
+      }
     } finally {
       setSaving(false);
     }
@@ -1087,7 +1408,22 @@ export const DiarioDeObra: React.FC = () => {
               <p className="text-xs md:text-sm text-gray-500 font-medium truncate">{initLoading ? 'Carregando...' : `${rdoNumberStr}`}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            {!isOnline && (
+              <span className="px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border whitespace-nowrap bg-amber-50 text-amber-800 border-amber-200">
+                SEM SINAL
+              </span>
+            )}
+            {draftPendingSync && (
+              <span className="px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border whitespace-nowrap bg-blue-50 text-blue-800 border-blue-200">
+                AGUARDANDO SYNC
+              </span>
+            )}
+            {isOnline && lastLocalSaveAt && !draftPendingSync && status === 'rascunho' && (
+              <span className="hidden sm:inline px-2.5 py-1 rounded-full text-[10px] md:text-xs font-medium border whitespace-nowrap bg-gray-50 text-gray-500 border-gray-200">
+                Cópia local ok
+              </span>
+            )}
             <span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border whitespace-nowrap ${statusBadgeColor[status]}`}>
               {statusLabels[status].toUpperCase()}
             </span>
@@ -1543,7 +1879,7 @@ export const DiarioDeObra: React.FC = () => {
                >
                   <div className="flex justify-between items-center mb-4 relative">
                      <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><ImageIcon size={16}/> Fotos</h3>
-                     <input type="file" accept="image/*" ref={fotoCameraInputRef} className="hidden" onChange={handleFotoUpload} capture="environment" />
+                     <input type="file" accept="image/*" ref={fotoCameraInputRef} className="hidden" onChange={handleFotoCameraUpload} capture="environment" />
                      <input type="file" multiple accept="image/*" ref={fotoGalleryInputRef} className="hidden" onChange={handleFotoUpload} />
                      <input type="file" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.gif,image/*" ref={fotoFilesInputRef} className="hidden" onChange={handleFotoUpload} />
                      <button
@@ -1686,7 +2022,7 @@ export const DiarioDeObra: React.FC = () => {
                >
                   <div className="flex justify-between items-center mb-4 relative">
                      <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><Video size={16}/> Vídeos</h3>
-                     <input type="file" accept="video/*" ref={videoCameraInputRef} className="hidden" onChange={handleVideoUpload} capture="environment" />
+                     <input type="file" accept="video/*" ref={videoCameraInputRef} className="hidden" onChange={handleVideoCameraUpload} capture="environment" />
                      <input type="file" multiple accept="video/*" ref={videoGalleryInputRef} className="hidden" onChange={handleVideoUpload} />
                      <input type="file" multiple accept=".mp4,.mov,.webm,.avi,.mkv,.3gp,video/*" ref={videoFilesInputRef} className="hidden" onChange={handleVideoUpload} />
                      <button

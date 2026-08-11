@@ -23,6 +23,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { ObraContextGuard } from '../../core/guards/obra-context.guard';
+import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 
 /** Generates a UUID-based filename to prevent path traversal attacks */
 function safeFilename(originalname: string): string {
@@ -41,7 +42,10 @@ export class UploadController {
   private readonly s3Client: S3Client;
   private readonly bucketName = process.env.AWS_S3_BUCKET_NAME || 'obra10-mvp';
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly capabilities: CapabilitiesService,
+  ) {
     this.s3Client = new S3Client({
       region: process.env.AWS_REGION || 'auto',
       endpoint: process.env.AWS_S3_ENDPOINT || undefined,
@@ -154,10 +158,11 @@ export class UploadController {
     file: Express.Multer.File,
   ) {
     const isOwner = req.user.sub === id;
-    const isGestor =
-      req.user.perfilGlobal === 'GESTOR' ||
-      req.user.perfilGlobal === 'SUPER_ADMIN';
-    if (!isOwner && !isGestor) {
+    const isAdmin = req.user.perfilGlobal === 'SUPER_ADMIN';
+    const podeGerenciar = isAdmin
+      ? true
+      : await this.capabilities.hasCapability(req.user.sub, 'gerenciarUsuarios');
+    if (!isOwner && !podeGerenciar) {
       throw new ForbiddenException(
         'Sem permissão para alterar a foto deste usuário.',
       );

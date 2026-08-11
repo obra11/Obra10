@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { ObraService } from './obra.service';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
+import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 import {
   CreateObraDto,
   EditObraDto,
@@ -24,7 +25,10 @@ import {
 @UseGuards(JwtAuthGuard)
 @Controller('obras')
 export class ObraController {
-  constructor(private readonly obraService: ObraService) {}
+  constructor(
+    private readonly obraService: ObraService,
+    private readonly capabilities: CapabilitiesService,
+  ) {}
 
   @Get('minhas')
   async getMinhasObras(@Req() req: any) {
@@ -101,8 +105,7 @@ export class ObraController {
     @Body() dto: AddColaboradorDto,
   ) {
     const empresaId = req.user?.empresaId;
-    if (req.user?.perfilGlobal !== 'GESTOR')
-      throw new ForbiddenException('Apenas Gestor pode gerenciar efetivo.');
+    await this.assertGerenciarUsuarios(req);
     return this.obraService.adicionarColaborador(id, empresaId, dto);
   }
 
@@ -114,8 +117,7 @@ export class ObraController {
     @Body() dto: EditColaboradorDto,
   ) {
     const empresaId = req.user?.empresaId;
-    if (req.user?.perfilGlobal !== 'GESTOR')
-      throw new ForbiddenException('Apenas Gestor pode gerenciar efetivo.');
+    await this.assertGerenciarUsuarios(req);
     return this.obraService.editarColaborador(id, empresaId, usuarioId, dto);
   }
 
@@ -126,8 +128,20 @@ export class ObraController {
     @Req() req: any,
   ) {
     const empresaId = req.user?.empresaId;
-    if (req.user?.perfilGlobal !== 'GESTOR')
-      throw new ForbiddenException('Apenas Gestor pode gerenciar efetivo.');
+    await this.assertGerenciarUsuarios(req);
     return this.obraService.removerColaborador(id, empresaId, usuarioId);
+  }
+
+  private async assertGerenciarUsuarios(req: any) {
+    if (req.user?.perfilGlobal === 'SUPER_ADMIN') return;
+    const pode = await this.capabilities.hasCapability(
+      req.user?.sub,
+      'gerenciarUsuarios',
+    );
+    if (!pode) {
+      throw new ForbiddenException(
+        'Você não tem permissão para gerenciar colaboradores da obra.',
+      );
+    }
   }
 }

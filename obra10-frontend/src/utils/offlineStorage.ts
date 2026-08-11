@@ -11,9 +11,26 @@ export interface OfflineAttachment {
   legenda?: string;        // legenda/descrição opcional
 }
 
+/** Rascunho do formulário RDO persistido no aparelho (IndexedDB). */
+export interface OfflineRdoDraft {
+  /** Chave estável: `${obraId}:${rdoId}` ou `${obraId}:draft` para novo. */
+  localKey: string;
+  obraId: string;
+  rdoId: string | null;
+  tempId: string;
+  dadosExtras: Record<string, any>;
+  aprovadorId?: string;
+  /** true = usuário pediu salvar e ainda precisa ir para o servidor */
+  pendingSync: boolean;
+  updatedAt: string;
+  rdoNumberStr?: string;
+  nomeObra?: string;
+}
+
 const DB_NAME = 'Obra10OfflineDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'offline_attachments';
+const DRAFT_STORE = 'offline_rdo_drafts';
 
 export function generateUUID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -26,6 +43,10 @@ export function generateUUID(): string {
   });
 }
 
+export function offlineDraftKey(obraId: string, rdoId: string | null | undefined): string {
+  return `${obraId}:${rdoId || 'draft'}`;
+}
+
 function initOfflineDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -33,6 +54,11 @@ function initOfflineDB(): Promise<IDBDatabase> {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(DRAFT_STORE)) {
+        const draftStore = db.createObjectStore(DRAFT_STORE, { keyPath: 'localKey' });
+        draftStore.createIndex('by_obra', 'obraId', { unique: false });
+        draftStore.createIndex('by_pending', 'pendingSync', { unique: false });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -154,3 +180,68 @@ export async function updateOfflineAttachmentLegenda(id: string, legenda: string
   });
 }
 
+// ── Rascunhos do formulário RDO ───────────────────────────────────────────────
+
+export async function saveOfflineRdoDraft(draft: OfflineRdoDraft): Promise<void> {
+  const db = await initOfflineDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DRAFT_STORE, 'readwrite');
+    const store = tx.objectStore(DRAFT_STORE);
+    const request = store.put({
+      ...draft,
+      updatedAt: draft.updatedAt || new Date().toISOString(),
+    });
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getOfflineRdoDraft(localKey: string): Promise<OfflineRdoDraft | null> {
+  const db = await initOfflineDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DRAFT_STORE, 'readonly');
+    const store = tx.objectStore(DRAFT_STORE);
+    const request = store.get(localKey);
+    request.onsuccess = () => resolve((request.result as OfflineRdoDraft) || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function deleteOfflineRdoDraft(localKey: string): Promise<void> {
+  const db = await initOfflineDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DRAFT_STORE, 'readwrite');
+    const store = tx.objectStore(DRAFT_STORE);
+    const request = store.delete(localKey);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getPendingOfflineRdoDrafts(): Promise<OfflineRdoDraft[]> {
+  const db = await initOfflineDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DRAFT_STORE, 'readonly');
+    const store = tx.objectStore(DRAFT_STORE);
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const all = (request.result as OfflineRdoDraft[]) || [];
+      resolve(all.filter((d) => d.pendingSync));
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getOfflineRdoDraftsForObra(obraId: string): Promise<OfflineRdoDraft[]> {
+  const db = await initOfflineDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DRAFT_STORE, 'readonly');
+    const store = tx.objectStore(DRAFT_STORE);
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const all = (request.result as OfflineRdoDraft[]) || [];
+      resolve(all.filter((d) => d.obraId === obraId));
+    };
+    request.onerror = () => reject(request.error);
+  });
+}

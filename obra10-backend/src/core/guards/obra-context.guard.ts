@@ -6,14 +6,18 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CapabilitiesService } from '../capabilities/capabilities.service';
 
 @Injectable()
 export class ObraContextGuard implements CanActivate {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly capabilities: CapabilitiesService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const user = request.user; // Usuário vindo do AuthGuard JWT
+    const user = request.user;
     const obraId =
       request.headers['x-obra-id'] ||
       request.body?.obraId ||
@@ -25,32 +29,50 @@ export class ObraContextGuard implements CanActivate {
         'Contexto de obra não fornecido no cabeçalho x-obra-id.',
       );
 
-    // Checa se o usuário é DIRETOR
     const userInfo = await this.prisma.usuario.findUnique({
       where: { id: user.sub || user.id },
-      select: { perfilGlobal: true, empresaId: true },
+      select: {
+        perfilGlobal: true,
+        empresaId: true,
+        capabilities: true,
+      },
     });
 
     let role: any = null;
 
-    // SUPER_ADMIN and GESTOR have unrestricted access to any obra in their empresa
+    const caps = userInfo
+      ? await this.capabilities.resolveForUser({
+          empresaId: userInfo.empresaId,
+          perfilGlobal: userInfo.perfilGlobal,
+          capabilitiesOverride: userInfo.capabilities,
+        })
+      : null;
+
+    // SUPER_ADMIN e quem tem acessoTodasObras têm acesso irrestrito às obras da empresa
     if (
-      userInfo?.perfilGlobal === 'SUPER_ADMIN' ||
-      userInfo?.perfilGlobal === 'GESTOR'
+      userInfo &&
+      (userInfo.perfilGlobal === 'SUPER_ADMIN' || caps?.acessoTodasObras)
     ) {
       const obra = await this.prisma.obra.findUnique({ where: { id: obraId } });
       if (!obra || obra.empresaId !== userInfo.empresaId) {
         throw new ForbiddenException('Obra não pertence à sua empresa.');
       }
-      // Privileged users get full access role
-      role = { perfilId: 99 };
+      role = {
+        perfilId: 99,
+        permissoes: caps?.aprovarRdo
+          ? { RDO: 'EDIT', ...(caps.modulosPadrao || {}) }
+          : { ...(caps?.modulosPadrao || {}), RDO: caps?.criarEditarRdo ? 'EDIT' : 'VIEW' },
+        capabilities: caps,
+      };
     } else {
-      // Checa se o usuário tem vínculo ativo com a obra
       role = await this.prisma.userObraRole.findUnique({
         where: {
           usuarioId_obraId: { usuarioId: user.sub || user.id, obraId: obraId },
         },
       });
+      if (role) {
+        role = { ...role, capabilities: caps };
+      }
     }
 
     if (!role) {
@@ -59,7 +81,6 @@ export class ObraContextGuard implements CanActivate {
       );
     }
 
-    // Injeta o papel resolvida na request para os Controllers validarem Níveis (Field vs Manager)
     request.obraRole = role;
 
     return true;

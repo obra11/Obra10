@@ -5,15 +5,27 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
+import { Prisma, TipoPapelEmpresa } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
+import {
+  DEFAULT_CAPABILITIES_BY_TIPO,
+  normalizeCapabilities,
+  perfilGlobalToTipoPapel,
+  RoleCapabilities,
+} from '../../core/capabilities/role-capabilities';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsuariosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly capabilities: CapabilitiesService,
+  ) {}
 
   async findAllByEmpresa(empresaId: string) {
-    return this.prisma.usuario.findMany({
+    await this.capabilities.ensurePapeisEmpresa(empresaId);
+    const usuarios = await this.prisma.usuario.findMany({
       where: { empresaId, deletedAt: null },
       select: {
         id: true,
@@ -21,6 +33,7 @@ export class UsuariosService {
         email: true,
         telefone: true,
         perfilGlobal: true,
+        capabilities: true,
         ativo: true,
         createdAt: true,
         fotoUrl: true,
@@ -33,15 +46,64 @@ export class UsuariosService {
       },
       orderBy: { createdAt: 'asc' },
     });
+
+    return Promise.all(
+      usuarios.map(async (u) => ({
+        ...u,
+        capabilitiesEfetivas: await this.capabilities.resolveForUser({
+          empresaId,
+          perfilGlobal: u.perfilGlobal,
+          capabilitiesOverride: u.capabilities,
+        }),
+      })),
+    );
+  }
+
+  async listPapeis(empresaId: string) {
+    return this.capabilities.listPapeis(empresaId);
+  }
+
+  async updatePapel(
+    empresaId: string,
+    tipo: string,
+    dto: {
+      nome?: string;
+      capabilities?: Partial<RoleCapabilities>;
+      permissoesPadrao?: Record<string, string>;
+    },
+  ) {
+    const tiposValidos: TipoPapelEmpresa[] = [
+      'GESTOR',
+      'COLABORADOR',
+      'EXTERNO',
+      'PERSONALIZADO',
+    ];
+    if (!tiposValidos.includes(tipo as TipoPapelEmpresa)) {
+      throw new BadRequestException('Tipo de papel inválido.');
+    }
+    return this.capabilities.updatePapel(
+      empresaId,
+      tipo as TipoPapelEmpresa,
+      dto,
+    );
   }
 
   async create(empresaId: string, dto: any) {
-    const { nome, email, senha, perfilGlobal, telefone } = dto;
+    const {
+      nome,
+      email,
+      senha,
+      perfilGlobal,
+      telefone,
+      capabilities,
+      permissoesObras,
+    } = dto;
     if (!nome || !email || !senha) {
       throw new BadRequestException('nome, email e senha são obrigatórios.');
     }
 
-    // Validate limiteUsuarios
+    await this.capabilities.ensurePapeisEmpresa(empresaId);
+
     const empresa = await this.prisma.empresa.findUnique({
       where: { id: empresaId },
       include: {
@@ -56,7 +118,6 @@ export class UsuariosService {
       );
     }
 
-    // Check email uniqueness within tenant (including soft-deleted ones)
     const existenteAtivo = await this.prisma.usuario.findFirst({
       where: { empresaId, email, deletedAt: null },
     });
@@ -70,31 +131,54 @@ export class UsuariosService {
     });
 
     const senhaHash = await bcrypt.hash(senha, 12);
+    const perfil = (perfilGlobal ?? 'USER') as string;
+    this.assertPerfilEmpresa(perfil);
 
-    // Auto-assign active tenant modules
+    if (perfil === 'PERSONALIZADO' && !capabilities) {
+      throw new BadRequestException(
+        'Função Personalizado exige configuração de permissões (capabilities).',
+      );
+    }
+
+    const capsToStore = await this.resolveCapabilitiesToStore(
+      empresaId,
+      perfil,
+      capabilities,
+    );
+
     const tenantModulosAtivos = await this.prisma.tenantModulo.findMany({
       where: {
         empresaId,
         ativo: true,
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
-      select: { moduloId: true },
+      include: { modulo: { select: { slug: true } } },
     });
 
+    const moduloSlugsFromCaps = Object.keys(capsToStore.modulosPadrao || {});
+    const modulosParaCriar = tenantModulosAtivos.filter(
+      (m) =>
+        moduloSlugsFromCaps.length === 0 ||
+        moduloSlugsFromCaps.includes(m.modulo.slug) ||
+        perfil === 'GESTOR',
+    );
+
+    let usuarioId: string;
+
     if (usuarioDeletado) {
-      // Re-ativa o usuário ao invés de criar um novo e gerar erro de unique constraint
-      return this.prisma.usuario.update({
+      const updated = await this.prisma.usuario.update({
         where: { id: usuarioDeletado.id },
         data: {
           nome,
           senhaHash,
           telefone,
-          perfilGlobal: perfilGlobal ?? 'USER',
+          perfilGlobal: perfil as any,
+          capabilities: capsToStore as unknown as Prisma.InputJsonValue,
           ativo: true,
           deletedAt: null,
           usuarioModulos: {
             deleteMany: {},
-            create: tenantModulosAtivos.map((m) => ({ moduloId: m.moduloId })),
+            create: modulosParaCriar.map((m) => ({ moduloId: m.moduloId })),
           },
         },
         select: {
@@ -102,23 +186,34 @@ export class UsuariosService {
           nome: true,
           email: true,
           perfilGlobal: true,
+          capabilities: true,
           createdAt: true,
           fotoUrl: true,
         },
       });
+      usuarioId = updated.id;
+      await this.applyPermissoesTemplate(
+        empresaId,
+        usuarioId,
+        perfil,
+        capsToStore,
+        permissoesObras,
+      );
+      return updated;
     }
 
-    return this.prisma.usuario.create({
+    const created = await this.prisma.usuario.create({
       data: {
         empresaId,
         nome,
         email,
         senhaHash,
         telefone,
-        perfilGlobal: perfilGlobal ?? 'USER',
+        perfilGlobal: perfil as any,
+        capabilities: capsToStore as unknown as Prisma.InputJsonValue,
         ativo: true,
         usuarioModulos: {
-          create: tenantModulosAtivos.map((m) => ({ moduloId: m.moduloId })),
+          create: modulosParaCriar.map((m) => ({ moduloId: m.moduloId })),
         },
       },
       select: {
@@ -126,14 +221,32 @@ export class UsuariosService {
         nome: true,
         email: true,
         perfilGlobal: true,
+        capabilities: true,
         createdAt: true,
         fotoUrl: true,
       },
     });
+
+    await this.applyPermissoesTemplate(
+      empresaId,
+      created.id,
+      perfil,
+      capsToStore,
+      permissoesObras,
+    );
+
+    return created;
   }
 
   async update(empresaId: string, id: string, dto: any) {
-    const { nome, email, perfilGlobal, telefone } = dto;
+    const {
+      nome,
+      email,
+      perfilGlobal,
+      telefone,
+      capabilities,
+      permissoesObras,
+    } = dto;
     const usuario = await this.prisma.usuario.findFirst({
       where: { id, empresaId, deletedAt: null },
     });
@@ -149,24 +262,82 @@ export class UsuariosService {
         );
     }
 
-    // Se o perfil mudar de GESTOR para USER e a empresa só tiver 1 gestor, isso pode causar problema, mas vamos simplificar por agora.
-    return this.prisma.usuario.update({
+    const perfil = (perfilGlobal ?? usuario.perfilGlobal) as string;
+    if (perfilGlobal) this.assertPerfilEmpresa(perfil);
+
+    if (perfil === 'PERSONALIZADO' && capabilities === undefined && !usuario.capabilities) {
+      throw new BadRequestException(
+        'Função Personalizado exige configuração de permissões (capabilities).',
+      );
+    }
+
+    let capsToStore: RoleCapabilities | undefined;
+    if (perfilGlobal || capabilities !== undefined) {
+      capsToStore = await this.resolveCapabilitiesToStore(
+        empresaId,
+        perfil,
+        capabilities !== undefined ? capabilities : usuario.capabilities,
+      );
+    }
+
+    const updated = await this.prisma.usuario.update({
       where: { id },
       data: {
         ...(nome && { nome }),
         ...(email && { email }),
-        ...(perfilGlobal && { perfilGlobal }),
+        ...(perfilGlobal && { perfilGlobal: perfilGlobal as any }),
         ...(telefone !== undefined && { telefone }),
+        ...(capsToStore && {
+          capabilities: capsToStore as unknown as Prisma.InputJsonValue,
+        }),
       },
       select: {
         id: true,
         nome: true,
         email: true,
         perfilGlobal: true,
+        capabilities: true,
         createdAt: true,
         fotoUrl: true,
       },
     });
+
+    if (capsToStore && (perfilGlobal || permissoesObras || capabilities !== undefined)) {
+      await this.applyPermissoesTemplate(
+        empresaId,
+        id,
+        perfil,
+        capsToStore,
+        permissoesObras,
+      );
+
+      // Atualiza módulos globais conforme template
+      const tenantModulosAtivos = await this.prisma.tenantModulo.findMany({
+        where: {
+          empresaId,
+          ativo: true,
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
+        include: { modulo: { select: { slug: true } } },
+      });
+      const moduloSlugsFromCaps = Object.keys(capsToStore.modulosPadrao || {});
+      const modulosParaCriar = tenantModulosAtivos.filter(
+        (m) =>
+          moduloSlugsFromCaps.length === 0 ||
+          moduloSlugsFromCaps.includes(m.modulo.slug) ||
+          perfil === 'GESTOR',
+      );
+      await this.prisma.$transaction([
+        this.prisma.usuarioModulo.deleteMany({ where: { usuarioId: id } }),
+        ...modulosParaCriar.map((m) =>
+          this.prisma.usuarioModulo.create({
+            data: { usuarioId: id, moduloId: m.moduloId },
+          }),
+        ),
+      ]);
+    }
+
+    return updated;
   }
 
   async setModulos(
@@ -174,14 +345,12 @@ export class UsuariosService {
     usuarioId: string,
     moduloSlugs: string[],
   ) {
-    // Confirm user belongs to this tenant
     const usuario = await this.prisma.usuario.findFirst({
       where: { id: usuarioId, empresaId, deletedAt: null },
     });
     if (!usuario)
       throw new NotFoundException('Usuário não encontrado nesta empresa.');
 
-    // Get modules contracted by the tenant
     const tenantModulosAtivos = await this.prisma.tenantModulo.findMany({
       where: {
         empresaId,
@@ -201,12 +370,10 @@ export class UsuariosService {
       );
     }
 
-    // Replace all user modules atomically
     const modulosIds = tenantModulosAtivos
       .filter((tm) => moduloSlugs.includes(tm.modulo.slug))
       .map((tm) => tm.moduloId);
 
-    // Fetch user's current obra roles to strip revoked modules
     const roles = await this.prisma.userObraRole.findMany({
       where: { usuarioId },
     });
@@ -241,7 +408,6 @@ export class UsuariosService {
     });
     if (!usuario) throw new NotFoundException('Usuário não encontrado.');
 
-    // Bump jwtVersion to revoke existing sessions
     return this.prisma.usuario.update({
       where: { id: usuarioId },
       data: {
@@ -267,14 +433,16 @@ export class UsuariosService {
 
     if (novaSenha) {
       if (!senhaAtual) {
-        throw new BadRequestException('Para alterar a senha, você deve fornecer a senha atual.');
+        throw new BadRequestException(
+          'Para alterar a senha, você deve fornecer a senha atual.',
+        );
       }
       const senhaOk = await bcrypt.compare(senhaAtual, usuario.senhaHash);
       if (!senhaOk) {
         throw new BadRequestException('Senha atual incorreta.');
       }
       updateData.senhaHash = await bcrypt.hash(novaSenha, 12);
-      updateData.jwtVersion = { increment: 1 }; // Force re-authentication / invalidate old tokens
+      updateData.jwtVersion = { increment: 1 };
     }
 
     return this.prisma.usuario.update({
@@ -289,5 +457,114 @@ export class UsuariosService {
         perfilGlobal: true,
       },
     });
+  }
+
+  private assertPerfilEmpresa(perfil: string) {
+    const ok = ['GESTOR', 'USER', 'EXTERNO', 'PERSONALIZADO'].includes(perfil);
+    if (!ok) {
+      throw new BadRequestException(
+        'perfilGlobal deve ser GESTOR, USER, EXTERNO ou PERSONALIZADO.',
+      );
+    }
+  }
+
+  private async resolveCapabilitiesToStore(
+    empresaId: string,
+    perfil: string,
+    override?: unknown,
+  ): Promise<RoleCapabilities> {
+    const tipo = perfilGlobalToTipoPapel(perfil);
+    const papelDefaults = tipo
+      ? DEFAULT_CAPABILITIES_BY_TIPO[tipo]
+      : DEFAULT_CAPABILITIES_BY_TIPO.COLABORADOR;
+
+    const fromPapel = await this.capabilities.resolveForUser({
+      empresaId,
+      perfilGlobal: perfil,
+    });
+
+    if (perfil === 'PERSONALIZADO') {
+      return normalizeCapabilities(override, papelDefaults);
+    }
+
+    // Para papéis padrão, persiste o template atual (override opcional do gestor)
+    if (override) {
+      return normalizeCapabilities(override, fromPapel);
+    }
+    return fromPapel;
+  }
+
+  /**
+   * Aplica permissoesPadrao do papel nas obras já vinculadas,
+   * ou permissoesObras explícitas (PERSONALIZADO).
+   */
+  private async applyPermissoesTemplate(
+    empresaId: string,
+    usuarioId: string,
+    perfil: string,
+    caps: RoleCapabilities,
+    permissoesObras?: Record<string, Record<string, string>>,
+  ) {
+    if (caps.acessoTodasObras && perfil === 'GESTOR') {
+      // Gestor com acesso total não precisa de vínculos explícitos
+      return;
+    }
+
+    const roles = await this.prisma.userObraRole.findMany({
+      where: { usuarioId },
+    });
+
+    const permissoesPadrao =
+      caps.modulosPadrao && Object.keys(caps.modulosPadrao).length > 0
+        ? caps.modulosPadrao
+        : {};
+
+    if (permissoesObras && Object.keys(permissoesObras).length > 0) {
+      // Garante perfil COLABORADOR padrão (perfilId=2 é comum no seed; busca por nome)
+      let perfilId = 2;
+      const perfilColab = await this.prisma.perfil.findFirst({
+        where: {
+          OR: [
+            { nomeInterno: 'COLABORADOR' },
+            { nomeInterno: 'USER' },
+            { nomeInterno: 'FIELD' },
+          ],
+        },
+      });
+      if (perfilColab) perfilId = perfilColab.id;
+
+      for (const [obraId, permissoes] of Object.entries(permissoesObras)) {
+        const obra = await this.prisma.obra.findFirst({
+          where: { id: obraId, empresaId, deletedAt: null },
+        });
+        if (!obra) continue;
+
+        await this.prisma.userObraRole.upsert({
+          where: { usuarioId_obraId: { usuarioId, obraId } },
+          create: {
+            usuarioId,
+            obraId,
+            perfilId,
+            permissoes: permissoes as Prisma.InputJsonValue,
+          },
+          update: { permissoes: permissoes as Prisma.InputJsonValue },
+        });
+      }
+      return;
+    }
+
+    // Atualiza vínculos existentes com o template do papel
+    if (Object.keys(permissoesPadrao).length === 0) return;
+
+    await Promise.all(
+      roles.map((role) =>
+        this.prisma.userObraRole.update({
+          where: { id: role.id },
+          data: {
+            permissoes: permissoesPadrao as unknown as Prisma.InputJsonValue,
+          },
+        }),
+      ),
+    );
   }
 }

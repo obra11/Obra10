@@ -14,6 +14,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { TenantService } from './tenant.service';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
+import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 import { RegisterTenantDto } from './dto/tenant.dto';
 import {
   ReenviarVerificacaoDto,
@@ -31,7 +32,10 @@ const PLAN_LIMITS: Record<string, number> = {
 
 @Controller()
 export class TenantController {
-  constructor(private readonly tenantService: TenantService) {}
+  constructor(
+    private readonly tenantService: TenantService,
+    private readonly capabilities: CapabilitiesService,
+  ) {}
 
   // ===================== PUBLIC — Self-Service Register =====================
   @Throttle({ default: { limit: 5, ttl: 3600 } })
@@ -69,9 +73,8 @@ export class TenantController {
   @Post('tenants/meu-plano/upgrade')
   async upgradeMeuPlano(@Req() req: any, @Body() dto: UpgradePlanoDto) {
     const empresaId = req.user?.empresaId;
-    if (!empresaId || req.user?.perfilGlobal !== 'GESTOR') {
-      throw new ForbiddenException('Apenas gestores podem alterar o plano.');
-    }
+    if (!empresaId) throw new ForbiddenException('Sessão inválida.');
+    await this.assertGerenciarEmpresa(req);
     return this.tenantService.upgradeMeuPlano(empresaId, dto.plano);
   }
 
@@ -82,9 +85,8 @@ export class TenantController {
     @Body() dto: UpdateMinhaEmpresaDto,
   ) {
     const empresaId = req.user?.empresaId;
-    if (!empresaId || req.user?.perfilGlobal !== 'GESTOR') {
-      throw new ForbiddenException('Apenas gestores podem editar a empresa.');
-    }
+    if (!empresaId) throw new ForbiddenException('Sessão inválida.');
+    await this.assertGerenciarEmpresa(req);
     return this.tenantService.updateTenant(empresaId, dto);
   }
 
@@ -142,5 +144,19 @@ export class TenantController {
 
     const cobrancas = await this.tenantService.getCobrancasPendentes(empresaId);
     return cobrancas;
+  }
+
+  private async assertGerenciarEmpresa(req: any) {
+    if (req.user?.perfilGlobal === 'SUPER_ADMIN') return;
+    // Gestores com gerenciarUsuarios (default do papel GESTOR) podem editar empresa/plano
+    const pode = await this.capabilities.hasCapability(
+      req.user?.sub,
+      'gerenciarUsuarios',
+    );
+    if (!pode) {
+      throw new ForbiddenException(
+        'Você não tem permissão para alterar dados da empresa.',
+      );
+    }
   }
 }

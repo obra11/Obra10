@@ -37,6 +37,11 @@ export const Efetivo: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [colaboradorEdit, setColaboradorEdit] = useState<Colaborador | null>(null);
 
+  const canManage =
+    user?.capabilities?.gerenciarUsuarios === true ||
+    user?.perfilGlobal === 'GESTOR';
+
+
   const fetchColaboradores = async () => {
     try {
       setLoading(true);
@@ -72,7 +77,7 @@ export const Efetivo: React.FC = () => {
           </h1>
           <p className="text-gray-500 mt-1 text-sm">Gerencie quem tem acesso a esta obra e suas permissões.</p>
         </div>
-        {user?.perfilGlobal === 'GESTOR' && (
+        {canManage && (
           <button 
             onClick={() => { setColaboradorEdit(null); setShowModal(true); }}
             className="px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 flex items-center shadow-sm shrink-0"
@@ -99,7 +104,7 @@ export const Efetivo: React.FC = () => {
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600">Usuário</th>
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600">Cargo / Perfil</th>
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600">Permissões de Módulo</th>
-                    {user?.perfilGlobal === 'GESTOR' && <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">Ações</th>}
+                    {canManage && <th className="px-6 py-4 text-right text-sm font-semibold text-gray-600">Ações</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -139,7 +144,7 @@ export const Efetivo: React.FC = () => {
                           )}
                         </div>
                       </td>
-                      {user?.perfilGlobal === 'GESTOR' && (
+                      {canManage && (
                         <td className="px-6 py-4 text-right space-x-2">
                           <button onClick={() => { setColaboradorEdit(c); setShowModal(true); }} className="p-2 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors" title="Editar Permissões">
                             <Edit2 size={16} />
@@ -191,7 +196,7 @@ export const Efetivo: React.FC = () => {
                     </>
                   )}
                 </div>
-                {user?.perfilGlobal === 'GESTOR' && (
+                {canManage && (
                   <div className="flex gap-2 pt-3 border-t border-gray-100">
                     <button onClick={() => { setColaboradorEdit(c); setShowModal(true); }} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg active:bg-blue-100">
                       <Edit2 size={14} /> Editar

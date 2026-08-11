@@ -23,6 +23,11 @@ const MOTIVO_LABELS: Record<string, string> = {
   OUTROS: 'Outros',
 };
 
+/** Data suficientemente antiga para cobrir todos os RDOs da obra (API exige dataInicio). */
+const DATA_DESDE_INICIO = '2000-01-01';
+
+type ModoPeriodo = 'inicio' | 'especifica' | 'periodo';
+
 interface StatsData {
   totalRdos: number;
   rdosAprovados: number;
@@ -33,26 +38,51 @@ interface StatsData {
   execucaoPorSemana: Array<{ semana: string; executadas: number; naoExecutadas: number }>;
 }
 
+function hojeISO(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+function diasAtrasISO(dias: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - dias);
+  return d.toISOString().split('T')[0];
+}
+
 export const RdoDashboard: React.FC = () => {
   const { obraAtiva } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [dataInicio, setDataInicio] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().split('T')[0];
-  });
-  const [dataFim] = useState(new Date().toISOString().split('T')[0]);
+  const [modo, setModo] = useState<ModoPeriodo>('periodo');
+  const [dataInicio, setDataInicio] = useState(() => diasAtrasISO(30));
+  const [dataFim, setDataFim] = useState(() => hojeISO());
+  const [dataEspecifica, setDataEspecifica] = useState(() => hojeISO());
+
+  const resolverIntervalo = (): { inicio: string; fim: string } => {
+    if (modo === 'inicio') {
+      return { inicio: DATA_DESDE_INICIO, fim: hojeISO() };
+    }
+    if (modo === 'especifica') {
+      return { inicio: dataEspecifica, fim: dataEspecifica };
+    }
+    return { inicio: dataInicio, fim: dataFim };
+  };
+
+  const aplicarPreset = (dias: number) => {
+    setModo('periodo');
+    setDataInicio(diasAtrasISO(dias));
+    setDataFim(hojeISO());
+  };
 
   const carregarStats = async () => {
     if (!obraAtiva?.id) return;
     setLoading(true); setError('');
+    const { inicio, fim } = resolverIntervalo();
     try {
       const r = await api.get(`/rdos/stats`, {
         headers: { 'x-obra-id': obraAtiva.id },
-        params: { obraId: obraAtiva.id, dataInicio, dataFim },
+        params: { obraId: obraAtiva.id, dataInicio: inicio, dataFim: fim },
       });
       setStats(r.data);
     } catch (e: any) {
@@ -62,32 +92,93 @@ export const RdoDashboard: React.FC = () => {
     }
   };
 
-  useEffect(() => { carregarStats(); }, [obraAtiva?.id, dataInicio]);
+  useEffect(() => { carregarStats(); }, [obraAtiva?.id, modo, dataInicio, dataFim, dataEspecifica]);
 
   const taxaExecucao = stats ? Math.round((stats.tarefasExecutadas / (stats.totalTarefas || 1)) * 100) : 0;
+
+  const modoBtnClass = (m: ModoPeriodo) =>
+    `px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+      modo === m
+        ? 'bg-red-600 text-white border-red-600'
+        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+    }`;
+
+  const presetBtnClass =
+    'px-2.5 py-1 text-xs rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors';
 
   return (
     <div className="p-6 md:p-8 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <ArrowLeft size={20} />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <BarChart2 size={24} className="text-red-600" /> Dashboard RDO
-            </h1>
-            <p className="text-gray-500 text-sm mt-0.5">Análise operacional dos diários de obra</p>
+      <div className="flex flex-col gap-4 mb-8">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+              <ArrowLeft size={20} />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <BarChart2 size={24} className="text-red-600" /> Dashboard RDO
+              </h1>
+              <p className="text-gray-500 text-sm mt-0.5">Análise operacional dos diários de obra</p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-          <span className="text-gray-400 text-sm">até hoje</span>
-          <button onClick={carregarStats} className="p-2 hover:bg-gray-100 rounded-lg border border-gray-200">
+          <button onClick={carregarStats} className="p-2 hover:bg-gray-100 rounded-lg border border-gray-200 self-start">
             <RefreshCcw size={16} className="text-gray-500" />
           </button>
+        </div>
+
+        {/* Filtro de período */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button type="button" className={modoBtnClass('inicio')} onClick={() => setModo('inicio')}>
+              Desde o início
+            </button>
+            <button type="button" className={modoBtnClass('especifica')} onClick={() => setModo('especifica')}>
+              Data específica
+            </button>
+            <button type="button" className={modoBtnClass('periodo')} onClick={() => setModo('periodo')}>
+              Período
+            </button>
+          </div>
+
+          {modo === 'inicio' && (
+            <p className="text-sm text-gray-500">Do primeiro RDO da obra até hoje</p>
+          )}
+
+          {modo === 'especifica' && (
+            <input
+              type="date"
+              value={dataEspecifica}
+              onChange={e => setDataEspecifica(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            />
+          )}
+
+          {modo === 'periodo' && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                type="date"
+                value={dataInicio}
+                max={dataFim}
+                onChange={e => setDataInicio(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+              <span className="text-gray-400 text-sm">até</span>
+              <input
+                type="date"
+                value={dataFim}
+                min={dataInicio}
+                max={hojeISO()}
+                onChange={e => setDataFim(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+              <div className="flex items-center gap-1.5 ml-1">
+                <button type="button" className={presetBtnClass} onClick={() => aplicarPreset(7)}>7 dias</button>
+                <button type="button" className={presetBtnClass} onClick={() => aplicarPreset(30)}>30 dias</button>
+                <button type="button" className={presetBtnClass} onClick={() => aplicarPreset(90)}>90 dias</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -139,7 +230,7 @@ export const RdoDashboard: React.FC = () => {
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-64 flex items-center justify-center text-gray-400 text-sm">🎉 Nenhuma não-execução no período</div>
+                <div className="h-64 flex items-center justify-center text-gray-400 text-sm">Nenhuma não-execução no período</div>
               )}
             </div>
 

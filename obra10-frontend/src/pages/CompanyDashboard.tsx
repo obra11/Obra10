@@ -12,6 +12,9 @@ export const CompanyDashboard: React.FC = () => {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingUserPhoto, setUploadingUserPhoto] = useState(false);
 
+  const canManage =
+    user?.capabilities?.gerenciarUsuarios === true ||
+    user?.perfilGlobal === 'GESTOR';
   const [showNovoModal, setShowNovoModal] = useState(false);
   const [novaObra, setNovaObra] = useState({ nome: '', endereco: '' });
   const [loadingCriar, setLoadingCriar] = useState(false);
@@ -157,7 +160,7 @@ export const CompanyDashboard: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 md:h-20 flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <div className="relative flex-shrink-0">
-              {user?.perfilGlobal === 'GESTOR' ? (
+              {canManage ? (
                 <label title="Alterar Logotipo da Empresa" className="relative cursor-pointer group flex items-center justify-center h-12 w-12 sm:w-auto sm:max-w-[150px] rounded overflow-hidden transition-all hover:ring-2 hover:ring-lunardeli-red shrink-0">
                   {uploadingLogo ? (
                     <div className="h-12 w-12 bg-gray-100 rounded flex items-center justify-center">
@@ -194,7 +197,7 @@ export const CompanyDashboard: React.FC = () => {
             <div className="border-l pl-4 border-gray-200">
               <div className="flex items-center gap-2">
                 <h1 className="text-base md:text-xl font-bold text-lunardeli-dark truncate max-w-[140px] md:max-w-[200px]">{empresa?.nomeFantasia || empresa?.razaoSocial}</h1>
-                {user?.perfilGlobal === 'GESTOR' && (
+                {canManage && (
                   <button onClick={() => { 
                     setEmpresaEdit({ 
                       nomeFantasia: empresa?.nomeFantasia || empresa?.razaoSocial || '',
@@ -259,7 +262,7 @@ export const CompanyDashboard: React.FC = () => {
             <button onClick={() => navigate('/catalogo')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Cadastro Base">
               <Boxes size={18} className="sm:mr-2 text-lunardeli-red" /> <span className="hidden sm:inline">Cadastro Base</span>
             </button>
-            {user?.perfilGlobal === 'GESTOR' && (
+            {canManage && (
               <>
                 <button onClick={() => navigate('/gestor/usuarios')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Equipe">
                   <Users size={18} className="sm:mr-2" /> <span className="hidden sm:inline">Equipe</span>
@@ -330,7 +333,7 @@ export const CompanyDashboard: React.FC = () => {
                 <h2 className="text-2xl font-bold text-gray-800">Suas Obras</h2>
                 <p className="text-gray-500 text-sm mt-1">Selecione um canteiro de obras para acessar seus módulos e RDOs.</p>
             </div>
-            {user?.perfilGlobal === 'GESTOR' && (
+            {canManage && (
               <button onClick={() => setShowNovoModal(true)} className="px-3 md:px-4 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 active:bg-red-800 flex items-center gap-1.5 md:gap-2 text-sm shrink-0">
                 <Plus size={18} /> <span className="hidden sm:inline">Nova </span>Obra
               </button>

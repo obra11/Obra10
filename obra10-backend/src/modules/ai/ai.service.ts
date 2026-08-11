@@ -8,6 +8,22 @@ import {
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  agregarRdosParaContexto,
+  capitalizarPrimeiraLetra,
+  classificarClima,
+  detectarEscopo,
+  detectarIntencaoFactual,
+  extrairEfetivoDoRdo,
+  extrairLinhasDeTexto,
+  formatarContextoParaPrompt,
+  formatarDataISO,
+  inferirPeriodo,
+  responderFactual,
+  respostaLocalAmigavel,
+  textoClimaDeExtras,
+  type ContextoAgregado,
+} from './ai-context.helper';
 
 // Lazy-load Anthropic to avoid crash when API key not set
 let Anthropic: any;
@@ -20,31 +36,7 @@ try {
 const AI_MODEL = 'claude-3-5-sonnet-20241022';
 const CACHE_TTL_HOURS = 24;
 const MAX_CHAMADAS_DIA = 3;
-
-function extrairLinhasDeTexto(texto: any): string[] {
-  if (!texto) return [];
-  if (Array.isArray(texto)) {
-    return texto
-      .map((item) => {
-        if (typeof item === 'string') return item.trim();
-        if (item && typeof item === 'object' && typeof item.descricao === 'string') {
-          return item.descricao.trim();
-        }
-        return '';
-      })
-      .filter((line) => line.length > 3);
-  }
-  if (typeof texto !== 'string') return [];
-  return texto
-    .split(/\r?\n/)
-    .map((line) => line.trim().replace(/^[-*•\d.]+\s*/, '').trim())
-    .filter((line) => line.length > 3);
-}
-
-function capitalizarPrimeiraLetra(texto: string): string {
-  if (!texto) return '';
-  return texto.charAt(0).toUpperCase() + texto.slice(1);
-}
+const MAX_RDOS_CONTEXTO = 200;
 
 @Injectable()
 export class AiService {
@@ -52,6 +44,77 @@ export class AiService {
   private activeQueries = new Set<string>(); // Controla concorrência por obraId para perguntas
 
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Busca RDOs no período (obra ou empresa) e agrega clima/efetivo/atividades.
+   * Inclui status relevantes — não só aprovados.
+   */
+  private async carregarContextoRdos(params: {
+    empresaId: string;
+    obraId?: string | null;
+    escopo: 'obra' | 'empresa';
+    dataInicio: Date;
+    dataFim: Date;
+    periodoLabel: string;
+  }): Promise<ContextoAgregado> {
+    const { empresaId, obraId, escopo, dataInicio, dataFim, periodoLabel } =
+      params;
+
+    let obraNome: string | undefined;
+    let obraIdResolvido: string | undefined = obraId || undefined;
+
+    if (escopo === 'obra' && obraId) {
+      const obra = await this.prisma.obra.findFirst({
+        where: { id: obraId, empresaId, deletedAt: null },
+        select: { id: true, nome: true },
+      });
+      if (!obra) {
+        // Obra inválida / outro tenant → cai para empresa
+        return this.carregarContextoRdos({
+          ...params,
+          obraId: null,
+          escopo: 'empresa',
+        });
+      }
+      obraNome = obra.nome;
+      obraIdResolvido = obra.id;
+    }
+
+    const where =
+      escopo === 'obra' && obraIdResolvido
+        ? {
+            obraId: obraIdResolvido,
+            dataReferencia: { gte: dataInicio, lte: dataFim },
+            deletedAt: null,
+          }
+        : {
+            obra: { empresaId, deletedAt: null },
+            dataReferencia: { gte: dataInicio, lte: dataFim },
+            deletedAt: null,
+          };
+
+    const rdos = await this.prisma.rdo.findMany({
+      where,
+      include: {
+        obra: { select: { id: true, nome: true } },
+        efetivos: { where: { deletedAt: null } },
+        atividades: { where: { deletedAt: null } },
+        tarefas: true,
+      },
+      orderBy: { dataReferencia: 'asc' },
+      take: MAX_RDOS_CONTEXTO,
+    });
+
+    return agregarRdosParaContexto({
+      rdos,
+      escopo: escopo === 'obra' && obraIdResolvido ? 'obra' : 'empresa',
+      obraId: obraIdResolvido,
+      obraNome,
+      dataInicio,
+      dataFim,
+      periodoLabel,
+    });
+  }
 
   /**
    * Gera relatório executivo consolidado para um período de RDOs de uma obra.
@@ -145,65 +208,18 @@ export class AiService {
 
     const resumoRdosParaIA = rdos.map((r) => {
       const d = (r.dadosExtras as any) || {};
-
-      // Extração robusta do clima
-      let climaStr = '';
-      if (d.clima) {
-        climaStr = d.clima;
-      } else if (d.climaManha || d.climaTarde) {
-        climaStr = `Manhã: ${d.climaManha ?? 'Sol'}, Tarde: ${d.climaTarde ?? 'Sol'}, Noite: ${d.climaNoite ?? 'Sol'}`;
-      } else if (d.condicoesClimaticas) {
-        climaStr = d.condicoesClimaticas;
-      } else {
-        climaStr = 'Não informado';
-      }
+      const { climaStr, textLower } = textoClimaDeExtras(d);
       climas.push(climaStr.toLowerCase());
 
-      // Contagem programática do clima
-      const textClima = [d.climaManha, d.climaTarde, d.climaNoite, d.clima, d.condicoesClimaticas]
-        .filter(Boolean)
-        .map((c) => c.toLowerCase())
-        .join(' ');
+      const { categoria } = classificarClima(textLower);
+      if (categoria === 'chuva') diasChuva++;
+      else if (categoria === 'sol') diasSol++;
+      else if (categoria === 'nublado') diasNublado++;
+      else diasOutros++;
 
-      if (
-        textClima.includes('chuva') ||
-        textClima.includes('chuvoso') ||
-        textClima.includes('chuvosa') ||
-        textClima.includes('tempestade') ||
-        textClima.includes('🌧️') ||
-        textClima.includes('⛈️') ||
-        textClima.includes('🌦️')
-      ) {
-        diasChuva++;
-      } else if (
-        textClima.includes('sol') ||
-        textClima.includes('☀️') ||
-        textClima.includes('ensolarado')
-      ) {
-        diasSol++;
-      } else if (
-        textClima.includes('nublado') ||
-        textClima.includes('☁️') ||
-        textClima.includes('⛅')
-      ) {
-        diasNublado++;
-      } else {
-        diasOutros++;
-      }
-
-      // Soma de efetivos dos diários (suporta dadosExtras.profissionais)
-      let efetivoDia = 0;
-      if (d.profissionais && Array.isArray(d.profissionais)) {
-        efetivoDia = d.profissionais.reduce(
-          (sum: number, p: any) => sum + Number(p && typeof p === 'object' ? p.quantidade || 0 : 0),
-          0,
-        );
-      } else {
-        efetivoDia = r.efetivos.reduce((s, e) => s + e.quantidade, 0);
-      }
+      const { total: efetivoDia, profissionais } = extrairEfetivoDoRdo(r);
       somaEfetivo += efetivoDia;
 
-      // Extração programática de atividades e pendências para contagem de frequência
       const atividadesList = extrairLinhasDeTexto(d.atividadesExecutadas);
       atividadesList.forEach((atv) => {
         const key = atv.toLowerCase();
@@ -217,7 +233,6 @@ export class AiService {
         frequenciaPendencias[key] = (frequenciaPendencias[key] || 0) + 1;
       });
 
-      // Relações do DB
       r.atividades.forEach((a) => servicosSet.add(a.descricao));
       r.tarefas
         .filter((t) => t.statusExecucao === 'EXECUTADO')
@@ -228,14 +243,14 @@ export class AiService {
         .map((t) => `${t.descricao} (${t.motivoNaoExecucao})`);
 
       return {
-        data: r.dataReferencia.toISOString().split('T')[0],
+        data: formatarDataISO(r.dataReferencia),
         clima: climaStr,
-        atividadesExecutadas: d.atividadesExecutadas || '',
-        atividadesPendentes: d.atividadesPendentes || '',
-        profissionais: (d.profissionais || [])
-          .filter((p: any) => p && typeof p === 'object')
-          .map((p: any) => `${p.nome || 'Profissional'}: ${p.quantidade || 0}`),
-        observacoes: d.observacoes || '',
+        atividadesExecutadas: atividadesList,
+        atividadesPendentes: pendenciasList,
+        profissionais: profissionais.map(
+          (p) => `${p.nome}: ${p.quantidade || 0}`,
+        ),
+        observacoes: extrairLinhasDeTexto(d.observacoes).join('\n'),
         gargalos: gargalosRdo,
       };
     });
@@ -243,7 +258,6 @@ export class AiService {
     const mediaEfetivoDiario = Math.round(somaEfetivo / totalDias);
     const servicosExecutados = Array.from(servicosSet);
 
-    // Identificar clima predominante
     let climaPredominante = 'Predominantemente Ensolarado/Bom';
     if (diasChuva > totalDias / 2) {
       climaPredominante = 'Predominantemente Chuvoso';
@@ -251,7 +265,6 @@ export class AiService {
       climaPredominante = `Dias bons (chuva em aprox. ${diasChuva} dia(s))`;
     }
 
-    // Listagem ordenada das contagens programáticas
     const listaFrequenciaAtividades = Object.entries(frequenciaAtividades)
       .map(([item, count]) => ({ item: capitalizarPrimeiraLetra(item), count }))
       .sort((a, b) => b.count - a.count);
@@ -273,20 +286,26 @@ export class AiService {
       servicosExecutados,
     };
 
-    // Helper para gerar o Mock Result com foco dinâmico
-    const gerarMockResult = (isFallback = false, errMsg?: string) => {
+    const gerarMockResult = (isFallback = false, _errMsg?: string) => {
       const focusText = foco?.trim() ? ` com foco em "${foco}"` : '';
-      const secoesText = secoes && secoes.length > 0 ? ` (seções focadas: ${secoes.join(', ')})` : '';
+      const secoesText =
+        secoes && secoes.length > 0
+          ? ` (seções focadas: ${secoes.join(', ')})`
+          : '';
 
       return {
         ...baseData,
         resumoExecutivo: `Período: ${dataInicio} a ${dataFim}. Análise consolidada de ${totalDias} diários de obras${focusText}${secoesText}. Relatório gerado com base nas atividades e ocorrências registradas no canteiro de obras.`,
         gargalos: [
-          foco?.trim() ? `Gargalo operacional relacionado a: ${foco}` : 'Chuva frequente prejudicou o ritmo de concretagem',
+          foco?.trim()
+            ? `Gargalo operacional relacionado a: ${foco}`
+            : 'Chuva frequente prejudicou o ritmo de concretagem',
           'Falha mecânica em equipamento secundário no 3º dia',
         ],
         recomendacoes: [
-          foco?.trim() ? `Ajustar planejamento para mitigar gargalo: ${foco}` : 'Melhorar planejamento de estoque de materiais para períodos de chuva instável',
+          foco?.trim()
+            ? `Ajustar planejamento para mitigar gargalo: ${foco}`
+            : 'Melhorar planejamento de estoque de materiais para períodos de chuva instável',
           'Realizar manutenção preventiva nos equipamentos locados',
         ],
         lembretes: [
@@ -328,7 +347,7 @@ export class AiService {
 
     // 6. Chamar Claude Sonnet
     const client = new Anthropic.default({ apiKey });
-    
+
     let promptFocus = '';
     if (foco?.trim()) {
       promptFocus += `\nINSTRUÇÃO DE FOCO DO USUÁRIO: O usuário solicitou prioridade na análise sobre: "${foco}". Direcione a análise, resumo executivo, recomendações e gargalos para cobrir este assunto com destaque.\n`;
@@ -379,7 +398,7 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
           response.content[0]?.type === 'text'
             ? response.content[0].text
             : '{}';
-        
+
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         const cleanJsonStr = jsonMatch ? jsonMatch[0] : '{}';
 
@@ -403,20 +422,10 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
         };
       }
     } catch (err: any) {
-      this.logger.error(`[AiService] Erro ao chamar a API do Claude: ${err?.message}`);
-      const isCreditsError =
-        err?.message?.includes('Plans & Billing') ||
-        err?.message?.includes('credit') ||
-        err?.status === 402 ||
-        err?.error?.type === 'insufficient_quota';
-      
-      if (isCreditsError) {
-        throw new BadRequestException(
-          'Saldo insuficiente na conta Anthropic. Adicione créditos em console.anthropic.com → Plans & Billing, ou deixe ANTHROPIC_API_KEY vazia para usar modo MOCK.',
-        );
-      }
-      
-      // Fallback robusto para o modo Mock se for qualquer outro erro de API/Rede
+      this.logger.error(
+        `[AiService] Erro ao chamar a API do Claude: ${err?.message}`,
+      );
+      // Fallback local sem expor detalhes de billing/chave ao usuário
       const fallbackResult = gerarMockResult(true, err?.message);
       await this.prisma.relatorioIA.create({
         data: {
@@ -445,7 +454,8 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
   }
 
   /**
-   * Responde a uma pergunta específica do usuário baseando-se nos RDOs aprovados do período.
+   * Responde a uma pergunta específica do usuário baseando-se nos RDOs do período.
+   * Perguntas factuais saem direto do banco; demais usam Claude com contexto rico.
    */
   async perguntarRelatorioObra(
     obraId: string,
@@ -458,7 +468,6 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
       throw new BadRequestException('A pergunta é obrigatória.');
     }
 
-    // Bloqueio de concorrência por obraId
     if (this.activeQueries.has(obraId)) {
       throw new HttpException(
         'Já existe uma pergunta sendo processada para esta obra. Aguarde a conclusão.',
@@ -466,175 +475,86 @@ Responda APENAS com o objeto JSON. Sem texto introdutório, sem explicações, s
       );
     }
 
-    let totalRdos = 0;
-    let rdos: any[] = [];
-    let resumoRdosParaIA: any[] = [];
-    let respostaSimulada = '';
-
-    // Função local de resposta simulada baseada nos RDOs (Fallback inteligente)
-    const gerarRespostaSimulada = (p: string) => {
-      const perguntaNorm = p.toLowerCase();
-      
-      // 1. Clima e chuva
-      if (perguntaNorm.includes('chuva') || perguntaNorm.includes('choveu') || perguntaNorm.includes('clima') || perguntaNorm.includes('tempo')) {
-        let contagemChuva = 0;
-        resumoRdosParaIA.forEach((r) => {
-          const txt = (r.clima || '').toLowerCase();
-          if (txt.includes('chuva') || txt.includes('chuvoso') || txt.includes('chuvosa') || txt.includes('🌧️') || txt.includes('⛈️') || txt.includes('🌦️')) {
-            contagemChuva++;
-          }
-        });
-        return `Com base nos diários analisados no período (total de ${totalRdos} dias), foi registrado chuva ou tempo instável em ${contagemChuva} dia(s). Nos demais dias, o clima registrado foi predominantemente estável/sol.`;
-      }
-
-      // 2. Efetivo e profissionais
-      if (perguntaNorm.includes('funcionario') || perguntaNorm.includes('efetivo') || perguntaNorm.includes('pedreiro') || perguntaNorm.includes('servente') || perguntaNorm.includes('trabalhou') || perguntaNorm.includes('pessoas') || perguntaNorm.includes('equipe')) {
-        let totalProfissionais = 0;
-        const profissionaisMap: Record<string, number> = {};
-        
-        rdos.forEach((r) => {
-          const d = (r.dadosExtras as any) || {};
-          if (d.profissionais && Array.isArray(d.profissionais)) {
-            d.profissionais.forEach((p: any) => {
-              if (p && typeof p === 'object') {
-                const nome = (p.nome || 'Outros').trim();
-                const qtd = Number(p.quantidade || 0);
-                profissionaisMap[nome] = (profissionaisMap[nome] || 0) + qtd;
-                totalProfissionais += qtd;
-              }
-            });
-          }
-        });
-
-        if (totalProfissionais > 0) {
-          const lista = Object.entries(profissionaisMap)
-            .map(([nome, qtd]) => `- ${nome}: acumulado de ${qtd} participações no período`)
-            .join('\n');
-          return `No período selecionado, o efetivo total acumulado nos diários foi de ${totalProfissionais} profissionais (soma de todos os dias).\nDistribuição dos profissionais registrados:\n${lista}`;
-        }
-        
-        const totalEfetivoRel = rdos.reduce((sum, r) => sum + (r.efetivos?.reduce((s, e) => s + e.quantidade, 0) || 0), 0);
-        return `O efetivo total registrado no período foi de ${totalEfetivoRel} profissionais (soma do efetivo diário acumulado).`;
-      }
-
-      // 3. Atividades executadas
-      if (perguntaNorm.includes('atividade') || perguntaNorm.includes('servico') || perguntaNorm.includes('feito') || perguntaNorm.includes('executado') || perguntaNorm.includes('obra')) {
-        const atividades = resumoRdosParaIA
-          .map((r) => r.atividadesExecutadas)
-          .filter(Boolean)
-          .join('\n');
-        if (atividades.trim()) {
-          return `Resumo das atividades executadas no período:\n${atividades.slice(0, 500)}${atividades.length > 500 ? '...' : ''}`;
-        }
-      }
-
-      return `Com base nos diários do período de ${dataInicio} a ${dataFim} (total de ${totalRdos} diários analisados), a pergunta "${pergunta}" foi processada localmente. O relatório executivo principal da obra indica que o andamento segue conforme os diários aprovados. Para um detalhamento preciso de outras ocorrências, consulte o painel superior.`;
-    };
-
     this.activeQueries.add(obraId);
 
     try {
       const inicio = new Date(dataInicio);
       const fim = new Date(dataFim);
 
+      if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime())) {
+        throw new BadRequestException('Datas inválidas. Use o formato YYYY-MM-DD.');
+      }
       if (inicio > fim) {
         throw new BadRequestException('dataInicio deve ser anterior a dataFim.');
       }
 
-      // Buscar RDOs aprovados do período
-      rdos = await this.prisma.rdo.findMany({
-        where: {
-          obraId,
-          status: 'APROVADO' as any,
-          dataReferencia: { gte: inicio, lte: fim },
-          deletedAt: null,
-        },
-        include: {
-          efetivos: { where: { deletedAt: null } },
-        },
-        orderBy: { dataReferencia: 'asc' },
+      const ctx = await this.carregarContextoRdos({
+        empresaId,
+        obraId,
+        escopo: 'obra',
+        dataInicio: inicio,
+        dataFim: fim,
+        periodoLabel: `${formatarDataISO(inicio)} a ${formatarDataISO(fim)}`,
       });
 
-      totalRdos = rdos.length;
-      if (rdos.length === 0) {
-        throw new BadRequestException(
-          'Nenhum RDO aprovado encontrado no período informado.',
-        );
+      if (ctx.totalRdos === 0) {
+        return {
+          resposta:
+            'Não encontrei nenhum diário de obra neste período. Ajuste as datas ou confira se já existem RDOs registrados nesta obra.',
+        };
       }
 
-      resumoRdosParaIA = rdos.map((r) => {
-        const d = (r.dadosExtras as any) || {};
+      const intencao = detectarIntencaoFactual(pergunta);
+      const factual = responderFactual(intencao, ctx, pergunta);
+      if (factual) {
+        return { resposta: factual };
+      }
 
-        let climaStr = '';
-        if (d.clima) {
-          climaStr = d.clima;
-        } else if (d.climaManha || d.climaTarde) {
-          climaStr = `Manhã: ${d.climaManha ?? 'Sol'}, Tarde: ${d.climaTarde ?? 'Sol'}, Noite: ${d.climaNoite ?? 'Sol'}`;
-        } else {
-          climaStr = 'Não informado';
-        }
-
-        return {
-          data: r.dataReferencia.toISOString().split('T')[0],
-          clima: climaStr,
-          atividadesExecutadas: d.atividadesExecutadas || '',
-          atividadesPendentes: d.atividadesPendentes || '',
-          profissionais: (d.profissionais || [])
-            .filter((p: any) => p && typeof p === 'object')
-            .map((p: any) => `${p.nome || 'Profissional'}: ${p.quantidade || 0}`),
-          observacoes: d.observacoes || '',
-        };
-      });
-
+      const contextoTexto = formatarContextoParaPrompt(ctx);
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (!apiKey || !Anthropic) {
         return {
-          resposta: `🤖 [Assistente de IA - Modo Local]\n\n${gerarRespostaSimulada(pergunta)}\n\n*(Nota: Chave ANTHROPIC_API_KEY não configurada no Railway. Para habilitar a resposta inteligente do Claude 3.5 Sonnet, adicione a variável de ambiente correspondente)*`,
+          resposta:
+            responderFactual('status_rdos', ctx, pergunta) ||
+            respostaLocalAmigavel(ctx),
         };
       }
 
-      const client = new Anthropic.default({ apiKey });
-      const prompt = `Você é um assistente especializado em gestão de obras de construção civil.
+      try {
+        const client = new Anthropic.default({ apiKey });
+        const prompt = `Você é um assistente especializado em gestão de obras de construção civil.
 
-Responda de forma concisa e direta à seguinte pergunta do usuário sobre os Relatórios Diários de Obra do período ${dataInicio} a ${dataFim}:
+Responda de forma concisa e direta, em português brasileiro, à pergunta do usuário sobre os Relatórios Diários de Obra do período ${dataInicio} a ${dataFim}:
 "${pergunta}"
 
-Baseie sua resposta estritamente nos dados consolidados dos diários de obra fornecidos abaixo. Caso não encontre informações relativas à pergunta, responda educadamente que os relatórios do período selecionado não possuem referências sobre o assunto.
+Baseie-se estritamente nos dados abaixo. Não invente números. Se não houver informação, diga claramente.
 
-Dados dos diários de obra:
-${JSON.stringify(resumoRdosParaIA, null, 2)}`;
+${contextoTexto}
 
-      const response = await client.messages.create({
-        model: AI_MODEL,
-        max_tokens: 600,
-        messages: [{ role: 'user', content: prompt }],
-      });
+Amostra JSON dos diários (até 40):
+${JSON.stringify(ctx.dias.slice(0, 40), null, 2)}`;
 
-      const resposta =
-        response.content[0]?.type === 'text' ? response.content[0].text : '';
-      return { resposta };
-    } catch (err: any) {
-      this.logger.error(`[AiService] Erro ao chamar a API do Claude para pergunta: ${err?.message}`);
-      const msg = err?.message ?? '';
-      const isCreditsError =
-        msg.includes('Plans & Billing') ||
-        msg.includes('credit') ||
-        err?.status === 402 ||
-        err?.error?.type === 'insufficient_quota';
-      if (isCreditsError) {
-        throw new BadRequestException(
-          'Saldo insuficiente na conta Anthropic. Adicione créditos em console.anthropic.com → Plans & Billing, ou deixe ANTHROPIC_API_KEY vazia para usar modo MOCK.',
-        );
-      }
-      
-      try {
-        respostaSimulada = gerarRespostaSimulada(pergunta);
+        const response = await client.messages.create({
+          model: AI_MODEL,
+          max_tokens: 600,
+          messages: [{ role: 'user', content: prompt }],
+        });
+
+        const resposta =
+          response.content[0]?.type === 'text' ? response.content[0].text : '';
         return {
-          resposta: `🤖 [Assistente de IA - Modo Local]\n\n${respostaSimulada}\n\n*(Nota: Ocorreu um erro ao conectar à API da Anthropic: "${err?.message || 'invalid x-api-key'}". Para ativar a resposta real gerada pelo Claude 3.5 Sonnet, certifique-se de configurar uma chave válida e ativa na variável ANTHROPIC_API_KEY no painel do Railway)*`
+          resposta:
+            resposta ||
+            respostaLocalAmigavel(ctx),
         };
-      } catch (simErr) {
+      } catch (err: any) {
+        this.logger.error(
+          `[AiService] Erro ao chamar Claude em perguntarRelatorioObra: ${err?.message}`,
+        );
         return {
-          resposta: `Não foi possível consultar a Inteligência Artificial ativa no momento (Erro: ${err?.message || 'Serviço temporariamente indisponível'}).\n\nResumo consolidado do período (total de ${totalRdos} diários):\n- Clima ou andamento: verifique os detalhes no painel do relatório executivo acima ou consulte as observações diretamente no RDO.`
+          resposta:
+            responderFactual(intencao || 'status_rdos', ctx, pergunta) ||
+            respostaLocalAmigavel(ctx),
         };
       }
     } finally {
@@ -644,7 +564,6 @@ ${JSON.stringify(resumoRdosParaIA, null, 2)}`;
 
   /**
    * Cron diário às 03:00 — remove RelatorioIA com mais de 30 dias.
-   * Evita crescimento indefinido da tabela de cache.
    */
   @Cron('0 3 * * *', { name: 'limpeza-cache-relatorios-ia' })
   async limpezaCacheRelatoriosIA() {
@@ -662,154 +581,161 @@ ${JSON.stringify(resumoRdosParaIA, null, 2)}`;
 
   /**
    * Endpoint de chat da Luna.
-   * Busca dados em tempo real da empresa do usuário e chama a API da Anthropic.
+   * Prioriza obra ativa (x-obra-id); consolida empresa se a pergunta for geral.
+   * Perguntas factuais respondem direto do banco.
    */
   async chat(
     empresaId: string,
     userId: string,
     message: string,
     history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    obraIdHeader?: string | null,
   ) {
     if (!message?.trim()) {
       throw new BadRequestException('A mensagem é obrigatória.');
     }
 
-    // 1. Obras ativas da empresa
+    void userId;
+
     const obrasAtivas = await this.prisma.obra.findMany({
-      where: {
-        empresaId,
-        status: 'ATIVA',
-        deletedAt: null,
-      },
-      select: {
-        nome: true,
-      },
+      where: { empresaId, status: 'ATIVA', deletedAt: null },
+      select: { id: true, nome: true },
     });
-    const listaObras = obrasAtivas.map((o) => o.nome).join(', ') || 'Nenhuma obra ativa';
+    const listaObrasNomes = obrasAtivas.map((o) => o.nome);
+    const listaObras = listaObrasNomes.join(', ') || 'Nenhuma obra ativa';
 
-    // 2. Últimos 10 RDOs (com status, data, obra, responsável)
-    const ultimosRdos = await this.prisma.rdo.findMany({
-      where: {
-        obra: {
-          empresaId,
-        },
-        deletedAt: null,
-      },
-      orderBy: {
-        dataReferencia: 'desc',
-      },
-      take: 10,
-      select: {
-        status: true,
-        dataReferencia: true,
-        obra: {
-          select: {
-            nome: true,
-          },
-        },
-        criador: {
-          select: {
-            nome: true,
-          },
-        },
-      },
-    });
-    const listaRdosRecentes = ultimosRdos
-      .map(
-        (r) =>
-          `- Obra: ${r.obra.nome}, Data: ${r.dataReferencia.toISOString().split('T')[0]}, Status: ${r.status}, Responsável: ${r.criador.nome}`,
-      )
-      .join('\n') || 'Nenhum RDO recente';
-
-    // 3. RDOs com status PENDENTE (aguardando aprovação = SUBMETIDO)
-    const rdosPendentes = await this.prisma.rdo.findMany({
-      where: {
-        obra: {
-          empresaId,
-        },
-        status: 'SUBMETIDO',
-        deletedAt: null,
-      },
-      select: {
-        dataReferencia: true,
-        obra: {
-          select: {
-            nome: true,
-          },
-        },
-        criador: {
-          select: {
-            nome: true,
-          },
-        },
-      },
-    });
-    const totalPendentes = rdosPendentes.length;
-    const listaRdosPendentes = rdosPendentes
-      .map(
-        (r) =>
-          `- Obra: ${r.obra.nome}, Data: ${r.dataReferencia.toISOString().split('T')[0]}, Responsável: ${r.criador.nome}`,
-      )
-      .join('\n') || 'Nenhum RDO aguardando aprovação';
-
-    // 4. Contagem de RDOs do mês atual
     const agora = new Date();
     const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
-    const totalRdosMes = await this.prisma.rdo.count({
-      where: {
-        obra: {
-          empresaId,
+    const [totalRdosMes, totalPendentes] = await Promise.all([
+      this.prisma.rdo.count({
+        where: {
+          obra: { empresaId },
+          dataReferencia: { gte: inicioMes },
+          deletedAt: null,
         },
-        dataReferencia: {
-          gte: inicioMes,
+      }),
+      this.prisma.rdo.count({
+        where: {
+          obra: { empresaId },
+          status: 'SUBMETIDO',
+          deletedAt: null,
         },
-        deletedAt: null,
-      },
-    });
+      }),
+    ]);
 
-    // Construção do System Prompt
+    const periodo = inferirPeriodo(message, agora);
+    const escopo = detectarEscopo(message, obraIdHeader);
+    const intencao = detectarIntencaoFactual(message);
+
+    let ctx: ContextoAgregado | null = null;
+    try {
+      ctx = await this.carregarContextoRdos({
+        empresaId,
+        obraId: obraIdHeader,
+        escopo,
+        dataInicio: periodo.dataInicio,
+        dataFim: periodo.dataFim,
+        periodoLabel: periodo.label,
+      });
+    } catch (err: any) {
+      this.logger.warn(
+        `[AiService] Falha ao carregar contexto RDO no chat: ${err?.message}`,
+      );
+    }
+
+    // 1) Respostas factuais diretas do banco
+    if (intencao && ctx) {
+      const factual = responderFactual(intencao, ctx, message, {
+        obrasAtivas: listaObrasNomes,
+        totalPendentesEmpresa: totalPendentes,
+      });
+      if (factual) {
+        return { reply: factual };
+      }
+    }
+    if (intencao === 'obras') {
+      return {
+        reply: responderFactual('obras', ctx || ({
+          escopo: 'empresa',
+          dataInicio: formatarDataISO(periodo.dataInicio),
+          dataFim: formatarDataISO(periodo.dataFim),
+          periodoLabel: periodo.label,
+          totalRdos: 0,
+          aprovados: 0,
+          submetidos: 0,
+          rascunhos: 0,
+          rejeitados: 0,
+          porStatus: {},
+          diasChuva: 0,
+          datasChuva: [],
+          diasSol: 0,
+          diasNublado: 0,
+          diasOutros: 0,
+          mediaEfetivo: 0,
+          totalEfetivoAcumulado: 0,
+          profissionaisMap: {},
+          topAtividades: [],
+          topPendencias: [],
+          dias: [],
+          obrasNomes: listaObrasNomes,
+        } as ContextoAgregado), message, {
+          obrasAtivas: listaObrasNomes,
+        }),
+      };
+    }
+
+    const contextoRico = ctx
+      ? formatarContextoParaPrompt(ctx)
+      : 'Sem diários disponíveis no período.';
+
     const systemPrompt = `Você é a Luna, assistente de IA do Obra 10, plataforma de gestão de obras.
 Responda sempre em português brasileiro. Seja objetiva, direta e profissional, mas com tom acolhedor.
 Nunca invente dados — use apenas as informações abaixo.
 Se não tiver a informação, diga que não tem acesso no momento.
 Para ações que não pode executar (aprovar, criar registros), oriente o usuário a fazer manualmente.
 
-DADOS DA EMPRESA (tempo real):
+DADOS RÁPIDOS DA EMPRESA:
 - Obras ativas: ${listaObras}
-- RDOs recentes:
-${listaRdosRecentes}
-- RDOs pendentes de aprovação: Quantidade: ${totalPendentes}
-${listaRdosPendentes}
-- Total de RDOs este mês: ${totalRdosMes}`;
+- RDOs este mês: ${totalRdosMes}
+- RDOs pendentes de aprovação agora: ${totalPendentes}
+
+CONTEXTO DETALHADO DOS DIÁRIOS (banco):
+${contextoRico}`;
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey || !Anthropic) {
-      // Fallback local/offline amigável para produção
       return {
-        reply: `Olá! Sou a Luna, sua assistente no Obra 10. No momento, meu canal de comunicação inteligente está passando por uma rápida manutenção. No entanto, consigo te adiantar alguns dados rápidos da empresa:\n- **Obras ativas**: ${listaObras}\n- **RDOs criados este mês**: ${totalRdosMes}\n- **RDOs pendentes de aprovação**: ${totalPendentes} pendentes.\n\nComo posso te ajudar no momento?`,
+        reply: respostaLocalAmigavel(ctx, {
+          obrasAtivas: listaObrasNomes,
+          totalRdosMes,
+          totalPendentes,
+        }),
       };
     }
 
     const client = new Anthropic.default({ apiKey });
-
-    // Preparar mensagens do histórico + nova mensagem
-    const formattedMessages = history.map((h) => ({
+    const formattedMessages = (history || []).map((h) => ({
       role: h.role,
       content: h.content,
     }));
-    formattedMessages.push({
-      role: 'user',
-      content: message,
-    });
+    formattedMessages.push({ role: 'user', content: message });
 
     try {
       const chatModel = 'claude-sonnet-4-20250514';
-      
+
       const makeCall = async (modelToUse: string) => {
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de 30 segundos atingido ao chamar a API da Anthropic.')), 30000)
+          setTimeout(
+            () =>
+              reject(
+                new Error(
+                  'Timeout de 30 segundos atingido ao chamar a API da Anthropic.',
+                ),
+              ),
+            30000,
+          ),
         );
-        
+
         const apiPromise = client.messages.create({
           model: modelToUse,
           max_tokens: 1024,
@@ -824,51 +750,50 @@ ${listaRdosPendentes}
       try {
         response = await makeCall(chatModel);
       } catch (err: any) {
-        // Fallback de modelo se der erro de modelo inválido ou não suportado
-        const isModelError = err?.status === 404 || err?.message?.includes('model') || err?.message?.includes('not found');
+        const isModelError =
+          err?.status === 404 ||
+          err?.message?.includes('model') ||
+          err?.message?.includes('not found');
         if (isModelError) {
-          this.logger.warn(`[AiService] Modelo '${chatModel}' falhou ou não existe. Fazendo fallback para 'claude-3-5-sonnet-20241022'.`);
-          response = await makeCall('claude-3-5-sonnet-20241022');
+          this.logger.warn(
+            `[AiService] Modelo '${chatModel}' falhou. Fallback para '${AI_MODEL}'.`,
+          );
+          response = await makeCall(AI_MODEL);
         } else {
-          throw err; // Outros erros (ex: timeout, billing) são repassados
+          throw err;
         }
       }
 
-      const reply = response.content[0]?.type === 'text' ? response.content[0].text : '';
-      return { reply };
-
+      const reply =
+        response.content[0]?.type === 'text' ? response.content[0].text : '';
+      return {
+        reply:
+          reply ||
+          respostaLocalAmigavel(ctx, {
+            obrasAtivas: listaObrasNomes,
+            totalRdosMes,
+            totalPendentes,
+          }),
+      };
     } catch (err: any) {
-      this.logger.error(`[AiService] Erro ao chamar a API da Anthropic no Chat: ${err?.message}`);
+      this.logger.error(
+        `[AiService] Erro no chat Luna: ${err?.message}`,
+      );
 
-      const msgNorm = message.toLowerCase();
-      let respostaSimulada = '';
-
-      if (msgNorm.includes('chuva') || msgNorm.includes('choveu') || msgNorm.includes('clima') || msgNorm.includes('tempo')) {
-        respostaSimulada = `Com base nos relatórios recentes da empresa, o clima tem variado nos canteiros. Para ver o registro oficial de chuvas ou sol de uma obra específica em um período, você pode utilizar a aba de **Relatório Diário de Obra** ou gerar o **Relatório Executivo — IA** selecionando o período desejado na listagem de RDOs.`;
-      } else if (msgNorm.includes('obra') || msgNorm.includes('ativa')) {
-        respostaSimulada = `Atualmente, temos as seguintes **obras ativas** registradas na empresa:\n\n${listaObras.split(', ').map(nome => `- ${nome}`).join('\n')}`;
-      } else if (msgNorm.includes('pendente') || msgNorm.includes('aprova')) {
-        respostaSimulada = `Temos um total de **${totalPendentes} RDO(s) pendente(s)** de aprovação no momento:\n\n${listaRdosPendentes || 'Nenhum RDO pendente.'}`;
-      } else if (msgNorm.includes('criado') || msgNorm.includes('mês') || msgNorm.includes('total')) {
-        respostaSimulada = `Este mês já foram criados **${totalRdosMes} RDOs** no total. Os 10 diários de obra mais recentes são:\n\n${listaRdosRecentes}`;
-      } else {
-        respostaSimulada = `Olá! Sou a Luna, sua assistente no Obra 10. No momento, estou respondendo em **Modo Local** (offline) devido a um problema temporário na chave de API da Anthropic. Consigo te adiantar as seguintes informações rápidas:\n\n- **Obras ativas**: ${listaObras}\n- **RDOs criados este mês**: ${totalRdosMes}\n- **RDOs pendentes de aprovação**: ${totalPendentes} pendentes.\n\nComo posso te ajudar no momento?`;
-      }
-
-      const isCreditsError =
-        err?.message?.includes('Plans & Billing') ||
-        err?.message?.includes('credit') ||
-        err?.status === 402 ||
-        err?.error?.type === 'insufficient_quota';
-
-      if (isCreditsError) {
-        return {
-          reply: `🤖 [Modo Local - Limite de Créditos Atingido]\n\n${respostaSimulada}\n\n*(Nota: O saldo de créditos da Anthropic acabou. Por favor, avise o administrador do sistema para verificar a conta)*`,
-        };
+      if (ctx && intencao) {
+        const factual = responderFactual(intencao, ctx, message, {
+          obrasAtivas: listaObrasNomes,
+          totalPendentesEmpresa: totalPendentes,
+        });
+        if (factual) return { reply: factual };
       }
 
       return {
-        reply: `🤖 [Modo Local - Chave de API Inválida ou Instável]\n\n${respostaSimulada}\n\n*(Nota: Ocorreu uma falha de autenticação/conexão com a Anthropic: "${err?.message || 'invalid x-api-key'}" - Status: ${err?.status || 401}. Avise o administrador para revisar a chave ANTHROPIC_API_KEY no Railway)*`,
+        reply: respostaLocalAmigavel(ctx, {
+          obrasAtivas: listaObrasNomes,
+          totalRdosMes,
+          totalPendentes,
+        }),
       };
     }
   }

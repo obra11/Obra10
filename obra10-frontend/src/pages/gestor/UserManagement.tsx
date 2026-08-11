@@ -5,20 +5,40 @@ import api from '../../services/api';
 import { getImageUrl } from '../../utils/image';
 import { ModuloToggle } from '../../components/ModuloToggle';
 import {
-  Users, Plus, Trash2, Loader2, User, Mail, Lock, X, ArrowLeft
+  Users, Plus, Trash2, Loader2, User, Mail, Lock, X, ArrowLeft, Settings, Shield
 } from 'lucide-react';
 
 interface Modulo { slug: string; nome: string; }
 interface UsuarioModulo { modulo: Modulo; }
-interface ObraVinculada { 
-  obra: { id: string; nome: string; status: string; }; 
+interface ObraVinculada {
+  obra: { id: string; nome: string; status: string; };
   permissoes?: Record<string, string>;
+}
+interface RoleCapabilities {
+  gerenciarUsuarios: boolean;
+  acessoTodasObras: boolean;
+  aprovarRdo: boolean;
+  criarEditarRdo: boolean;
+  verTodosRdos: boolean;
+  verSoAprovados: boolean;
+  verParcialAprovados: boolean;
+  modulosPadrao: Record<string, string>;
 }
 interface Usuario {
   id: string; nome: string; email: string;
   perfilGlobal: string; ativo: boolean; fotoUrl?: string;
+  capabilities?: RoleCapabilities | null;
+  capabilitiesEfetivas?: RoleCapabilities;
   usuarioModulos: UsuarioModulo[];
   userObraRole: ObraVinculada[];
+}
+interface PapelEmpresa {
+  id: string;
+  tipo: string;
+  nome: string;
+  capabilities: RoleCapabilities;
+  permissoesPadrao?: Record<string, string>;
+  editavel: boolean;
 }
 
 const MODULO_LABELS: Record<string, string> = {
@@ -29,20 +49,73 @@ const MODULO_LABELS: Record<string, string> = {
   IA: 'Análise IA',
 };
 
+const FUNCOES = [
+  { value: 'GESTOR', label: 'Gestor' },
+  { value: 'USER', label: 'Colaborador' },
+  { value: 'EXTERNO', label: 'Usuário externo' },
+  { value: 'PERSONALIZADO', label: 'Personalizado' },
+] as const;
+
+const EMPTY_CAPS: RoleCapabilities = {
+  gerenciarUsuarios: false,
+  acessoTodasObras: false,
+  aprovarRdo: false,
+  criarEditarRdo: false,
+  verTodosRdos: false,
+  verSoAprovados: false,
+  verParcialAprovados: false,
+  modulosPadrao: {},
+};
+
+const CAP_LABELS: { key: keyof Omit<RoleCapabilities, 'modulosPadrao'>; label: string; hint: string }[] = [
+  { key: 'gerenciarUsuarios', label: 'Gerenciar usuários', hint: 'Criar, editar e remover usuários da empresa' },
+  { key: 'acessoTodasObras', label: 'Acesso a todas as obras', hint: 'Vê todas as obras sem vínculo explícito' },
+  { key: 'aprovarRdo', label: 'Aprovar RDO', hint: 'Pode aprovar e reabrir diários de obra' },
+  { key: 'criarEditarRdo', label: 'Criar e editar RDO', hint: 'Pode criar e preencher diários' },
+  { key: 'verTodosRdos', label: 'Ver todos os RDOs', hint: 'Visualiza diários em qualquer status' },
+  { key: 'verSoAprovados', label: 'Ver só aprovados', hint: 'Restringe a diários aprovados' },
+  { key: 'verParcialAprovados', label: 'Visualização parcial', hint: 'Só clima e atividades de RDOs aprovados' },
+];
+
+function roleBadgeClass(perfil: string) {
+  switch (perfil) {
+    case 'GESTOR': return 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100';
+    case 'EXTERNO': return 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100';
+    case 'PERSONALIZADO': return 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100';
+    default: return 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100';
+  }
+}
+
+function labelPerfil(perfil: string) {
+  return FUNCOES.find(f => f.value === perfil)?.label || perfil;
+}
+
 export const UserManagement: React.FC = () => {
-  useAuth(); // Keep hook for future auth checks
+  useAuth();
   const navigate = useNavigate();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [tenantModulos, setTenantModulos] = useState<string[]>([]);
   const [obrasPermitidas, setObrasPermitidas] = useState<{id: string, nome: string}[]>([]);
+  const [papeis, setPapeis] = useState<PapelEmpresa[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showConfigPapeis, setShowConfigPapeis] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [uploadingFotoId, setUploadingFotoId] = useState<string | null>(null);
-  const [form, setForm] = useState({ nome: '', email: '', senha: '', perfilGlobal: 'USER' });
+  const [form, setForm] = useState({
+    nome: '',
+    email: '',
+    senha: '',
+    perfilGlobal: 'USER',
+    capabilities: { ...EMPTY_CAPS } as RoleCapabilities,
+    modulosPersonalizados: {} as Record<string, string>,
+  });
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
-  // const baseURL = import.meta.env.VITE_API_URL ?? '';
+  const [editingPersonalizadoId, setEditingPersonalizadoId] = useState<string | null>(null);
+  const [personalizadoDraft, setPersonalizadoDraft] = useState<RoleCapabilities>({ ...EMPTY_CAPS });
+  const [papelDraft, setPapelDraft] = useState<Record<string, RoleCapabilities>>({});
+  const [savingPapel, setSavingPapel] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAll();
@@ -51,25 +124,34 @@ export const UserManagement: React.FC = () => {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [usersRes, tenantRes] = await Promise.all([
+      const [usersRes, tenantRes, papeisRes] = await Promise.all([
         api.get('/usuarios'),
         api.get('/auth/me'),
+        api.get('/usuarios/papeis').catch(() => ({ data: [] })),
       ]);
       setUsuarios(usersRes.data);
-      // Fetch tenant modules from empresa info
+      setPapeis(papeisRes.data || []);
+      const draft: Record<string, RoleCapabilities> = {};
+      for (const p of papeisRes.data || []) {
+        draft[p.tipo] = {
+          ...EMPTY_CAPS,
+          ...(p.capabilities || {}),
+          modulosPadrao: {
+            ...(p.permissoesPadrao || {}),
+            ...((p.capabilities as RoleCapabilities)?.modulosPadrao || {}),
+          },
+        };
+      }
+      setPapelDraft(draft);
+
       const meData = tenantRes.data;
       if (meData.obrasPermitidas) {
         setObrasPermitidas(meData.obrasPermitidas);
       }
-      // We get available modules from tenant by calling tenants endpoint
-      const tenantData = await api.get(`/admin/tenants`).catch(() => null);
-      if (tenantData) {
-        const myTenant = tenantData.data.find((t: any) => t.id === meData.usuario?.empresaId);
-        if (myTenant) {
-          setTenantModulos(myTenant.tenantModulos.filter((m: any) => m.ativo).map((m: any) => m.modulo.slug));
-        }
+      const empresaModulos = meData.empresa?.modulos?.map((m: any) => m.slug);
+      if (empresaModulos?.length) {
+        setTenantModulos(empresaModulos);
       } else {
-        // Fallback: offer all modules (user may not be super admin)
         setTenantModulos(['RDO', 'FVS', 'PROJETOS', 'CONCRETO', 'IA']);
       }
     } finally {
@@ -82,9 +164,25 @@ export const UserManagement: React.FC = () => {
     setFormError('');
     setFormLoading(true);
     try {
-      await api.post('/usuarios', form);
+      const payload: any = {
+        nome: form.nome,
+        email: form.email,
+        senha: form.senha,
+        perfilGlobal: form.perfilGlobal,
+      };
+      if (form.perfilGlobal === 'PERSONALIZADO') {
+        payload.capabilities = {
+          ...form.capabilities,
+          modulosPadrao: form.modulosPersonalizados,
+        };
+      }
+      await api.post('/usuarios', payload);
       setShowForm(false);
-      setForm({ nome: '', email: '', senha: '', perfilGlobal: 'USER' });
+      setForm({
+        nome: '', email: '', senha: '', perfilGlobal: 'USER',
+        capabilities: { ...EMPTY_CAPS },
+        modulosPersonalizados: {},
+      });
       await fetchAll();
     } catch (err: any) {
       setFormError(err?.response?.data?.message || 'Erro ao criar usuário.');
@@ -99,7 +197,10 @@ export const UserManagement: React.FC = () => {
       if (isAssigned) {
         await api.delete(`/obras/${obraId}/colaboradores/${usuarioId}`);
       } else {
-        await api.post(`/obras/${obraId}/colaboradores`, { usuarioId, permissoes: {} });
+        const u = usuarios.find(x => x.id === usuarioId);
+        const caps = u?.capabilitiesEfetivas || u?.capabilities;
+        const permissoes = caps?.modulosPadrao || {};
+        await api.post(`/obras/${obraId}/colaboradores`, { usuarioId, permissoes });
       }
       await fetchAll();
     } catch (err: any) {
@@ -110,6 +211,18 @@ export const UserManagement: React.FC = () => {
   };
 
   const handleUpdateRole = async (usuarioId: string, newRole: string) => {
+    if (newRole === 'PERSONALIZADO') {
+      const u = usuarios.find(x => x.id === usuarioId);
+      setEditingPersonalizadoId(usuarioId);
+      setPersonalizadoDraft({
+        ...EMPTY_CAPS,
+        ...(u?.capabilitiesEfetivas || u?.capabilities || {}),
+        modulosPadrao: {
+          ...((u?.capabilitiesEfetivas || u?.capabilities)?.modulosPadrao || {}),
+        },
+      });
+      return;
+    }
     setSavingId('role_' + usuarioId);
     try {
       await api.patch(`/usuarios/${usuarioId}`, { perfilGlobal: newRole });
@@ -121,15 +234,48 @@ export const UserManagement: React.FC = () => {
     }
   };
 
+  const handleSavePersonalizado = async () => {
+    if (!editingPersonalizadoId) return;
+    setSavingId('role_' + editingPersonalizadoId);
+    try {
+      await api.patch(`/usuarios/${editingPersonalizadoId}`, {
+        perfilGlobal: 'PERSONALIZADO',
+        capabilities: personalizadoDraft,
+      });
+      setEditingPersonalizadoId(null);
+      await fetchAll();
+    } catch (err: any) {
+      alert('Erro ao salvar personalizado: ' + (err?.response?.data?.message || err.message));
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const handleSavePapel = async (tipo: string) => {
+    setSavingPapel(tipo);
+    try {
+      const caps = papelDraft[tipo];
+      await api.patch(`/usuarios/papeis/${tipo}`, {
+        capabilities: caps,
+        permissoesPadrao: caps?.modulosPadrao || {},
+      });
+      await fetchAll();
+    } catch (err: any) {
+      alert('Erro ao salvar função: ' + (err?.response?.data?.message || err.message));
+    } finally {
+      setSavingPapel(null);
+    }
+  };
+
   const handleToggleModuleInsideObra = async (usuarioId: string, obraId: string, slug: string, permissoesAtuais: Record<string, string>) => {
     setSavingId(usuarioId + obraId + slug);
     const novasPermissoes = { ...permissoesAtuais };
     if (novasPermissoes[slug]) {
        delete novasPermissoes[slug];
     } else {
-       novasPermissoes[slug] = 'VIEW'; // Concede inicialmente
+       novasPermissoes[slug] = 'VIEW';
     }
-    
+
     try {
       await api.patch(`/obras/${obraId}/colaboradores/${usuarioId}`, { permissoes: novasPermissoes });
       await fetchAll();
@@ -167,6 +313,84 @@ export const UserManagement: React.FC = () => {
     await fetchAll();
   };
 
+  const renderCapabilitiesEditor = (
+    caps: RoleCapabilities,
+    onChange: (next: RoleCapabilities) => void,
+    showModulos = true,
+  ) => (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {CAP_LABELS.map(item => (
+          <label key={item.key} className="flex items-start gap-2 p-3 border border-gray-200 rounded-lg bg-white cursor-pointer hover:border-red-200">
+            <input
+              type="checkbox"
+              className="mt-0.5 rounded border-gray-300 text-red-600 focus:ring-red-500"
+              checked={!!caps[item.key]}
+              onChange={e => onChange({ ...caps, [item.key]: e.target.checked })}
+            />
+            <span>
+              <span className="block text-sm font-semibold text-gray-800">{item.label}</span>
+              <span className="block text-[11px] text-gray-500">{item.hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {showModulos && (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Módulos padrão</p>
+          <div className="space-y-2">
+            {tenantModulos.map(slug => {
+              const nivel = caps.modulosPadrao?.[slug] || '';
+              const ativo = !!nivel;
+              return (
+                <div key={slug} className={`border rounded-lg p-3 ${ativo ? 'border-red-200 bg-red-50/30' : 'border-gray-200'}`}>
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={ativo}
+                      onChange={() => {
+                        const next = { ...caps.modulosPadrao };
+                        if (ativo) delete next[slug];
+                        else next[slug] = slug === 'RDO' ? 'EDIT' : 'VIEW';
+                        onChange({ ...caps, modulosPadrao: next });
+                      }}
+                      className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+                    />
+                    {MODULO_LABELS[slug] || slug}
+                  </label>
+                  {ativo && (
+                    <select
+                      className="mt-2 w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white"
+                      value={nivel}
+                      onChange={e => onChange({
+                        ...caps,
+                        modulosPadrao: { ...caps.modulosPadrao, [slug]: e.target.value },
+                      })}
+                    >
+                      {slug === 'RDO' ? (
+                        <>
+                          <option value="VIEW">Visualizar todos os diários</option>
+                          <option value="VIEW_APPROVED">Apenas diários aprovados</option>
+                          <option value="VIEW_PARTIAL_APPROVED">Visualização parcial (aprovados)</option>
+                          <option value="EDIT">Criar e editar diários</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="VIEW">Apenas visualizar</option>
+                          <option value="EDIT">Pode editar / criar</option>
+                        </>
+                      )}
+                    </select>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   if (loading) {
     return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-red-600" size={40} /></div>;
   }
@@ -174,10 +398,9 @@ export const UserManagement: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-5xl mx-auto">
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div className="flex items-center gap-3">
-            <button 
+            <button
               onClick={() => navigate('/dashboard')}
               title="Voltar ao Início"
               className="p-2 -ml-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -190,15 +413,60 @@ export const UserManagement: React.FC = () => {
               <p className="text-sm text-gray-500">{usuarios.length} usuários na sua conta</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowForm(prev => !prev)}
-            className="flex shrink-0 items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors"
-          >
-            <Plus size={16} /> Novo Usuário
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setShowConfigPapeis(prev => !prev)}
+              className="flex shrink-0 items-center justify-center gap-2 px-4 py-2 bg-white text-gray-700 font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              <Settings size={16} /> Configurar funções
+            </button>
+            <button
+              onClick={() => setShowForm(prev => !prev)}
+              className="flex shrink-0 items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <Plus size={16} /> Novo Usuário
+            </button>
+          </div>
         </div>
 
-        {/* Create Form */}
+        {showConfigPapeis && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Shield className="text-red-600" size={20} />
+                <h2 className="font-semibold text-gray-900">Configurar funções padrão</h2>
+              </div>
+              <button onClick={() => setShowConfigPapeis(false)}><X size={18} className="text-gray-400 hover:text-gray-700" /></button>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">
+              Defina o que cada função pode fazer por padrão. Usuários personalizados são configurados individualmente.
+            </p>
+            <div className="space-y-6">
+              {['GESTOR', 'COLABORADOR', 'EXTERNO'].map(tipo => {
+                const papel = papeis.find(p => p.tipo === tipo);
+                const draft = papelDraft[tipo] || { ...EMPTY_CAPS };
+                return (
+                  <div key={tipo} className="border border-gray-100 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-gray-800">
+                        {papel?.nome || tipo}
+                      </h3>
+                      <button
+                        onClick={() => handleSavePapel(tipo)}
+                        disabled={savingPapel === tipo}
+                        className="text-sm px-3 py-1.5 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:opacity-70"
+                      >
+                        {savingPapel === tipo ? 'Salvando...' : 'Salvar'}
+                      </button>
+                    </div>
+                    {renderCapabilitiesEditor(draft, next => setPapelDraft(prev => ({ ...prev, [tipo]: next })))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {showForm && (
           <div className="bg-white rounded-xl shadow-sm border border-red-100 p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
@@ -226,12 +494,26 @@ export const UserManagement: React.FC = () => {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">Perfil</label>
+                <label className="text-xs font-semibold text-gray-500 mb-1 block">Função</label>
                 <select value={form.perfilGlobal} onChange={e => setForm(p => ({ ...p, perfilGlobal: e.target.value }))} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 outline-none bg-white">
-                  <option value="USER">Usuário</option>
-                  <option value="GESTOR">Gestor</option>
+                  {FUNCOES.map(f => (
+                    <option key={f.value} value={f.value}>{f.label}</option>
+                  ))}
                 </select>
               </div>
+              {form.perfilGlobal === 'PERSONALIZADO' && (
+                <div className="sm:col-span-2 border border-violet-100 rounded-xl p-4 bg-violet-50/40">
+                  <h3 className="font-semibold text-gray-800 mb-3">Permissões personalizadas</h3>
+                  {renderCapabilitiesEditor(
+                    { ...form.capabilities, modulosPadrao: form.modulosPersonalizados },
+                    next => setForm(p => ({
+                      ...p,
+                      capabilities: { ...next, modulosPadrao: next.modulosPadrao },
+                      modulosPersonalizados: next.modulosPadrao,
+                    })),
+                  )}
+                </div>
+              )}
               <div className="sm:col-span-2 flex justify-end">
                 <button type="submit" disabled={formLoading} className="flex items-center gap-2 px-6 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-70">
                   {formLoading ? <><Loader2 size={14} className="animate-spin" />Criando...</> : 'Criar Usuário'}
@@ -241,9 +523,37 @@ export const UserManagement: React.FC = () => {
           </div>
         )}
 
-        {/* Users List */}
+        {editingPersonalizadoId && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[100]">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <h3 className="text-lg font-bold text-gray-800">Configurar função personalizada</h3>
+                <button onClick={() => setEditingPersonalizadoId(null)} className="text-gray-400 hover:text-gray-700">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-5 overflow-y-auto">
+                {renderCapabilitiesEditor(personalizadoDraft, setPersonalizadoDraft)}
+              </div>
+              <div className="p-5 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+                <button onClick={() => setEditingPersonalizadoId(null)} className="px-4 py-2 text-gray-600 font-semibold rounded-lg hover:bg-gray-200">
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSavePersonalizado}
+                  disabled={!!savingId}
+                  className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 disabled:opacity-70"
+                >
+                  {savingId ? 'Salvando...' : 'Salvar permissões'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-3">
           {usuarios.map(u => {
+            const acessoTotal = u.capabilitiesEfetivas?.acessoTodasObras || u.perfilGlobal === 'GESTOR';
             return (
               <div key={u.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
                 <div className="flex items-start justify-between gap-4">
@@ -271,14 +581,26 @@ export const UserManagement: React.FC = () => {
                           <Loader2 size={10} className="animate-spin" /> ATUALIZANDO...
                         </span>
                       ) : (
-                        <select
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-wider cursor-pointer outline-none border transition-colors ${u.perfilGlobal === 'GESTOR' ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}`}
-                          value={u.perfilGlobal}
-                          onChange={(e) => handleUpdateRole(u.id, e.target.value)}
-                        >
-                          <option value="USER">COLABORADOR (USER)</option>
-                          <option value="GESTOR">GESTOR</option>
-                        </select>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <select
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-wider cursor-pointer outline-none border transition-colors ${roleBadgeClass(u.perfilGlobal)}`}
+                            value={u.perfilGlobal}
+                            onChange={(e) => handleUpdateRole(u.id, e.target.value)}
+                          >
+                            {FUNCOES.map(f => (
+                              <option key={f.value} value={f.value}>{f.label}</option>
+                            ))}
+                          </select>
+                          {u.perfilGlobal === 'PERSONALIZADO' && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateRole(u.id, 'PERSONALIZADO')}
+                              className="text-[10px] font-bold text-violet-700 underline"
+                            >
+                              Editar permissões
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -287,7 +609,6 @@ export const UserManagement: React.FC = () => {
                   </button>
                 </div>
 
-                {/* Acessos por Obra */}
                 <div className="mt-4 pt-4 border-t border-gray-50">
                   <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Acessos por Obra</p>
                   <div className="space-y-3">
@@ -296,36 +617,36 @@ export const UserManagement: React.FC = () => {
                     )}
                     {obrasPermitidas.map(obra => {
                       const role = u.userObraRole?.find(r => r.obra.id === obra.id);
-                      const isAssigned = !!role;
+                      const isAssigned = !!role || acessoTotal;
                       const userPermissoes = (role?.permissoes as Record<string, string>) || {};
 
                       return (
                         <div key={obra.id} className={`border rounded-lg overflow-hidden transition-all ${isAssigned ? 'border-red-200 shadow-sm' : 'border-gray-200'}`}>
-                          {/* Cabeçalho da Obra (Toggle de Vínculo) */}
                           <div className={`flex items-center justify-between p-3 ${isAssigned ? 'bg-red-50/50' : 'bg-gray-50'}`}>
                             <span className={`text-sm font-semibold ${isAssigned ? 'text-gray-900' : 'text-gray-500'}`}>
                               {obra.nome}
                             </span>
-                            
-                            <label className="relative inline-flex items-center cursor-pointer">
-                              {savingId === u.id + obra.id && <Loader2 size={14} className="animate-spin absolute -left-5 text-gray-400" />}
-                              <input 
-                                type="checkbox" 
-                                className="sr-only peer" 
-                                checked={isAssigned}
-                                disabled={savingId === u.id + obra.id}
-                                onChange={() => handleToggleObra(u.id, obra.id, isAssigned)}
-                              />
-                              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600"></div>
-                            </label>
+
+                            {!acessoTotal && (
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                {savingId === u.id + obra.id && <Loader2 size={14} className="animate-spin absolute -left-5 text-gray-400" />}
+                                <input
+                                  type="checkbox"
+                                  className="sr-only peer"
+                                  checked={!!role}
+                                  disabled={savingId === u.id + obra.id}
+                                  onChange={() => handleToggleObra(u.id, obra.id, !!role)}
+                                />
+                                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600"></div>
+                              </label>
+                            )}
                           </div>
-                          
-                          {/* Toggles Individuais e Módulos */}
+
                           {isAssigned && (
                             <div className="p-3 bg-white border-t border-red-100 flex flex-wrap gap-2">
-                               {u.perfilGlobal === 'GESTOR' ? (
+                               {acessoTotal ? (
                                   <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100">
-                                     Acesso Total (Perfil Gestor)
+                                     Acesso total ({labelPerfil(u.perfilGlobal)})
                                   </span>
                                ) : (
                                   tenantModulos.map(slug => {

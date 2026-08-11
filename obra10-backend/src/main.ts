@@ -62,10 +62,11 @@ async function bootstrap() {
   );
 
   // 1b. Custom security headers not covered by helmet
+  // camera/microphone = (self) — necessário para upload de mídia no RDO e voz da Luna
   app.use((req: any, res: any, next: any) => {
     res.setHeader(
       'Permissions-Policy',
-      'camera=(), microphone=(), geolocation=()',
+      'camera=(self), microphone=(self), geolocation=()',
     );
     next();
   });

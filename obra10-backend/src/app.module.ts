@@ -25,6 +25,7 @@ import { ModulosModule } from './modules/modulos/modulos.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CryptoModule } from './core/services/crypto.module';
+import { CapabilitiesModule } from './core/capabilities/capabilities.module';
 import { CupomModule } from './modules/cupom/cupom.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { FeatureModule } from './modules/feature/feature.module';
@@ -36,6 +37,7 @@ import { ApiVersionMiddleware } from './core/middlewares/api-version.middleware'
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
     CryptoModule,
+    CapabilitiesModule,
     ThrottlerModule.forRoot([
       {
         ttl: 60000,

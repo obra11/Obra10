@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -21,6 +22,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
+    private readonly capabilities: CapabilitiesService,
   ) {}
 
   async login(email: string, senhaPlana: string, empresaId: string) {
@@ -90,10 +92,17 @@ export class AuthService {
       },
     });
 
+    const caps = await this.capabilities.resolveForUser({
+      empresaId: user.empresaId,
+      perfilGlobal: user.perfilGlobal,
+      capabilitiesOverride: user.capabilities,
+    });
+
     const obrasPermitidas = await this.buildObrasPermitidas(
       user.id,
       user.empresaId,
-      user.perfilGlobal,
+      caps.acessoTodasObras || user.perfilGlobal === 'SUPER_ADMIN',
+      caps,
     );
 
     const payload = {
@@ -113,6 +122,7 @@ export class AuthService {
         empresaId: user.empresaId,
         perfilGlobal: user.perfilGlobal,
         fotoUrl: user.fotoUrl,
+        capabilities: caps,
       },
       empresa: {
         ...user.empresa,
@@ -154,10 +164,17 @@ export class AuthService {
     if (!user)
       throw new UnauthorizedException('Usuário não encontrado ou inativo.');
 
+    const caps = await this.capabilities.resolveForUser({
+      empresaId: user.empresaId,
+      perfilGlobal: user.perfilGlobal,
+      capabilitiesOverride: user.capabilities,
+    });
+
     const obrasPermitidas = await this.buildObrasPermitidas(
       user.id,
       user.empresaId,
-      user.perfilGlobal,
+      caps.acessoTodasObras || user.perfilGlobal === 'SUPER_ADMIN',
+      caps,
     );
 
     return {
@@ -168,6 +185,7 @@ export class AuthService {
         empresaId: user.empresaId,
         perfilGlobal: user.perfilGlobal,
         fotoUrl: user.fotoUrl,
+        capabilities: caps,
       },
       empresa: {
         ...user.empresa,
@@ -189,10 +207,10 @@ export class AuthService {
   private async buildObrasPermitidas(
     userId: string,
     empresaId: string,
-    perfilGlobal: string,
+    acessoTodasObras: boolean,
+    caps?: { aprovarRdo?: boolean; criarEditarRdo?: boolean; modulosPadrao?: Record<string, string> },
   ) {
-    const isPrivilegiado =
-      perfilGlobal === 'SUPER_ADMIN' || perfilGlobal === 'GESTOR';
+    const isPrivilegiado = acessoTodasObras;
     const obrasBrutas = isPrivilegiado
       ? await this.prisma.obra.findMany({
           where: { empresaId, deletedAt: null },
@@ -211,6 +229,10 @@ export class AuthService {
 
     return obrasBrutas.map((obra: any) => {
       const permissoesObj = obra.userObraRole?.[0]?.permissoes || {};
+      const privilegiadoPerms =
+        caps?.modulosPadrao && Object.keys(caps.modulosPadrao).length > 0
+          ? caps.modulosPadrao
+          : { RDO: caps?.criarEditarRdo ? 'EDIT' : 'VIEW' };
       return {
         id: obra.id,
         nome: obra.nome,
@@ -220,7 +242,7 @@ export class AuthService {
         minhasPermissoes: isPrivilegiado
           ? ['SUPER']
           : Object.keys(permissoesObj),
-        permissoes: isPrivilegiado ? { rdo: 'EDIT' } : permissoesObj,
+        permissoes: isPrivilegiado ? privilegiadoPerms : permissoesObj,
       };
     });
   }
