@@ -12,7 +12,7 @@ type Obra10LogoProps = {
 };
 
 /**
- * Marca Obra 10 — primeiro logo (capacete preenchido).
+ * Marca Obra 10 — capacete outline (logo oficial enviada).
  * withWordmark: capacete + texto "OBRA 10".
  */
 export const Obra10Logo: React.FC<Obra10LogoProps> = ({
@@ -24,7 +24,7 @@ export const Obra10Logo: React.FC<Obra10LogoProps> = ({
 }) => {
   const icon = (
     <img
-      src="/obra10-mark.svg?v=2.5.8"
+      src="/obra10-mark.svg?v=2.5.9"
       width={size}
       height={size}
       alt={withWordmark ? '' : alt}
