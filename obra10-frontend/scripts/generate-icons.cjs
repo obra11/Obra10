@@ -1,6 +1,8 @@
 /**
- * Logo oficial Obra 10 (referência do usuário):
- * capacete branco em outline (cúpula + crista + aba) em vermelho.
+ * Logo Obra 10 — arte fornecida pelo usuário (exata).
+ * Vermelho da arte: #CE1628
+ * Ícone: PNG oficial do usuário, centrado (sem moldura inventada).
+ * Lockup: ícone + OBRA 10 como no banner.
  * Uso: node scripts/generate-icons.cjs
  */
 const path = require('path');
@@ -9,35 +11,96 @@ const sharp = require('sharp');
 
 const OUT_PUBLIC = path.resolve(__dirname, '../public');
 const OUT_BACKEND = path.resolve(__dirname, '../../obra10-backend/client');
-// Vermelho da marca Lunardeli (UI). O PNG enviado era ~#CE1628 por compressão.
-const RED = '#E5192C';
+const RED = '#CE1628';
+const RED_RGB = { r: 206, g: 22, b: 40 };
 
-/**
- * Capacete estilo da logo enviada: aba + cúpula arredondada + crista no topo.
- * NÃO é o Lucide (caixa). É o outline de capacete de obra.
- */
-function markSvg(size = 512, { round = true } = {}) {
-  const rx = round ? Math.round(size * 0.18) : 0;
-  // viewBox 0 0 100 100 — traço ~7.5
+const USER_ICON = path.resolve(__dirname, '../public/logo-obra10-user.png');
+const USER_ASSET = path.resolve(
+  process.env.USERPROFILE || '',
+  '.cursor/projects/d-ANTYGRAVITY-OBRA-10/assets',
+  'c__Users_User_AppData_Roaming_Cursor_User_workspaceStorage_bd60fcbf49460ca3a642c7ba33191d7f_images_LOGO-99e23749-c61f-4338-8bcd-bcfe2d68a84c.png',
+);
+const BANNER_ASSET = path.resolve(
+  process.env.USERPROFILE || '',
+  '.cursor/projects/d-ANTYGRAVITY-OBRA-10/assets',
+  'c__Users_User_AppData_Roaming_Cursor_User_workspaceStorage_bd60fcbf49460ca3a642c7ba33191d7f_images_image-bab41724-432c-4b95-9309-b086cebba464.png',
+);
+
+async function buildMasterIcon(size) {
+  // Capacete do usuário em quadrado vermelho #CE1628 (mesmo vermelho da arte)
+  const pad = Math.round(size * 0.14);
+  const inner = size - pad * 2;
+  const hat = await sharp(USER_ICON)
+    .resize(inner, inner, {
+      fit: 'contain',
+      background: { ...RED_RGB, alpha: 1 },
+      kernel: sharp.kernel.lanczos3,
+    })
+    .png()
+    .toBuffer();
+
+  return sharp({
+    create: {
+      width: size,
+      height: size,
+      channels: 3,
+      background: RED_RGB,
+    },
+  })
+    .composite([{ input: hat, left: pad, top: pad }])
+    .png({ compressionLevel: 9, palette: false })
+    .toBuffer();
+}
+
+function svgFromPng(b64, size) {
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${size}" height="${size}" fill="none">
-  <rect width="100" height="100" rx="${round ? 18 : 0}" fill="${RED}"/>
-  <g
-    stroke="#FFFFFF"
-    stroke-width="7.2"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    fill="none"
-  >
-    <!-- aba -->
-    <path d="M18 70 H82"/>
-    <!-- cúpula -->
-    <path d="M26 70 V54 C26 38 36 29 50 29 C64 29 74 38 74 54 V70"/>
-    <!-- crista -->
-    <path d="M41 29 V21 C41 15.5 45 12.5 50 12.5 C55 12.5 59 15.5 59 21 V29"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+  <image width="${size}" height="${size}" href="data:image/png;base64,${b64}" xlink:href="data:image/png;base64,${b64}"/>
 </svg>
 `;
+}
+
+async function buildWordmarkPng() {
+  // Lockup 640×160: tile ~altura do banner (como na arte) + OBRA 10
+  const W = 640;
+  const H = 160;
+  const tile = 128;
+  const tileX = 16;
+  const tileY = 16;
+  const iconPad = 10;
+
+  const iconInner = tile - iconPad * 2;
+  const hat = await sharp(USER_ICON)
+    .resize(iconInner, iconInner, {
+      fit: 'contain',
+      background: { ...RED_RGB, alpha: 1 },
+      kernel: sharp.kernel.lanczos3,
+    })
+    .png()
+    .toBuffer();
+
+  // Tile com cantos arredondados via SVG mask
+  const tileSvg = Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${tile}" height="${tile}">
+  <rect width="${tile}" height="${tile}" rx="24" fill="${RED}"/>
+</svg>`);
+
+  const tilePng = await sharp(tileSvg)
+    .composite([{ input: hat, left: iconPad, top: iconPad }])
+    .png()
+    .toBuffer();
+
+  // Texto via SVG
+  const textSvg = Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
+  <rect width="${W}" height="${H}" fill="${RED}"/>
+  <text x="160" y="108" fill="#FFFFFF" font-family="Inter, Arial Black, Arial, sans-serif" font-size="72" font-weight="800" letter-spacing="-1.5">OBRA 10</text>
+</svg>`);
+
+  return sharp(textSvg)
+    .composite([{ input: tilePng, left: tileX, top: tileY }])
+    .png()
+    .toBuffer();
 }
 
 const PNG_SIZES = [
@@ -47,52 +110,54 @@ const PNG_SIZES = [
   { name: 'icon-192.png', size: 192 },
   { name: 'icon-512.png', size: 512 },
   { name: 'logo-obra10.png', size: 512 },
+  { name: 'logo-obra10-source.png', size: 512 },
 ];
 
-async function writeAll(dir) {
+async function writeAll(dir, master512, wordmark) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  fs.writeFileSync(path.join(dir, 'favicon.svg'), markSvg(512, { round: true }), 'utf8');
-  fs.writeFileSync(path.join(dir, 'icon-192.svg'), markSvg(192, { round: true }), 'utf8');
-  fs.writeFileSync(path.join(dir, 'icon-512.svg'), markSvg(512, { round: true }), 'utf8');
-  fs.writeFileSync(path.join(dir, 'obra10-mark.svg'), markSvg(512, { round: true }), 'utf8');
-  fs.writeFileSync(path.join(dir, 'obra10-wordmark.svg'), markSvg(512, { round: true }), 'utf8');
-
-  // Master PNG 512 a partir do SVG (nítido)
-  const master = await sharp(Buffer.from(markSvg(512, { round: false })), { density: 384 })
-    .resize(512, 512, { fit: 'fill' })
-    .flatten({ background: RED })
-    .png({ compressionLevel: 9, palette: false })
-    .toBuffer();
-
-  await sharp(master).toFile(path.join(dir, 'logo-obra10-source.png'));
+  const b64 = master512.toString('base64');
+  fs.writeFileSync(path.join(dir, 'favicon.svg'), svgFromPng(b64, 512), 'utf8');
+  fs.writeFileSync(path.join(dir, 'icon-192.svg'), svgFromPng(b64, 512), 'utf8');
+  fs.writeFileSync(path.join(dir, 'icon-512.svg'), svgFromPng(b64, 512), 'utf8');
+  fs.writeFileSync(path.join(dir, 'obra10-mark.svg'), svgFromPng(b64, 512), 'utf8');
 
   for (const { name, size } of PNG_SIZES) {
-    await sharp(Buffer.from(markSvg(size, { round: false })), { density: 384 })
-      .resize(size, size, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
-      .flatten({ background: RED })
-      .png({ compressionLevel: 9, palette: false })
-      .toFile(path.join(dir, name));
+    const buf = size === 512 ? master512 : await buildMasterIcon(size);
+    await sharp(buf).toFile(path.join(dir, name));
     console.log(path.join(dir, name));
+  }
+
+  await sharp(wordmark).toFile(path.join(dir, 'obra10-wordmark.png'));
+  // SVG wordmark = PNG embutido (fiel ao lockup)
+  const wmB64 = wordmark.toString('base64');
+  fs.writeFileSync(
+    path.join(dir, 'obra10-wordmark.svg'),
+    `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 640 160" width="640" height="160">
+  <image width="640" height="160" href="data:image/png;base64,${wmB64}" xlink:href="data:image/png;base64,${wmB64}"/>
+</svg>
+`,
+    'utf8',
+  );
+
+  if (fs.existsSync(USER_ICON)) {
+    fs.copyFileSync(USER_ICON, path.join(dir, 'logo-obra10-user.png'));
   }
 }
 
 (async () => {
-  // Guarda o PNG original do usuário como referência
-  const userSrc = path.resolve(__dirname, '../public/logo-obra10-user.png');
-  const asset = path.resolve(
-    process.env.USERPROFILE || '',
-    '.cursor/projects/d-ANTYGRAVITY-OBRA-10/assets',
-    'c__Users_User_AppData_Roaming_Cursor_User_workspaceStorage_bd60fcbf49460ca3a642c7ba33191d7f_images_LOGO-99e23749-c61f-4338-8bcd-bcfe2d68a84c.png',
-  );
-  if (fs.existsSync(asset)) {
-    fs.copyFileSync(asset, userSrc);
-    fs.copyFileSync(asset, path.join(OUT_BACKEND, 'logo-obra10-user.png'));
+  if (fs.existsSync(USER_ASSET)) fs.copyFileSync(USER_ASSET, USER_ICON);
+  if (fs.existsSync(BANNER_ASSET)) {
+    fs.copyFileSync(BANNER_ASSET, path.resolve(__dirname, '../public/brand-lockup-ref.png'));
   }
+  if (!fs.existsSync(USER_ICON)) throw new Error('logo-obra10-user.png ausente');
 
-  await writeAll(OUT_PUBLIC);
-  await writeAll(OUT_BACKEND);
-  console.log('OK — logo do usuário (capacete outline) aplicada.');
+  const master512 = await buildMasterIcon(512);
+  const wordmark = await buildWordmarkPng();
+  await writeAll(OUT_PUBLIC, master512, wordmark);
+  await writeAll(OUT_BACKEND, master512, wordmark);
+  console.log('OK — logo EXATA do usuário aplicada (#CE1628).');
 })().catch((e) => {
   console.error(e);
   process.exit(1);

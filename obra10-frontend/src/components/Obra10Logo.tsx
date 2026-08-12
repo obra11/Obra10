@@ -5,15 +5,15 @@ type Obra10LogoProps = {
   size?: number;
   /** Se true, mostra "OBRA 10" ao lado do ícone. */
   withWordmark?: boolean;
-  /** Variante de cor do texto do wordmark. */
+  /** Cor do texto (ex.: text-white no painel vermelho). */
   wordmarkClassName?: string;
   className?: string;
   alt?: string;
 };
 
 /**
- * Marca Obra 10 — capacete outline (logo oficial enviada).
- * withWordmark: capacete + texto "OBRA 10".
+ * Logo Obra 10 — ícone da arte fornecida pelo usuário.
+ * withWordmark: ícone + "OBRA 10" (mesmo layout do banner).
  */
 export const Obra10Logo: React.FC<Obra10LogoProps> = ({
   size = 40,
@@ -24,11 +24,11 @@ export const Obra10Logo: React.FC<Obra10LogoProps> = ({
 }) => {
   const icon = (
     <img
-      src="/obra10-mark.svg?v=2.5.9"
+      src="/logo-obra10.png?v=2.6.1"
       width={size}
       height={size}
       alt={withWordmark ? '' : alt}
-      className={`shrink-0 object-contain ${withWordmark ? '' : className}`}
+      className={`shrink-0 object-contain rounded-[22%] ${withWordmark ? '' : className}`}
       draggable={false}
     />
   );
@@ -36,11 +36,11 @@ export const Obra10Logo: React.FC<Obra10LogoProps> = ({
   if (!withWordmark) return icon;
 
   return (
-    <div className={`flex items-center gap-3.5 ${className}`} aria-label={alt}>
+    <div className={`flex items-center gap-3 ${className}`} aria-label={alt}>
       {icon}
       <span
         className={`font-extrabold tracking-tight leading-none ${wordmarkClassName}`}
-        style={{ fontSize: Math.round(size * 0.7) }}
+        style={{ fontSize: Math.round(size * 0.68) }}
       >
         OBRA 10
       </span>
