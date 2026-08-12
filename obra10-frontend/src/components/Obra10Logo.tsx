@@ -24,7 +24,7 @@ export const Obra10Logo: React.FC<Obra10LogoProps> = ({
 }) => {
   const icon = (
     <img
-      src="/obra10-mark.svg?v=2.5.7"
+      src="/obra10-mark.svg?v=2.5.8"
       width={size}
       height={size}
       alt={withWordmark ? '' : alt}
