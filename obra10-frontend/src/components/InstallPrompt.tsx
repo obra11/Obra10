@@ -86,7 +86,7 @@ export const InstallPrompt: React.FC = () => {
         
         <div className="flex items-center gap-4 flex-1">
           <img
-            src="/obra10-mark.svg?v=2.5.5"
+            src="/obra10-mark.svg?v=2.5.6"
             alt="Obra 10"
             className="h-12 w-12 rounded-xl shrink-0 shadow-inner object-contain"
             draggable={false}
