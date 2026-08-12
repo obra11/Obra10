@@ -12,7 +12,7 @@ type Obra10LogoProps = {
 };
 
 /**
- * Marca interna Obra 10: capacete branco em vermelho (PNG oficial).
+ * Marca interna Obra 10: capacete branco em vermelho Lunardeli (#E5192C), SVG nítido.
  * Use withWordmark nas telas de login/headers.
  */
 export const Obra10Logo: React.FC<Obra10LogoProps> = ({
@@ -24,11 +24,11 @@ export const Obra10Logo: React.FC<Obra10LogoProps> = ({
 }) => {
   const icon = (
     <img
-      src="/logo-obra10.png?v=2.5.4"
+      src="/obra10-mark.svg?v=2.5.5"
       width={size}
       height={size}
       alt={withWordmark ? '' : alt}
-      className={`shrink-0 object-contain rounded-xl ${withWordmark ? '' : className}`}
+      className={`shrink-0 object-contain ${withWordmark ? '' : className}`}
       draggable={false}
     />
   );
