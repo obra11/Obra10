@@ -1,22 +1,18 @@
 import React from 'react';
 
 type Obra10LogoProps = {
-  /**
-   * Altura do capacete. Com wordmark, o texto "OBRA 10"
-   * usa a mesma altura (proporção da arte LOGO2).
-   */
+  /** Altura do lockup (ou do ícone sem wordmark). */
   size?: number;
-  /** Se true, mostra "OBRA 10" ao lado do ícone. */
+  /** Se true, usa a arte LOGO2 completa (capacete + OBRA 10). */
   withWordmark?: boolean;
-  /** Cor do texto (ex.: text-white no painel vermelho). */
+  /** No claro: texto escuro; no vermelho: usa a arte branca transparente. */
   wordmarkClassName?: string;
   className?: string;
   alt?: string;
 };
 
 /**
- * Logo Obra 10 — proporção da arte fornecida:
- * capacete branco (sem tile) + "OBRA 10" na mesma altura.
+ * Logo Obra 10 — arte exata fornecida (LOGO2), sem remontar por CSS.
  */
 export const Obra10Logo: React.FC<Obra10LogoProps> = ({
   size = 40,
@@ -28,42 +24,54 @@ export const Obra10Logo: React.FC<Obra10LogoProps> = ({
   const onRed =
     /\btext-white\b/.test(wordmarkClassName) || wordmarkClassName.includes('white');
 
-  // No vermelho: só o capacete branco. No claro: tile vermelho (legível).
-  const iconSrc = withWordmark
-    ? onRed
-      ? '/logo-obra10-hat.png?v=2.6.4'
-      : '/logo-obra10.png?v=2.6.4'
-    : '/logo-obra10.png?v=2.6.4';
+  if (withWordmark && onRed) {
+    // Arte LOGO2 completa — proporção idêntica à que o usuário enviou
+    // Lockup ~220×45 → aspect ≈ 4.9
+    const height = size;
+    const width = Math.round(size * 4.9);
+    return (
+      <img
+        src="/obra10-lockup-transparent.png?v=2.6.5"
+        width={width}
+        height={height}
+        alt={alt}
+        className={`shrink-0 object-contain object-left ${className}`}
+        draggable={false}
+      />
+    );
+  }
 
-  // Proporção LOGO2: altura do capacete ≈ altura das maiúsculas
-  const textPx = withWordmark && onRed ? size : Math.round(size * 0.82);
-  const iconH = size;
-  // Capacete da arte é um pouco mais largo que alto
-  const iconW = withWordmark && onRed ? Math.round(size * 1.25) : size;
-
-  const icon = (
-    <img
-      src={iconSrc}
-      width={iconW}
-      height={iconH}
-      alt={withWordmark ? '' : alt}
-      className={`shrink-0 object-contain ${withWordmark && onRed ? '' : 'rounded-[22%]'} ${withWordmark ? '' : className}`}
-      draggable={false}
-    />
-  );
-
-  if (!withWordmark) return icon;
+  if (withWordmark) {
+    // Fundo claro: ícone vermelho + texto escuro
+    return (
+      <div className={`flex items-center gap-2.5 ${className}`} aria-label={alt}>
+        <img
+          src="/logo-obra10.png?v=2.6.5"
+          width={size}
+          height={size}
+          alt=""
+          className="shrink-0 object-contain rounded-[22%]"
+          draggable={false}
+        />
+        <span
+          className={`font-extrabold tracking-tight leading-none ${wordmarkClassName}`}
+          style={{ fontSize: Math.round(size * 0.82) }}
+        >
+          OBRA 10
+        </span>
+      </div>
+    );
+  }
 
   return (
-    <div className={`flex items-center gap-2.5 ${className}`} aria-label={alt}>
-      {icon}
-      <span
-        className={`font-extrabold tracking-tight leading-none ${wordmarkClassName}`}
-        style={{ fontSize: textPx }}
-      >
-        OBRA 10
-      </span>
-    </div>
+    <img
+      src={`/logo-obra10.png?v=2.6.5`}
+      width={size}
+      height={size}
+      alt={alt}
+      className={`shrink-0 object-contain rounded-[22%] ${className}`}
+      draggable={false}
+    />
   );
 };
 

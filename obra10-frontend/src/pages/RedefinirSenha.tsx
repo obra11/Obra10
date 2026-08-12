@@ -54,7 +54,7 @@ export const RedefinirSenha: React.FC = () => {
         <div className="absolute inset-0 bg-black/10"></div>
         <div className="relative z-10 text-white max-w-lg">
           <div className="flex items-center mb-8">
-            <Obra10Logo size={40} withWordmark wordmarkClassName="text-white" />
+            <Obra10Logo size={44} withWordmark wordmarkClassName="text-white" />
           </div>
           <h1 className="text-5xl font-extrabold mb-6 leading-tight">
             Gestão inteligente no canteiro de obras.
