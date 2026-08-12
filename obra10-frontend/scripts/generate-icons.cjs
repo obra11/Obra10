@@ -26,31 +26,68 @@ const BANNER_ASSET = path.resolve(
   'c__Users_User_AppData_Roaming_Cursor_User_workspaceStorage_bd60fcbf49460ca3a642c7ba33191d7f_images_image-bab41724-432c-4b95-9309-b086cebba464.png',
 );
 
-async function buildMasterIcon(size) {
-  // Capacete do usuário em quadrado vermelho #CE1628 (mesmo vermelho da arte)
-  // Menos padding → capacete mais presente (proporcional ao wordmark)
-  const pad = Math.round(size * 0.06);
-  const inner = size - pad * 2;
-  const hat = await sharp(USER_ICON)
-    .resize(inner, inner, {
+/** Remove fundo vermelho e corta folga — capacete “cheio” no enquadramento. */
+async function buildHatOnly(size) {
+  const { data, info } = await sharp(USER_ICON)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    // Vermelho da arte → transparente
+    if (r > 160 && g < 80 && b < 100 && r > g + 60 && r > b + 60) {
+      data[i + 3] = 0;
+    }
+  }
+
+  const trimmed = await sharp(data, {
+    raw: { width: info.width, height: info.height, channels: 4 },
+  })
+    .trim()
+    .png()
+    .toBuffer();
+
+  return sharp(trimmed)
+    .resize(size, size, {
       fit: 'contain',
-      background: { ...RED_RGB, alpha: 1 },
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
       kernel: sharp.kernel.lanczos3,
     })
     .png()
     .toBuffer();
+}
 
-  return sharp({
+async function buildMasterIcon(size, { frame = false } = {}) {
+  // Padding interno pequeno: capacete ocupa quase o tile
+  const pad = Math.round(size * (frame ? 0.16 : 0.1));
+  const inner = size - pad * 2;
+  const hat = await buildHatOnly(inner);
+
+  let img = sharp({
     create: {
       width: size,
       height: size,
-      channels: 3,
-      background: RED_RGB,
+      channels: 4,
+      background: { ...RED_RGB, alpha: 1 },
     },
-  })
-    .composite([{ input: hat, left: pad, top: pad }])
-    .png({ compressionLevel: 9, palette: false })
-    .toBuffer();
+  }).composite([{ input: hat, left: pad, top: pad }]);
+
+  if (frame) {
+    // Moldura branca — tile legível no painel vermelho do login
+    const sw = Math.max(3, Math.round(size * 0.045));
+    const inset = Math.round(size * 0.08);
+    const rx = Math.round(size * 0.18);
+    const frameSvg = Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
+  <rect x="${inset}" y="${inset}" width="${size - inset * 2}" height="${size - inset * 2}" rx="${rx}" fill="none" stroke="#FFFFFF" stroke-width="${sw}"/>
+</svg>`);
+    img = sharp(await img.png().toBuffer()).composite([{ input: frameSvg, left: 0, top: 0 }]);
+  }
+
+  return img.png({ compressionLevel: 9, palette: false }).toBuffer();
 }
 
 function svgFromPng(b64, size) {
@@ -71,14 +108,7 @@ async function buildWordmarkPng() {
   const iconPad = 10;
 
   const iconInner = tile - iconPad * 2;
-  const hat = await sharp(USER_ICON)
-    .resize(iconInner, iconInner, {
-      fit: 'contain',
-      background: { ...RED_RGB, alpha: 1 },
-      kernel: sharp.kernel.lanczos3,
-    })
-    .png()
-    .toBuffer();
+  const hat = await buildHatOnly(iconInner);
 
   // Tile com cantos arredondados via SVG mask
   const tileSvg = Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
@@ -114,7 +144,7 @@ const PNG_SIZES = [
   { name: 'logo-obra10-source.png', size: 512 },
 ];
 
-async function writeAll(dir, master512, wordmark) {
+async function writeAll(dir, master512, framed512, hat512, wordmark) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
   const b64 = master512.toString('base64');
@@ -129,8 +159,10 @@ async function writeAll(dir, master512, wordmark) {
     console.log(path.join(dir, name));
   }
 
+  await sharp(framed512).toFile(path.join(dir, 'logo-obra10-framed.png'));
+  await sharp(hat512).toFile(path.join(dir, 'logo-obra10-hat.png'));
   await sharp(wordmark).toFile(path.join(dir, 'obra10-wordmark.png'));
-  // SVG wordmark = PNG embutido (fiel ao lockup)
+
   const wmB64 = wordmark.toString('base64');
   fs.writeFileSync(
     path.join(dir, 'obra10-wordmark.svg'),
@@ -155,10 +187,12 @@ async function writeAll(dir, master512, wordmark) {
   if (!fs.existsSync(USER_ICON)) throw new Error('logo-obra10-user.png ausente');
 
   const master512 = await buildMasterIcon(512);
+  const framed512 = await buildMasterIcon(512, { frame: true });
+  const hat512 = await buildHatOnly(512);
   const wordmark = await buildWordmarkPng();
-  await writeAll(OUT_PUBLIC, master512, wordmark);
-  await writeAll(OUT_BACKEND, master512, wordmark);
-  console.log('OK — logo EXATA do usuário aplicada (#CE1628).');
+  await writeAll(OUT_PUBLIC, master512, framed512, hat512, wordmark);
+  await writeAll(OUT_BACKEND, master512, framed512, hat512, wordmark);
+  console.log('OK — logo com proporção de lockup (hat / framed / tile).');
 })().catch((e) => {
   console.error(e);
   process.exit(1);

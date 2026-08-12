@@ -1,7 +1,10 @@
 import React from 'react';
 
 type Obra10LogoProps = {
-  /** Tamanho do ícone (quadrado). */
+  /**
+   * Altura do ícone (tile). No lockup, o texto "OBRA 10" fica
+   * na mesma altura visual do tile — proporção do brand.
+   */
   size?: number;
   /** Se true, mostra "OBRA 10" ao lado do ícone. */
   withWordmark?: boolean;
@@ -12,8 +15,9 @@ type Obra10LogoProps = {
 };
 
 /**
- * Logo Obra 10 — ícone da arte fornecida pelo usuário.
- * withWordmark: ícone + "OBRA 10" (capacete ~altura do texto).
+ * Logo Obra 10.
+ * - No vermelho: tile com moldura branca (visível) + OBRA 10 na mesma altura.
+ * - No claro: tile vermelho sólido + texto escuro.
  */
 export const Obra10Logo: React.FC<Obra10LogoProps> = ({
   size = 40,
@@ -22,9 +26,19 @@ export const Obra10Logo: React.FC<Obra10LogoProps> = ({
   className = '',
   alt = 'Obra 10',
 }) => {
+  const onRed =
+    /\btext-white\b/.test(wordmarkClassName) || wordmarkClassName.includes('white');
+
+  const iconSrc = onRed
+    ? '/logo-obra10-framed.png?v=2.6.3'
+    : '/logo-obra10.png?v=2.6.3';
+
+  // Texto ≈ altura do tile (como no banner de marca)
+  const textPx = Math.round(size * 0.82);
+
   const icon = (
     <img
-      src="/logo-obra10.png?v=2.6.2"
+      src={withWordmark ? iconSrc : `/logo-obra10.png?v=2.6.3`}
       width={size}
       height={size}
       alt={withWordmark ? '' : alt}
@@ -36,11 +50,11 @@ export const Obra10Logo: React.FC<Obra10LogoProps> = ({
   if (!withWordmark) return icon;
 
   return (
-    <div className={`flex items-center gap-3.5 ${className}`} aria-label={alt}>
+    <div className={`flex items-center gap-3 ${className}`} aria-label={alt}>
       {icon}
       <span
         className={`font-extrabold tracking-tight leading-none ${wordmarkClassName}`}
-        style={{ fontSize: Math.round(size * 0.58) }}
+        style={{ fontSize: textPx }}
       >
         OBRA 10
       </span>
