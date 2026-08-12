@@ -13,7 +13,7 @@ type Obra10LogoProps = {
 
 /**
  * Logo Obra 10 — ícone da arte fornecida pelo usuário.
- * withWordmark: ícone + "OBRA 10" (mesmo layout do banner).
+ * withWordmark: ícone + "OBRA 10" (capacete ~altura do texto).
  */
 export const Obra10Logo: React.FC<Obra10LogoProps> = ({
   size = 40,
@@ -24,7 +24,7 @@ export const Obra10Logo: React.FC<Obra10LogoProps> = ({
 }) => {
   const icon = (
     <img
-      src="/logo-obra10.png?v=2.6.1"
+      src="/logo-obra10.png?v=2.6.2"
       width={size}
       height={size}
       alt={withWordmark ? '' : alt}
@@ -36,11 +36,11 @@ export const Obra10Logo: React.FC<Obra10LogoProps> = ({
   if (!withWordmark) return icon;
 
   return (
-    <div className={`flex items-center gap-3 ${className}`} aria-label={alt}>
+    <div className={`flex items-center gap-3.5 ${className}`} aria-label={alt}>
       {icon}
       <span
         className={`font-extrabold tracking-tight leading-none ${wordmarkClassName}`}
-        style={{ fontSize: Math.round(size * 0.68) }}
+        style={{ fontSize: Math.round(size * 0.58) }}
       >
         OBRA 10
       </span>

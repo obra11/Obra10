@@ -28,7 +28,8 @@ const BANNER_ASSET = path.resolve(
 
 async function buildMasterIcon(size) {
   // Capacete do usuário em quadrado vermelho #CE1628 (mesmo vermelho da arte)
-  const pad = Math.round(size * 0.14);
+  // Menos padding → capacete mais presente (proporcional ao wordmark)
+  const pad = Math.round(size * 0.06);
   const inner = size - pad * 2;
   const hat = await sharp(USER_ICON)
     .resize(inner, inner, {

@@ -53,8 +53,8 @@ export const RedefinirSenha: React.FC = () => {
       <div className="hidden lg:flex lg:w-1/2 bg-lunardeli-red items-center justify-center p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-black/10"></div>
         <div className="relative z-10 text-white max-w-lg">
-          <div className="flex space-x-4 items-center mb-8">
-            <Obra10Logo size={56} withWordmark wordmarkClassName="text-white" />
+          <div className="flex items-center mb-8">
+            <Obra10Logo size={72} withWordmark wordmarkClassName="text-white" />
           </div>
           <h1 className="text-5xl font-extrabold mb-6 leading-tight">
             Gestão inteligente no canteiro de obras.
@@ -71,7 +71,7 @@ export const RedefinirSenha: React.FC = () => {
           {/* Mobile Logo */}
           <div className="flex lg:hidden justify-center items-center mb-8">
             <Obra10Logo
-              size={48}
+              size={60}
               withWordmark
               wordmarkClassName="text-lunardeli-dark"
             />
