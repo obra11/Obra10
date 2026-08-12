@@ -27,7 +27,7 @@ export const AdminLayout: React.FC = () => {
       {/* Sidebar */}
       <aside className="w-full md:w-64 bg-white border-b md:border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-100 flex items-center gap-3">
-          <Obra10Logo size={32} className="rounded-lg" />
+          <Obra10Logo size={32} />
           <div>
             <h1 className="font-extrabold text-gray-900 tracking-tight leading-none text-lg">OBRA 10</h1>
             <span className="text-[10px] font-bold tracking-widest text-red-600 uppercase">Super Admin</span>
