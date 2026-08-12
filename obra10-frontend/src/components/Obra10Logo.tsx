@@ -12,8 +12,8 @@ type Obra10LogoProps = {
 };
 
 /**
- * Marca interna Obra 10: capacete com moldura branca + vermelho #E5192C (SVG nítido).
- * Use withWordmark nas telas de login/headers (ícone + "OBRA 10").
+ * Marca Obra 10 — primeiro logo (capacete preenchido).
+ * withWordmark: capacete + texto "OBRA 10".
  */
 export const Obra10Logo: React.FC<Obra10LogoProps> = ({
   size = 40,
@@ -24,7 +24,7 @@ export const Obra10Logo: React.FC<Obra10LogoProps> = ({
 }) => {
   const icon = (
     <img
-      src="/obra10-mark.svg?v=2.5.6"
+      src="/obra10-mark.svg?v=2.5.7"
       width={size}
       height={size}
       alt={withWordmark ? '' : alt}

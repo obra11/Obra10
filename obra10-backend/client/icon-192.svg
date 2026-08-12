@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192" fill="none">
-  <rect width="192" height="192" rx="42" fill="#E5192C"/>
-  <rect x="17.28" y="17.28" width="157.44" height="157.44" rx="34.56" fill="none" stroke="#FFFFFF" stroke-width="8.64"/>
-  <g transform="translate(55.065599999999996, 53.145599999999995) scale(3.4112000000000005)" stroke="#FFFFFF" stroke-width="2.45" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <path d="M2 18h20"/>
-    <path d="M20 18v-8a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v8"/>
-    <path d="M9 6h6a1 1 0 0 1 1 1v2H8V7a1 1 0 0 1 1-1Z"/>
+  <rect width="192" height="192" rx="36" fill="#E5192C"/>
+  <g transform="translate(30, 37.5) scale(0.375)">
+    <path d="M176 0C96 0 32 64 32 144v16H0v48h32v16c0 16 8 24 24 24h240c16 0 24-8 24-24v-16h32v-48h-32v-16C320 64 256 0 176 0z" fill="#FFFFFF" fill-opacity="0.95"/>
+    <path d="M176 32c-60 0-112 52-112 112v16h224v-16c0-60-52-112-112-112z" fill="#E5192C"/>
+    <text x="176" y="290" text-anchor="middle" font-family="Inter, Arial Black, Arial, sans-serif" font-weight="900" font-size="72" fill="#FFFFFF" letter-spacing="-2">OBRA</text>
+    <text x="176" y="340" text-anchor="middle" font-family="Inter, Arial Black, Arial, sans-serif" font-weight="900" font-size="52" fill="#FFFFFF" fill-opacity="0.9" letter-spacing="8">10</text>
   </g>
 </svg>

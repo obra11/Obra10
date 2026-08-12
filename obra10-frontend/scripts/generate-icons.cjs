@@ -1,6 +1,6 @@
 /**
- * Marca Obra 10 — SVG vetorial nítido alinhado ao brand (moldura branca + capacete).
- * Vermelho oficial: #E5192C
+ * Restaura o primeiro logotipo Obra 10 (capacete preenchido + OBRA 10).
+ * Fonte: commit anterior a 6d1c7c9 (helmet outline).
  * Uso: node scripts/generate-icons.cjs
  */
 const path = require('path');
@@ -11,53 +11,38 @@ const OUT_PUBLIC = path.resolve(__dirname, '../public');
 const OUT_BACKEND = path.resolve(__dirname, '../../obra10-backend/client');
 const RED = '#E5192C';
 
-/**
- * Ícone: capacete branco dentro de quadrado arredondado com moldura branca.
- * @param {number} size
- * @param {{ outerRound?: boolean }} opts
- *   outerRound: arredonda o fundo do SVG (UI). PNG de atalho usa false (quadrado cheio).
- */
-function markSvg(size = 512, opts = { outerRound: true }) {
-  const outerRx = opts.outerRound ? Math.round(size * 0.22) : 0;
-  const pad = size * 0.09;
-  const frameRx = size * 0.18;
-  const frameStroke = Math.max(2, size * 0.045);
-
-  // Capacete (Lucide HardHat) centralizado na área interna
-  const inner = size - pad * 2;
-  const hatScale = (inner * 0.52) / 24;
-  const hatTx = pad + (inner - 24 * hatScale) / 2;
-  const hatTy = pad + (inner - 24 * hatScale) / 2 - size * 0.01;
-  const hatSw = 2.45;
-
+/** Ícone completo original: capacete + OBRA / 10 */
+function appIconSvg(size = 512) {
+  const s = size / 512;
+  const tx = 80 * s;
+  const ty = 100 * s;
+  const sx = s;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" fill="none">
-  <rect width="${size}" height="${size}" rx="${outerRx}" fill="${RED}"/>
-  <rect x="${pad}" y="${pad}" width="${size - pad * 2}" height="${size - pad * 2}" rx="${frameRx}" fill="none" stroke="#FFFFFF" stroke-width="${frameStroke}"/>
-  <g transform="translate(${hatTx}, ${hatTy}) scale(${hatScale})" stroke="#FFFFFF" stroke-width="${hatSw}" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <path d="M2 18h20"/>
-    <path d="M20 18v-8a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v8"/>
-    <path d="M9 6h6a1 1 0 0 1 1 1v2H8V7a1 1 0 0 1 1-1Z"/>
+  <rect width="${size}" height="${size}" rx="${96 * s}" fill="${RED}"/>
+  <g transform="translate(${tx}, ${ty}) scale(${sx})">
+    <path d="M176 0C96 0 32 64 32 144v16H0v48h32v16c0 16 8 24 24 24h240c16 0 24-8 24-24v-16h32v-48h-32v-16C320 64 256 0 176 0z" fill="#FFFFFF" fill-opacity="0.95"/>
+    <path d="M176 32c-60 0-112 52-112 112v16h224v-16c0-60-52-112-112-112z" fill="${RED}"/>
+    <text x="176" y="290" text-anchor="middle" font-family="Inter, Arial Black, Arial, sans-serif" font-weight="900" font-size="72" fill="#FFFFFF" letter-spacing="-2">OBRA</text>
+    <text x="176" y="340" text-anchor="middle" font-family="Inter, Arial Black, Arial, sans-serif" font-weight="900" font-size="52" fill="#FFFFFF" fill-opacity="0.9" letter-spacing="8">10</text>
   </g>
 </svg>
 `;
 }
 
-/** Wordmark completo: ícone + OBRA 10 (como no brand). */
-function wordmarkSvg() {
+/**
+ * Só o capacete (para UI ao lado do wordmark "OBRA 10").
+ * Mesmo traço preenchido do primeiro logo.
+ */
+function markOnlySvg(size = 512) {
+  const s = size / 512;
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 160" width="560" height="160" fill="none">
-  <rect width="560" height="160" fill="${RED}"/>
-  <!-- mark -->
-  <rect x="16" y="16" width="128" height="128" rx="28" fill="${RED}"/>
-  <rect x="28" y="28" width="104" height="104" rx="22" fill="none" stroke="#FFFFFF" stroke-width="6"/>
-  <g transform="translate(48, 50) scale(3.7)" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <path d="M2 18h20"/>
-    <path d="M20 18v-8a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v8"/>
-    <path d="M9 6h6a1 1 0 0 1 1 1v2H8V7a1 1 0 0 1 1-1Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" fill="none">
+  <rect width="${size}" height="${size}" rx="${96 * s}" fill="${RED}"/>
+  <g transform="translate(${96 * s}, ${136 * s}) scale(${s})">
+    <path d="M176 0C96 0 32 64 32 144v16H0v48h32v16c0 16 8 24 24 24h240c16 0 24-8 24-24v-16h32v-48h-32v-16C320 64 256 0 176 0z" fill="#FFFFFF" fill-opacity="0.95"/>
+    <path d="M176 32c-60 0-112 52-112 112v16h224v-16c0-60-52-112-112-112z" fill="${RED}"/>
   </g>
-  <!-- wordmark -->
-  <text x="168" y="108" fill="#FFFFFF" font-family="Inter, Arial Black, Arial, sans-serif" font-size="72" font-weight="800" letter-spacing="-1.5">OBRA 10</text>
 </svg>
 `;
 }
@@ -75,16 +60,16 @@ const PNG_SIZES = [
 async function writeAll(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  fs.writeFileSync(path.join(dir, 'favicon.svg'), markSvg(512, { outerRound: true }), 'utf8');
-  fs.writeFileSync(path.join(dir, 'icon-192.svg'), markSvg(192, { outerRound: true }), 'utf8');
-  fs.writeFileSync(path.join(dir, 'icon-512.svg'), markSvg(512, { outerRound: true }), 'utf8');
-  fs.writeFileSync(path.join(dir, 'obra10-mark.svg'), markSvg(512, { outerRound: true }), 'utf8');
-  fs.writeFileSync(path.join(dir, 'obra10-wordmark.svg'), wordmarkSvg(), 'utf8');
+  const fav = appIconSvg(512);
+  fs.writeFileSync(path.join(dir, 'favicon.svg'), fav, 'utf8');
+  fs.writeFileSync(path.join(dir, 'icon-192.svg'), appIconSvg(192), 'utf8');
+  fs.writeFileSync(path.join(dir, 'icon-512.svg'), appIconSvg(512), 'utf8');
+  fs.writeFileSync(path.join(dir, 'obra10-mark.svg'), markOnlySvg(512), 'utf8');
+  fs.writeFileSync(path.join(dir, 'obra10-wordmark.svg'), fav, 'utf8');
 
   for (const { name, size } of PNG_SIZES) {
-    // Atalho/PWA: moldura branca + fundo vermelho cheio (sem canto externo)
-    const svg = Buffer.from(markSvg(size, { outerRound: false }));
-    await sharp(svg, { density: 384 })
+    const svg = Buffer.from(appIconSvg(size));
+    await sharp(svg, { density: 300 })
       .resize(size, size, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
       .flatten({ background: RED })
       .png({ compressionLevel: 9, palette: false })
@@ -92,15 +77,17 @@ async function writeAll(dir) {
     console.log(path.join(dir, name));
   }
 
-  await sharp(Buffer.from(wordmarkSvg()), { density: 300 })
-    .png({ compressionLevel: 9 })
+  await sharp(Buffer.from(markOnlySvg(512)), { density: 300 })
+    .resize(512, 512, { fit: 'contain', background: RED })
+    .flatten({ background: RED })
+    .png()
     .toFile(path.join(dir, 'obra10-wordmark.png'));
 }
 
 (async () => {
   await writeAll(OUT_PUBLIC);
   await writeAll(OUT_BACKEND);
-  console.log('OK — marca com moldura branca (#E5192C).');
+  console.log('OK — primeiro logo Obra 10 (capacete preenchido) restaurado.');
 })().catch((e) => {
   console.error(e);
   process.exit(1);
