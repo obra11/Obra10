@@ -1,6 +1,6 @@
 /**
- * Gera favicons e ícones PWA a partir do logo oficial Obra 10.
- * Uso: node scripts/generate-icons.js
+ * Gera favicons e ícones PWA a partir do logo oficial Obra 10 (PNG).
+ * Uso: node scripts/generate-icons.cjs
  */
 const path = require('path');
 const fs = require('fs');
@@ -19,29 +19,35 @@ const OUT_BACKEND = path.resolve(__dirname, '../../obra10-backend/client');
 const SIZES = [
   { name: 'favicon-16.png', size: 16 },
   { name: 'favicon-32.png', size: 32 },
+  { name: 'apple-touch-icon.png', size: 180 },
   { name: 'icon-192.png', size: 192 },
   { name: 'icon-512.png', size: 512 },
 ];
 
-/** SVG fiel ao logo (capacete branco em fundo vermelho #E5192C). */
-const SVG_TEMPLATE = (size, rx) => `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" fill="none">
-  <rect width="${size}" height="${size}" rx="${rx}" fill="#E5192C"/>
-  <g transform="translate(${size * 0.17}, ${size * 0.18}) scale(${size / 512 * 14})" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <path d="M2 18h20"/>
-    <path d="M20 18v-8a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v8"/>
-    <path d="M9 6h6a1 1 0 0 1 1 1v2H8V7a1 1 0 0 1 1-1Z"/>
-  </g>
+function svgFromPngBase64(b64, size) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+  <image width="${size}" height="${size}" href="data:image/png;base64,${b64}" xlink:href="data:image/png;base64,${b64}"/>
 </svg>
 `;
+}
 
 async function main() {
   const source = fs.existsSync(SRC) ? SRC : FALLBACK_SRC;
   if (!fs.existsSync(source)) {
     throw new Error(`Logo fonte não encontrado: ${source}`);
   }
+
+  // PNG master 512 para embutir no SVG (mesma arte do atalho)
+  const master512 = await sharp(source)
+    .resize(512, 512, { fit: 'cover', position: 'centre' })
+    .png()
+    .toBuffer();
+  const b64 = master512.toString('base64');
+
   for (const dir of [OUT_PUBLIC, OUT_BACKEND]) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
     for (const { name, size } of SIZES) {
       const dest = path.join(dir, name);
       await sharp(source)
@@ -50,24 +56,37 @@ async function main() {
         .toFile(dest);
       console.log('PNG', dest);
     }
-    await sharp(source).png().toFile(path.join(dir, 'logo-obra10.png'));
-  }
 
-  // SVGs alinhados ao branding
-  const svgs = [
-    ['favicon.svg', 512, 96],
-    ['icon-192.svg', 192, 36],
-    ['icon-512.svg', 512, 96],
-  ];
-  for (const dir of [OUT_PUBLIC, OUT_BACKEND]) {
-    for (const [name, size, rx] of svgs) {
+    await sharp(source).png().toFile(path.join(dir, 'logo-obra10.png'));
+
+    // SVGs = PNG embutido (idêntico ao logo oficial — sem traço Lucide)
+    const svgs = [
+      ['favicon.svg', 512],
+      ['icon-192.svg', 192],
+      ['icon-512.svg', 512],
+    ];
+    for (const [name, size] of svgs) {
+      const buf =
+        size === 512
+          ? master512
+          : await sharp(source)
+              .resize(size, size, { fit: 'cover', position: 'centre' })
+              .png()
+              .toBuffer();
       const p = path.join(dir, name);
-      fs.writeFileSync(p, SVG_TEMPLATE(size, rx), 'utf8');
+      fs.writeFileSync(p, svgFromPngBase64(buf.toString('base64'), size), 'utf8');
       console.log('SVG', p);
     }
   }
 
-  console.log('Ícones Obra 10 atualizados.');
+  // Também grava um SVG “marca” no public (para <img>)
+  fs.writeFileSync(
+    path.join(OUT_PUBLIC, 'obra10-mark.svg'),
+    svgFromPngBase64(b64, 512),
+    'utf8',
+  );
+
+  console.log('Ícones Obra 10 atualizados a partir do logo oficial.');
 }
 
 main().catch((e) => {

@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/auth.service';
-import { HardHat, Lock, Mail, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Lock, Mail, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Obra10Logo } from '../components/Obra10Logo';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -44,7 +45,7 @@ export const Login: React.FC = () => {
         <div className="absolute inset-0 bg-black/10"></div>
         <div className="relative z-10 text-white max-w-lg">
           <div className="flex space-x-4 items-center mb-8">
-            <HardHat size={48} />
+            <Obra10Logo size={56} className="rounded-2xl shadow-lg" />
             <span className="text-4xl font-bold tracking-tight">OBRA 10</span>
           </div>
           <h1 className="text-5xl font-extrabold mb-6 leading-tight">
@@ -60,8 +61,8 @@ export const Login: React.FC = () => {
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 sm:p-12">
         <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl shadow-black/5">
           {/* Mobile Logo */}
-          <div className="flex lg:hidden justify-center items-center space-x-3 mb-8 text-lunardeli-red">
-            <HardHat size={40} />
+          <div className="flex lg:hidden justify-center items-center space-x-3 mb-8">
+            <Obra10Logo size={48} className="rounded-xl" />
             <span className="text-3xl font-bold text-lunardeli-dark">OBRA 10</span>
           </div>
 

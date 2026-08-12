@@ -2,9 +2,10 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=2.5.2">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png?v=2.5.2">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2.5.2">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2.5.2">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>OBRA 10 — Gestão de Obras</title>
     <meta name="description" content="Sistema de gestão de obras com RDO, FVS, concretagem e análise com IA." />
@@ -15,7 +16,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Obra 10" />
-    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png?v=2.5.2">
     
     <!-- Preconnect fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -57,7 +58,7 @@
       // Register Service Worker for PWA
       if ('serviceWorker' in navigator && window.location.hostname !== 'localhost') {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js?v=2.5.1').then(reg => {
+          navigator.serviceWorker.register('/sw.js?v=2.5.2').then(reg => {
             reg.update();
           }).catch(() => {});
         });

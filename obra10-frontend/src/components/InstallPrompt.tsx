@@ -85,12 +85,12 @@ export const InstallPrompt: React.FC = () => {
       <div className="bg-white shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.2)] sm:shadow-md border-t-4 border-t-red-600 sm:border-t-0 sm:border-b-4 sm:border-b-red-600 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         
         <div className="flex items-center gap-4 flex-1">
-          <div className="bg-red-600 p-2 rounded-xl shrink-0 h-12 w-12 flex items-center justify-center shadow-inner">
-            {/* Simple representation of the Obra 10 helmet or just Logo */}
-            <svg viewBox="0 0 512 512" className="w-8 h-8 text-white fill-current" preserveAspectRatio="xMidYMid meet">
-              <path d="M256 80c-80 0-144 64-144 144v16h-32v48h32v16c0 16 8 24 24 24h240c16 0 24-8 24-24v-16h32v-48h-32v-16c0-80-64-144-144-144z" opacity="0.95" />
-            </svg>
-          </div>
+          <img
+            src="/logo-obra10.png"
+            alt="Obra 10"
+            className="h-12 w-12 rounded-xl shrink-0 shadow-inner object-contain"
+            draggable={false}
+          />
           <div>
             <h4 className="font-bold text-gray-900 leading-tight">Instale o Obra 10</h4>
             <p className="text-xs text-gray-500 mt-0.5">App nativo na sua área de trabalho para acesso rápido</p>
