@@ -2,8 +2,8 @@ import React from 'react';
 
 type Obra10LogoProps = {
   /**
-   * Altura do ícone (tile). No lockup, o texto "OBRA 10" fica
-   * na mesma altura visual do tile — proporção do brand.
+   * Altura do capacete. Com wordmark, o texto "OBRA 10"
+   * usa a mesma altura (proporção da arte LOGO2).
    */
   size?: number;
   /** Se true, mostra "OBRA 10" ao lado do ícone. */
@@ -15,9 +15,8 @@ type Obra10LogoProps = {
 };
 
 /**
- * Logo Obra 10.
- * - No vermelho: tile com moldura branca (visível) + OBRA 10 na mesma altura.
- * - No claro: tile vermelho sólido + texto escuro.
+ * Logo Obra 10 — proporção da arte fornecida:
+ * capacete branco (sem tile) + "OBRA 10" na mesma altura.
  */
 export const Obra10Logo: React.FC<Obra10LogoProps> = ({
   size = 40,
@@ -29,20 +28,26 @@ export const Obra10Logo: React.FC<Obra10LogoProps> = ({
   const onRed =
     /\btext-white\b/.test(wordmarkClassName) || wordmarkClassName.includes('white');
 
-  const iconSrc = onRed
-    ? '/logo-obra10-framed.png?v=2.6.3'
-    : '/logo-obra10.png?v=2.6.3';
+  // No vermelho: só o capacete branco. No claro: tile vermelho (legível).
+  const iconSrc = withWordmark
+    ? onRed
+      ? '/logo-obra10-hat.png?v=2.6.4'
+      : '/logo-obra10.png?v=2.6.4'
+    : '/logo-obra10.png?v=2.6.4';
 
-  // Texto ≈ altura do tile (como no banner de marca)
-  const textPx = Math.round(size * 0.82);
+  // Proporção LOGO2: altura do capacete ≈ altura das maiúsculas
+  const textPx = withWordmark && onRed ? size : Math.round(size * 0.82);
+  const iconH = size;
+  // Capacete da arte é um pouco mais largo que alto
+  const iconW = withWordmark && onRed ? Math.round(size * 1.25) : size;
 
   const icon = (
     <img
-      src={withWordmark ? iconSrc : `/logo-obra10.png?v=2.6.3`}
-      width={size}
-      height={size}
+      src={iconSrc}
+      width={iconW}
+      height={iconH}
       alt={withWordmark ? '' : alt}
-      className={`shrink-0 object-contain rounded-[22%] ${withWordmark ? '' : className}`}
+      className={`shrink-0 object-contain ${withWordmark && onRed ? '' : 'rounded-[22%]'} ${withWordmark ? '' : className}`}
       draggable={false}
     />
   );
@@ -50,7 +55,7 @@ export const Obra10Logo: React.FC<Obra10LogoProps> = ({
   if (!withWordmark) return icon;
 
   return (
-    <div className={`flex items-center gap-3 ${className}`} aria-label={alt}>
+    <div className={`flex items-center gap-2.5 ${className}`} aria-label={alt}>
       {icon}
       <span
         className={`font-extrabold tracking-tight leading-none ${wordmarkClassName}`}
