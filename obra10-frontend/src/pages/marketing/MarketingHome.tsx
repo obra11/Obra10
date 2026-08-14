@@ -26,15 +26,7 @@ export const MarketingHome: React.FC = () => {
     <div>
       {/* Hero */}
       <section className="relative min-h-[calc(100vh-4rem)] flex items-center overflow-hidden bg-lunardeli-dark text-white">
-        <div
-          className="absolute inset-0 opacity-40"
-          style={{
-            backgroundImage:
-              'linear-gradient(120deg, rgba(176,16,32,0.85) 0%, rgba(27,27,27,0.92) 55%), url(/brand/lunardeli-logo.jpg)',
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
+        <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(176,16,32,0.9)_0%,rgba(27,27,27,0.98)_58%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(229,25,44,0.35),_transparent_55%)]" />
 
         <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 py-20 w-full">
@@ -125,11 +117,8 @@ export const MarketingHome: React.FC = () => {
       </section>
 
       {/* CTA final */}
-      <section className="relative overflow-hidden bg-lunardeli-red text-white py-20">
-        <div className="absolute right-0 top-0 opacity-20 pointer-events-none">
-          <img src="/brand/lunardeli-simbolo.jpg" alt="" className="w-64 h-64 object-contain invert" />
-        </div>
-        <div className="relative max-w-6xl mx-auto px-4 sm:px-6">
+      <section className="bg-lunardeli-red text-white py-20">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <h2 className="font-display text-3xl sm:text-4xl font-extrabold max-w-xl">
             Comece hoje. Seu canteiro no controle.
           </h2>

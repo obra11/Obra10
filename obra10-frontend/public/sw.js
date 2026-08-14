@@ -1,4 +1,4 @@
-const CACHE_NAME = 'obra10-v2.6.8';
+const CACHE_NAME = 'obra10-v2.6.9';
 // Não pré-cachear '/' — HTML antigo no SW redirecionava logados para o app.
 const STATIC_ASSETS = [
   '/favicon-16.png',
