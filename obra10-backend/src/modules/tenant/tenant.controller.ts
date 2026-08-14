@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Patch,
+  Delete,
   Body,
   Param,
   Req,
@@ -93,6 +94,15 @@ export class TenantController {
     if (!empresaId) throw new ForbiddenException('Sessão inválida.');
     await this.assertGerenciarFinanceiro(req);
     return this.tenantService.upgradeMeuPlano(empresaId, dto.plano);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('tenants/meu-plano/modulos/:slug')
+  async desativarMeuModulo(@Req() req: any, @Param('slug') slug: string) {
+    const empresaId = req.user?.empresaId;
+    if (!empresaId) throw new ForbiddenException('Sessão inválida.');
+    await this.assertGerenciarFinanceiro(req);
+    return this.tenantService.desativarMeuModulo(empresaId, slug);
   }
 
   @UseGuards(JwtAuthGuard)

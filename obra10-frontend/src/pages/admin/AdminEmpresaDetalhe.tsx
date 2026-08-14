@@ -8,6 +8,8 @@ import {
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getImageUrl } from '../../utils/image';
+import { labelPlano, PACOTES_OBRAS, PLANOS, PLANO_KEYS } from '../../utils/pacotesObras';
+import type { PlanoNome } from '../../utils/pacotesObras';
 
 export const AdminEmpresaDetalhe: React.FC = () => {
   const { id } = useParams();
@@ -20,6 +22,7 @@ export const AdminEmpresaDetalhe: React.FC = () => {
   
   const [loading, setLoading] = useState(true);
   const [loadingForm, setLoadingForm] = useState(false);
+  const [salvandoPlano, setSalvandoPlano] = useState(false);
   
   // States for manual payment override
   const [cobrancaSelecionada, setCobrancaSelecionada] = useState<any>(null);
@@ -121,6 +124,30 @@ export const AdminEmpresaDetalhe: React.FC = () => {
     if (activeTab === 'auditoria') fetchAuditLogs();
     if (activeTab === 'visao_geral') fetchCupons();
   }, [activeTab]);
+
+  const handleAlterarPlanoAdmin = async (novoPlano: PlanoNome) => {
+    if (novoPlano === empresa?.plano) return;
+    const info = PLANOS[novoPlano];
+    const pacote = PACOTES_OBRAS[info.pacote];
+    if (
+      !window.confirm(
+        `Alterar plano para ${info.label}?\n\n${pacote.label}\nAté ${info.limiteUsuarios} usuários`,
+      )
+    ) {
+      return;
+    }
+    setSalvandoPlano(true);
+    try {
+      await api.patch(`/admin/empresas/${id}`, { plano: novoPlano });
+      await fetchEmpresa();
+      setFormData((prev) => ({ ...prev, plano: novoPlano, limiteUsuarios: info.limiteUsuarios }));
+      alert(`Plano atualizado para ${info.label}.`);
+    } catch (e: any) {
+      alert(e?.response?.data?.message || 'Erro ao alterar plano.');
+    } finally {
+      setSalvandoPlano(false);
+    }
+  };
 
   const handleToggleBloqueio = async () => {
     if (!window.confirm(`Deseja ${empresa.ativo ? 'bloquear' : 'desbloquear'} a empresa?`)) return;
@@ -253,11 +280,16 @@ export const AdminEmpresaDetalhe: React.FC = () => {
               Documento Principal: {empresa.cpfCnpj || empresa.cnpj || 'Não informado'} • Cadastro: {format(new Date(empresa.createdAt), 'dd/MM/yyyy')}
             </p>
             <div className="flex gap-2 items-center mt-2 flex-wrap">
-              <div className="text-sm font-semibold uppercase tracking-wider text-red-600 border border-red-200 bg-red-50 rounded px-2 w-max">Plano {empresa.plano}</div>
+              <div className="text-sm font-semibold uppercase tracking-wider text-red-600 border border-red-200 bg-red-50 rounded px-2 w-max">
+                Plano {labelPlano(empresa.plano)}
+              </div>
               {empresa.pacoteObras && (
                 <div className="text-sm font-semibold uppercase tracking-wider text-gray-700 border border-gray-200 bg-gray-50 rounded px-2 w-max">
-                  {empresa.pacoteObras === 'ATE_3' ? 'Até 3 obras' : empresa.pacoteObras === 'ILIMITADO' ? 'Obras ilimitadas' : 'Até 5 obras'}
-                  {empresa.limiteObras != null ? ` · limite ${empresa.limiteObras}` : ''}
+                  {empresa.pacoteObras === 'ATE_3'
+                    ? 'Até 3 obras'
+                    : empresa.pacoteObras === 'ILIMITADO'
+                      ? 'Obras ilimitadas'
+                      : 'Até 5 obras'}
                 </div>
               )}
                {empresa.cupons?.find((c: any) => c.ativo)?.cupom && (
@@ -302,33 +334,90 @@ export const AdminEmpresaDetalhe: React.FC = () => {
       {/* TAB 1: VISÃO GERAL */}
       {activeTab === 'visao_geral' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="md:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <h3 className="font-bold text-gray-900 mb-1">Tipo de plano</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Altere o plano do cliente (Básico / Pro / Enterprise). Isso atualiza limite de obras e usuários.
+            </p>
+            <div className="grid sm:grid-cols-3 gap-3">
+              {PLANO_KEYS.map((opt) => {
+                const info = PLANOS[opt];
+                const pacote = PACOTES_OBRAS[info.pacote];
+                const selected = empresa.plano === opt;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    disabled={salvandoPlano}
+                    onClick={() => handleAlterarPlanoAdmin(opt)}
+                    className={`text-left p-4 rounded-xl border-2 transition-all disabled:opacity-50 ${
+                      selected
+                        ? 'border-red-500 bg-red-50'
+                        : 'border-gray-200 hover:border-red-300'
+                    }`}
+                  >
+                    <p className="font-bold text-gray-900">{info.label}</p>
+                    <p className="text-sm text-gray-500 mt-1">{pacote.label}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Até {info.limiteUsuarios} usuários ·{' '}
+                      {opt === 'PRO'
+                        ? 'preço de tabela'
+                        : opt === 'BASICO'
+                          ? '−20% sobre a tabela'
+                          : '+50% sobre a tabela'}
+                    </p>
+                    {selected && (
+                      <p className="text-[10px] font-bold uppercase text-red-600 mt-2">Atual</p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {salvandoPlano && (
+              <p className="text-xs text-gray-400 mt-3 flex items-center gap-2">
+                <Loader2 size={12} className="animate-spin" /> Salvando plano...
+              </p>
+            )}
+          </div>
+
           <div className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="bg-gray-50 px-5 py-4 border-b border-gray-200">
-                <h3 className="font-bold text-gray-900 flex items-center gap-2"><Key strokeWidth={2.5} size={18} className="text-gray-400"/> Módulos Contratados</h3>
+                <h3 className="font-bold text-gray-900 flex items-center gap-2"><Key strokeWidth={2.5} size={18} className="text-gray-400"/> Módulos da Empresa</h3>
+                <p className="text-xs text-gray-500 mt-1">Ative só o que está disponível. Módulos desativados não entram na cobrança.</p>
               </div>
               <div className="p-5 space-y-3">
-                {empresa.tenantModulos.length === 0 ? <p className="text-gray-500 text-sm">Nenhum módulo ativo.</p> : null}
-                {empresa.tenantModulos.map((tm: any) => (
-                  <div key={tm.id} className="flex justify-between items-center p-3 border rounded-lg">
+                {(empresa.modulosCatalogo || []).length === 0 && empresa.tenantModulos.length === 0 ? (
+                  <p className="text-gray-500 text-sm">Nenhum módulo cadastrado no catálogo.</p>
+                ) : null}
+                {(empresa.modulosCatalogo || empresa.tenantModulos.map((tm: any) => tm.modulo)).map((mod: any) => {
+                  const tm = empresa.tenantModulos.find((t: any) => t.moduloId === mod.id || t.modulo?.slug === mod.slug);
+                  const ativoEmpresa = !!tm?.ativo;
+                  const disponivelCatalogo = mod.ativo !== false;
+                  return (
+                  <div key={mod.id || mod.slug} className={`flex justify-between items-center p-3 border rounded-lg ${!disponivelCatalogo ? 'bg-amber-50/50 border-amber-100' : ''}`}>
                     <div>
-                      <h4 className="font-semibold text-gray-900">{tm.modulo.nome}</h4>
-                      <p className="text-xs text-gray-400">Ativado em {format(new Date(tm.dataContratacao), 'dd/MM/yyyy')}</p>
+                      <h4 className="font-semibold text-gray-900">{mod.nome}</h4>
+                      <p className="text-xs text-gray-400">
+                        {tm ? `Vinculado em ${format(new Date(tm.dataContratacao), 'dd/MM/yyyy')}` : 'Ainda não vinculado'}
+                        {!disponivelCatalogo ? ' · Indisponível no produto (não cobrar)' : ''}
+                      </p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className={`text-xs px-2 py-1 rounded-full font-bold ${tm.ativo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                        {tm.ativo ? 'ATIVO' : 'DESATIVADO'}
+                      <span className={`text-xs px-2 py-1 rounded-full font-bold ${ativoEmpresa ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {ativoEmpresa ? 'ATIVO' : 'DESATIVADO'}
                       </span>
                       <button 
-                        onClick={() => handleToggleModulo(tm.modulo.slug, tm.ativo)}
-                        disabled={loadingModulo === tm.modulo.slug}
-                        className={`text-xs font-semibold px-2 py-1 rounded border transition-colors ${tm.ativo ? 'text-red-600 border-red-200 hover:bg-red-50' : 'text-green-600 border-green-200 hover:bg-green-50'}`}
+                        onClick={() => handleToggleModulo(mod.slug, ativoEmpresa)}
+                        disabled={loadingModulo === mod.slug || (!disponivelCatalogo && !ativoEmpresa)}
+                        className={`text-xs font-semibold px-2 py-1 rounded border transition-colors disabled:opacity-40 ${ativoEmpresa ? 'text-red-600 border-red-200 hover:bg-red-50' : 'text-green-600 border-green-200 hover:bg-green-50'}`}
                       >
-                        {loadingModulo === tm.modulo.slug ? <Loader2 size={12} className="animate-spin inline" /> : (tm.ativo ? 'Desativar' : 'Ativar')}
+                        {loadingModulo === mod.slug ? <Loader2 size={12} className="animate-spin inline" /> : (ativoEmpresa ? 'Desativar' : 'Ativar')}
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -459,11 +548,26 @@ export const AdminEmpresaDetalhe: React.FC = () => {
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Plano Atual</label>
-              <select value={formData.plano} onChange={(e) => setFormData({...formData, plano: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-red-600 outline-none font-bold text-red-700">
-                <option value="BASICO">BASICO</option>
-                <option value="PRO">PRO</option>
-                <option value="ENTERPRISE">ENTERPRISE</option>
+              <select
+                value={formData.plano}
+                onChange={(e) => {
+                  const plano = e.target.value as PlanoNome;
+                  const info = PLANOS[plano];
+                  setFormData({
+                    ...formData,
+                    plano,
+                    limiteUsuarios: info?.limiteUsuarios || formData.limiteUsuarios,
+                  });
+                }}
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-red-600 outline-none font-bold text-red-700 bg-white"
+              >
+                <option value="BASICO">Básico — até 3 obras</option>
+                <option value="PRO">Pro — até 5 obras</option>
+                <option value="ENTERPRISE">Enterprise — obras ilimitadas</option>
               </select>
+              <p className="text-xs text-gray-400 mt-1">
+                Ao salvar, sincroniza pacote de obras e limite de usuários.
+              </p>
             </div>
 
             <div className="md:col-span-2 mt-4">

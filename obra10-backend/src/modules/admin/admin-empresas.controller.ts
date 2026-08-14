@@ -12,6 +12,12 @@ import {
   PAPEL_NOME_PADRAO,
   PAPEIS_COM_DEFAULT_EDITAVEL,
 } from '../../core/capabilities/role-capabilities';
+import {
+  limiteObrasDoPacote,
+  pacoteDoPlano,
+  PLAN_LIMITS,
+  resolvePlano,
+} from '../cobranca/pacotes-obras';
 
 @Controller('admin/empresas')
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
@@ -151,29 +157,35 @@ export class AdminEmpresasController {
 
   @Get(':id')
   async getEmpresa(@Param('id') id: string) {
-    const empresa = await this.prisma.empresa.findUnique({
-      where: { id },
-      include: {
-        usuarios: true,
-        obras: true,
-        tenantModulos: {
-          include: { modulo: true }
+    const [empresa, modulosCatalogo] = await Promise.all([
+      this.prisma.empresa.findUnique({
+        where: { id },
+        include: {
+          usuarios: true,
+          obras: true,
+          tenantModulos: {
+            include: { modulo: true },
+          },
+          cupons: {
+            include: { cupom: true },
+          },
+          cobrancas: {
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+          },
         },
-        cupons: {
-          include: { cupom: true }
-        },
-        cobrancas: {
-          orderBy: { createdAt: 'desc' },
-          take: 10
-        }
-      }
-    });
+      }),
+      this.prisma.modulo.findMany({
+        orderBy: { ordemExibicao: 'asc' },
+      }),
+    ]);
 
     if (!empresa) throw new NotFoundException('Empresa não encontrada');
     return {
       ...empresa,
       cnpj: empresa.cnpj ? this.cryptoService.decrypt(empresa.cnpj) : null,
       cpfCnpj: empresa.cpfCnpj ? this.cryptoService.decrypt(empresa.cpfCnpj) : null,
+      modulosCatalogo,
     };
   }
 
@@ -199,9 +211,22 @@ export class AdminEmpresasController {
 
   @Patch(':id')
   async updateEmpresa(@Param('id') id: string, @Body() dto: AtualizarEmpresaAdminDto) {
+    const empresa = await this.prisma.empresa.findUnique({ where: { id } });
+    if (!empresa) throw new NotFoundException('Empresa não encontrada');
+
+    const data: Record<string, any> = { ...dto };
+    if (dto.plano) {
+      const plano = resolvePlano(dto.plano);
+      const pacote = pacoteDoPlano(plano);
+      data.plano = plano;
+      data.limiteUsuarios = PLAN_LIMITS[plano];
+      data.pacoteObras = pacote;
+      data.limiteObras = limiteObrasDoPacote(pacote);
+    }
+
     return this.prisma.empresa.update({
       where: { id },
-      data: dto
+      data,
     });
   }
 

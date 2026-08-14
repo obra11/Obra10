@@ -35,7 +35,10 @@ export class CobrancaCron {
     const tenants = await this.prisma.empresa.findMany({
       where: { ativo: true, suspensa: false, deletedAt: null },
       include: {
-        tenantModulos: { where: { ativo: true }, include: { modulo: true } },
+        tenantModulos: {
+          where: { ativo: true },
+          include: { modulo: true },
+        },
         cartaoSalvo: true,
       },
     });
@@ -68,12 +71,15 @@ export class CobrancaCron {
           continue;
         }
 
-        // Cobrar módulos mensais + anuais vencidos (renovação)
+        // Cobrar só módulos ativos do tenant E disponíveis no catálogo
         const agora = new Date();
         const pacoteObras = resolvePacoteObras((empresa as any).pacoteObras);
+        const modulosCobraveis = empresa.tenantModulos.filter(
+          (tm) => tm.modulo?.ativo !== false,
+        );
         let valorBase = 0;
         const anuaisVencidosSlugs: string[] = [];
-        for (const tm of empresa.tenantModulos) {
+        for (const tm of modulosCobraveis) {
           const mensal = Number(tm.modulo.preco);
           const anual = Number((tm.modulo as any).precoAnual || 0);
           const period = (tm as any).periodicidade || 'MENSAL';
@@ -88,7 +94,7 @@ export class CobrancaCron {
         }
         const cobrancaPeriodicidade =
           anuaisVencidosSlugs.length > 0 &&
-          empresa.tenantModulos.every(
+          modulosCobraveis.every(
             (tm) => (tm as any).periodicidade === 'ANUAL',
           )
             ? 'ANUAL'

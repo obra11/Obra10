@@ -435,11 +435,14 @@ export class TenantService {
       const periodicidade =
         (tm as any).periodicidade === 'ANUAL' ? 'ANUAL' : 'MENSAL';
       const precoBase = periodicidade === 'ANUAL' ? anual : mensal;
-      const valor = precoComPacote(precoBase, pacoteObras);
+      const disponivelNoCatalogo = tm.modulo.ativo !== false;
+      const cobravel = tm.ativo && disponivelNoCatalogo;
+      const valor = cobravel ? precoComPacote(precoBase, pacoteObras) : 0;
       return {
         nome: tm.modulo.nome,
         slug: tm.modulo.slug,
         ativo: tm.ativo,
+        disponivelNoCatalogo,
         expiresAt: tm.expiresAt,
         periodicidade,
         precoTabelaMensal: mensal,
@@ -448,11 +451,11 @@ export class TenantService {
       };
     });
 
-    const ativos = modulos.filter((m) => m.ativo);
-    const valorMensal = ativos
+    const ativosCobraveis = modulos.filter((m) => m.ativo && m.disponivelNoCatalogo);
+    const valorMensal = ativosCobraveis
       .filter((m) => m.periodicidade === 'MENSAL')
       .reduce((s, m) => s + m.valor, 0);
-    const valorAnual = ativos
+    const valorAnual = ativosCobraveis
       .filter((m) => m.periodicidade === 'ANUAL')
       .reduce((s, m) => s + m.valor, 0);
     const valorPlano = Math.round((valorMensal + valorAnual) * 100) / 100;
@@ -520,6 +523,32 @@ export class TenantService {
       total: items.length,
       items,
     };
+  }
+
+  async desativarMeuModulo(empresaId: string, moduloSlug: string) {
+    const modulo = await this.prisma.modulo.findUnique({
+      where: { slug: moduloSlug },
+    });
+    if (!modulo) throw new NotFoundException('Módulo não encontrado.');
+
+    const tm = await this.prisma.tenantModulo.findUnique({
+      where: {
+        empresaId_moduloId: { empresaId, moduloId: modulo.id },
+      },
+    });
+    if (!tm) {
+      throw new NotFoundException('Este módulo não está vinculado à empresa.');
+    }
+    if (!tm.ativo) {
+      return { success: true, ativo: false };
+    }
+
+    await this.prisma.tenantModulo.update({
+      where: { id: tm.id },
+      data: { ativo: false },
+    });
+
+    return { success: true, ativo: false, slug: moduloSlug };
   }
 
   // ===================== UPGRADE MEU PLANO =====================

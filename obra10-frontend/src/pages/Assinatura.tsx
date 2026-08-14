@@ -58,6 +58,8 @@ export const Assinatura: React.FC = () => {
   const [filtroFim, setFiltroFim] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
 
+  const [loadingModuloSlug, setLoadingModuloSlug] = useState<string | null>(null);
+
   useEffect(() => {
     carregarDados();
   }, []);
@@ -73,6 +75,25 @@ export const Assinatura: React.FC = () => {
       alert('Erro ao carregar dados do plano.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDesativarModulo = async (slug: string, nome: string) => {
+    if (
+      !window.confirm(
+        `Desativar o módulo "${nome}"?\n\nEle deixa de aparecer como ativo e não entra nas próximas cobranças.`,
+      )
+    ) {
+      return;
+    }
+    setLoadingModuloSlug(slug);
+    try {
+      await api.delete(`/tenants/meu-plano/modulos/${slug}`);
+      await carregarDados();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Erro ao desativar módulo.');
+    } finally {
+      setLoadingModuloSlug(null);
     }
   };
 
@@ -319,6 +340,7 @@ export const Assinatura: React.FC = () => {
                   <th className="px-6 py-3 text-sm font-semibold text-gray-600">Valor</th>
                   <th className="px-6 py-3 text-sm font-semibold text-gray-600">Status</th>
                   <th className="px-6 py-3 text-sm font-semibold text-gray-600">Vencimento</th>
+                  <th className="px-6 py-3 text-sm font-semibold text-gray-600">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -329,9 +351,14 @@ export const Assinatura: React.FC = () => {
                       <span className="text-xs text-gray-400 ml-2 border rounded px-1">
                         {m.slug}
                       </span>
+                      {m.disponivelNoCatalogo === false && (
+                        <span className="ml-2 text-[10px] font-bold uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                          Indisponível — sem cobrança
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-gray-800">
-                      {m.ativo ? (
+                      {m.ativo && m.disponivelNoCatalogo !== false ? (
                         <>
                           {money(m.valor)}
                           <span className="text-xs font-normal text-gray-400 ml-1">
@@ -339,7 +366,7 @@ export const Assinatura: React.FC = () => {
                           </span>
                         </>
                       ) : (
-                        <span className="text-gray-400 font-normal">—</span>
+                        <span className="text-gray-400 font-normal">R$ 0,00</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
@@ -357,6 +384,24 @@ export const Assinatura: React.FC = () => {
                       {m.expiresAt
                         ? format(new Date(m.expiresAt), 'dd/MM/yyyy')
                         : 'Renovação Mensal'}
+                    </td>
+                    <td className="px-6 py-4">
+                      {m.ativo ? (
+                        <button
+                          type="button"
+                          onClick={() => handleDesativarModulo(m.slug, m.nome)}
+                          disabled={loadingModuloSlug === m.slug}
+                          className="text-xs font-bold text-red-600 border border-red-200 hover:bg-red-50 px-2.5 py-1.5 rounded-lg disabled:opacity-50"
+                        >
+                          {loadingModuloSlug === m.slug ? (
+                            <Loader2 size={12} className="animate-spin inline" />
+                          ) : (
+                            'Desativar'
+                          )}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
