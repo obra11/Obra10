@@ -57,16 +57,7 @@ export const AppRoutes: React.FC = () => {
     <Routes>
       {/* === SITE COMERCIAL (público) === */}
       <Route element={<MarketingLayout />}>
-        <Route
-          path="/"
-          element={
-            isAuthenticated ? (
-              <Navigate to={getDashboardRoute()} replace />
-            ) : (
-              <MarketingHome />
-            )
-          }
-        />
+        <Route path="/" element={<MarketingHome />} />
         <Route path="/produto" element={<MarketingProduto />} />
         <Route path="/precos" element={<Precos />} />
         <Route path="/sobre" element={<MarketingSobre />} />
