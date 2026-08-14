@@ -544,12 +544,17 @@ export class CobrancaService {
       data: { suspensa: false, diasInadimplente: 0 },
     });
 
-    // Activate all tenant modules
-    const slugsAtivos = cobranca.empresa.tenantModulos
-      .filter((tm) => tm.ativo)
-      .map((tm) => tm.modulo.slug);
-    if (slugsAtivos.length > 0) {
-      await this.ativarModulos(cobranca.empresaId, slugsAtivos);
+    // Activate modules from this charge when available
+    const slugs =
+      cobranca.modulosSlugs?.length > 0
+        ? cobranca.modulosSlugs
+        : cobranca.empresa.tenantModulos
+            .filter((tm) => tm.ativo)
+            .map((tm) => tm.modulo.slug);
+    const periodicidade =
+      cobranca.periodicidade === 'ANUAL' ? 'ANUAL' : 'MENSAL';
+    if (slugs.length > 0) {
+      await this.ativarModulos(cobranca.empresaId, slugs, periodicidade);
     }
 
     // AuditLog
