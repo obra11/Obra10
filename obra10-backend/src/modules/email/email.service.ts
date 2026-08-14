@@ -349,5 +349,36 @@ export class EmailService {
       `,
     );
   }
+
+  /** Formulário público do site comercial → contato@obra10.com.br */
+  async enviarContatoSite(dto: {
+    nome: string;
+    email: string;
+    telefone?: string;
+    mensagem: string;
+  }) {
+    const to =
+      process.env.CONTACT_EMAIL ||
+      process.env.SUPPORT_EMAIL ||
+      'contato@obra10.com.br';
+    const telefone = dto.telefone
+      ? `<p><strong>Telefone:</strong> ${dto.telefone}</p>`
+      : '';
+    await this.send(
+      to,
+      `Contato site Obra 10 — ${dto.nome}`,
+      `
+      <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
+        <h2 style="color:#E5192C;margin-top:0">Novo contato pelo site</h2>
+        <p><strong>Nome:</strong> ${dto.nome}</p>
+        <p><strong>E-mail:</strong> <a href="mailto:${dto.email}">${dto.email}</a></p>
+        ${telefone}
+        <p><strong>Mensagem:</strong></p>
+        <p style="white-space:pre-wrap;background:#f5f5f5;padding:12px;border-radius:8px">${dto.mensagem}</p>
+        <p style="color:#9ca3af;font-size:11px;margin-top:24px">Responda diretamente ao e-mail do remetente.</p>
+      </div>
+      `,
+    );
+  }
 }
 

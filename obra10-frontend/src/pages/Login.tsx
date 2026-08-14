@@ -159,6 +159,12 @@ export const Login: React.FC = () => {
             Ainda não tem conta? <Link to="/register" className="font-semibold text-lunardeli-red hover:underline">Criar conta</Link>
           </div>
 
+          <div className="mt-4 text-center text-sm">
+            <Link to="/" className="font-semibold text-gray-500 hover:text-lunardeli-red">
+              ← Voltar ao site
+            </Link>
+          </div>
+
           <div className="mt-8 text-center text-sm text-gray-500">
             &copy; 2026 Lunardeli Engenharia. Todos os direitos reservados.
           </div>

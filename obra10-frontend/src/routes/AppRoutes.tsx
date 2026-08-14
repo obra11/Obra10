@@ -39,6 +39,11 @@ import { AdminCupons } from '../pages/admin/AdminCupons';
 import { AdminFeatures } from '../pages/admin/AdminFeatures';
 import { AdminSuporte } from '../pages/admin/AdminSuporte';
 import { SuportePage } from '../pages/SuportePage';
+import { MarketingLayout } from '../layouts/MarketingLayout';
+import { MarketingHome } from '../pages/marketing/MarketingHome';
+import { MarketingProduto } from '../pages/marketing/MarketingProduto';
+import { MarketingSobre } from '../pages/marketing/MarketingSobre';
+import { MarketingContato } from '../pages/marketing/MarketingContato';
 
 export const AppRoutes: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
@@ -50,19 +55,31 @@ export const AppRoutes: React.FC = () => {
 
   return (
     <Routes>
-      <Route
-        path="/"
-        element={isAuthenticated ? <Navigate to={getDashboardRoute()} replace /> : <Navigate to="/login" replace />}
-      />
+      {/* === SITE COMERCIAL (público) === */}
+      <Route element={<MarketingLayout />}>
+        <Route
+          path="/"
+          element={
+            isAuthenticated ? (
+              <Navigate to={getDashboardRoute()} replace />
+            ) : (
+              <MarketingHome />
+            )
+          }
+        />
+        <Route path="/produto" element={<MarketingProduto />} />
+        <Route path="/precos" element={<Precos />} />
+        <Route path="/sobre" element={<MarketingSobre />} />
+        <Route path="/contato" element={<MarketingContato />} />
+      </Route>
 
       <Route
         path="/login"
         element={isAuthenticated ? <Navigate to={getDashboardRoute()} replace /> : <Login />}
       />
 
-      {/* === PUBLIC === */}
+      {/* === PUBLIC AUTH === */}
       <Route path="/register" element={<Register />} />
-      <Route path="/precos" element={<Precos />} />
       <Route path="/verificar-email" element={<VerificarEmail />} />
       <Route path="/diario-de-obra" element={<DiarioDeObra />} />
       <Route path="/esqueci-senha" element={<EsqueciSenha />} />
