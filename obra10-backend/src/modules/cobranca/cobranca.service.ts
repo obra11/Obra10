@@ -290,7 +290,7 @@ export class CobrancaService {
   }
 
   // ===================== CONFIRMAR PAGAMENTO (WEBHOOK) =====================
-  async confirmarPagamento(idAsaas: string) {
+  async confirmarPagamento(idAsaas: string, paymentPayload?: any) {
     const cobranca = await this.prisma.cobranca.findUnique({
       where: { idAsaas },
       include: {
@@ -301,7 +301,153 @@ export class CobrancaService {
       this.logger.warn(`Cobrança não encontrada para idAsaas: ${idAsaas}`);
       return;
     }
-    await this.processarPagamentoLocal(cobranca);
+    if (cobranca.status !== 'PAGO') {
+      await this.processarPagamentoLocal(cobranca);
+    }
+    await this.enriquecerCobrancaAsaas(cobranca.id, idAsaas, paymentPayload);
+  }
+
+  /** Atualiza líquido/taxas e agenda NFS-e quando configurado. */
+  async enriquecerCobrancaAsaas(
+    cobrancaId: string,
+    idAsaas: string,
+    paymentPayload?: any,
+  ) {
+    const cobranca = await this.prisma.cobranca.findUnique({
+      where: { id: cobrancaId },
+    });
+    if (!cobranca) return;
+
+    let value = Number(cobranca.valor);
+    let netValue: number | null = null;
+    let statusAsaas: string | null = null;
+
+    if (paymentPayload) {
+      if (paymentPayload.value != null) value = Number(paymentPayload.value);
+      if (paymentPayload.netValue != null && paymentPayload.netValue !== '') {
+        netValue = Number(paymentPayload.netValue);
+      }
+      if (paymentPayload.status) statusAsaas = String(paymentPayload.status);
+    }
+
+    if (netValue == null || statusAsaas == null) {
+      const info = await this.asaas.buscarPagamento(idAsaas);
+      if (info) {
+        if (info.value > 0) value = info.value;
+        if (info.netValue != null) netValue = info.netValue;
+        statusAsaas = info.status || statusAsaas;
+      }
+    }
+
+    const taxaAsaas =
+      netValue != null ? Math.round((value - netValue) * 100) / 100 : null;
+
+    const dataUpdate: Record<string, unknown> = {};
+    if (netValue != null) dataUpdate.valorLiquido = netValue;
+    if (taxaAsaas != null) dataUpdate.taxaAsaas = taxaAsaas;
+    if (statusAsaas) dataUpdate.statusAsaas = statusAsaas;
+
+    if (Object.keys(dataUpdate).length > 0) {
+      await this.prisma.cobranca.update({
+        where: { id: cobrancaId },
+        data: dataUpdate,
+      });
+    }
+
+    // NFS-e automática (se habilitada e ainda sem nota)
+    if (
+      this.asaas.nfEnabled &&
+      !cobranca.idNotaAsaas &&
+      cobranca.formaPagamento !== 'BONIFICACAO'
+    ) {
+      const invoice = await this.asaas.agendarNotaFiscal({
+        paymentId: idAsaas,
+        valor: value,
+      });
+      if (invoice) {
+        await this.prisma.cobranca.update({
+          where: { id: cobrancaId },
+          data: {
+            idNotaAsaas: invoice.id,
+            statusNota: invoice.status,
+            notaPdfUrl: invoice.pdfUrl || null,
+            notaXmlUrl: invoice.xmlUrl || null,
+          },
+        });
+      }
+    }
+  }
+
+  async processarWebhookNota(invoice: any) {
+    if (!invoice?.id) return;
+    const paymentId = invoice.payment;
+    if (!paymentId) {
+      this.logger.warn(`Invoice ${invoice.id} sem payment associado`);
+      return;
+    }
+    const cobranca = await this.prisma.cobranca.findUnique({
+      where: { idAsaas: paymentId },
+    });
+    if (!cobranca) {
+      this.logger.warn(
+        `Cobrança não encontrada para NF payment=${paymentId} invoice=${invoice.id}`,
+      );
+      return;
+    }
+    await this.prisma.cobranca.update({
+      where: { id: cobranca.id },
+      data: {
+        idNotaAsaas: invoice.id,
+        statusNota: invoice.status || cobranca.statusNota,
+        notaPdfUrl: invoice.pdfUrl || cobranca.notaPdfUrl,
+        notaXmlUrl: invoice.xmlUrl || cobranca.notaXmlUrl,
+      },
+    });
+  }
+
+  /** Backfill líquido/taxas/NF para cobranças PAGO com idAsaas. */
+  async sincronizarAsaasFinanceiro(limit = 50) {
+    const items = await this.prisma.cobranca.findMany({
+      where: {
+        status: 'PAGO',
+        idAsaas: { not: null },
+        NOT: { formaPagamento: 'BONIFICACAO' },
+        OR: [
+          { valorLiquido: null },
+          { idNotaAsaas: null },
+          { notaPdfUrl: null },
+        ],
+      },
+      take: Math.min(100, Math.max(1, limit)),
+      orderBy: { dataPagamento: 'desc' },
+    });
+
+    let atualizados = 0;
+    for (const c of items) {
+      if (!c.idAsaas) continue;
+      try {
+        await this.enriquecerCobrancaAsaas(c.id, c.idAsaas);
+        if (c.idNotaAsaas && !c.notaPdfUrl) {
+          const inv = await this.asaas.buscarNotaFiscal(c.idNotaAsaas);
+          if (inv) {
+            await this.prisma.cobranca.update({
+              where: { id: c.id },
+              data: {
+                statusNota: inv.status,
+                notaPdfUrl: inv.pdfUrl || null,
+                notaXmlUrl: inv.xmlUrl || null,
+              },
+            });
+          }
+        }
+        atualizados += 1;
+      } catch (err: any) {
+        this.logger.warn(
+          `Sync Asaas falhou cobranca=${c.id}: ${err?.message || err}`,
+        );
+      }
+    }
+    return { processados: items.length, atualizados };
   }
 
   // Confirmação chamada pelo frontend após sucesso no PayPal SDK

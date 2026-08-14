@@ -164,7 +164,8 @@ export class CobrancaController {
       throw new ForbiddenException('Token de webhook inválido.');
     }
 
-    const eventId = body?.id || body?.payment?.id;
+    const eventId =
+      body?.id || body?.payment?.id || body?.invoice?.id;
     if (!eventId) throw new BadRequestException('Payload inválido.');
 
     // Save WebhookEvent first (before processing)
@@ -187,7 +188,21 @@ export class CobrancaController {
       ) {
         const idAsaasPayment = body.payment?.id;
         if (idAsaasPayment)
-          await this.cobrancaService.confirmarPagamento(idAsaasPayment);
+          await this.cobrancaService.confirmarPagamento(
+            idAsaasPayment,
+            body.payment,
+          );
+      }
+
+      if (
+        body.event === 'INVOICE_CREATED' ||
+        body.event === 'INVOICE_AUTHORIZED' ||
+        body.event === 'INVOICE_UPDATED' ||
+        body.event === 'INVOICE_SYNCHRONIZED'
+      ) {
+        if (body.invoice) {
+          await this.cobrancaService.processarWebhookNota(body.invoice);
+        }
       }
 
       if (event) {

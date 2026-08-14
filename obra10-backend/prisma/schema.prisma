@@ -417,6 +417,11 @@ model Cobranca {
   id             String    @id @default(uuid())
   empresaId      String    @map("empresa_id")
   valor          Decimal   @db.Decimal(10, 2)
+  /** Valor líquido creditado pelo Asaas (após taxas). */
+  valorLiquido   Decimal?  @map("valor_liquido") @db.Decimal(10, 2)
+  /** Taxa Asaas estimada (valor − valorLiquido). */
+  taxaAsaas      Decimal?  @map("taxa_asaas") @db.Decimal(10, 2)
+  statusAsaas    String?   @map("status_asaas")
   status         String    @default("PENDENTE")
   formaPagamento String    @map("forma_pagamento")
   periodicidade  String    @default("MENSAL") // MENSAL | ANUAL
@@ -429,6 +434,11 @@ model Cobranca {
   qrCode         String?   @map("qr_code")
   qrCodeBase64   String?   @map("qr_code_base64")
   idAsaas        String?   @unique @map("id_asaas")
+  /** NFS-e Asaas */
+  idNotaAsaas    String?   @map("id_nota_asaas")
+  statusNota     String?   @map("status_nota")
+  notaPdfUrl     String?   @map("nota_pdf_url")
+  notaXmlUrl     String?   @map("nota_xml_url")
   idempotencyKey String    @unique @map("idempotency_key")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")

@@ -1,10 +1,16 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CobrancaService } from '../cobranca/cobranca.service';
 import {
   AtualizarDespesaFinanceiraDto,
   CriarDespesaFinanceiraDto,
 } from './dto/admin.dto';
+import {
+  parseDataBrasilFimDoDia,
+  parseDataBrasilInicioDoDia,
+  toInputDateBrasil,
+} from '../cupom/cupom-data';
 
 function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -14,11 +20,24 @@ function endOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 }
 
-function parseDateParam(value?: string, fallback?: Date) {
+/** Interpreta YYYY-MM-DD (ou ISO) como início do dia em Brasília. */
+function parseInicio(value?: string, fallback?: Date | null) {
   if (!value) return fallback ?? null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) throw new BadRequestException(`Data inválida: ${value}`);
-  return d;
+  try {
+    return parseDataBrasilInicioDoDia(value.slice(0, 10));
+  } catch {
+    throw new BadRequestException(`Data inválida: ${value}`);
+  }
+}
+
+/** Interpreta YYYY-MM-DD (ou ISO) como fim do dia em Brasília. */
+function parseFim(value?: string, fallback?: Date | null) {
+  if (!value) return fallback ?? null;
+  try {
+    return parseDataBrasilFimDoDia(value.slice(0, 10));
+  } catch {
+    throw new BadRequestException(`Data inválida: ${value}`);
+  }
 }
 
 function toNum(v: Prisma.Decimal | number | null | undefined) {
@@ -26,7 +45,7 @@ function toNum(v: Prisma.Decimal | number | null | undefined) {
 }
 
 function ymd(d: Date) {
-  return d.toISOString().slice(0, 10);
+  return toInputDateBrasil(d);
 }
 
 function agingBucket(dataVencimento: Date, agora: Date) {
@@ -42,54 +61,76 @@ function agingBucket(dataVencimento: Date, agora: Date) {
 
 @Injectable()
 export class AdminFinanceiroService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cobrancaService: CobrancaService,
+  ) {}
 
   async getResumo(inicioStr?: string, fimStr?: string) {
     const agora = new Date();
-    const inicio = parseDateParam(
+    const hojeYmd = toInputDateBrasil(agora);
+    const [yy, mm] = hojeYmd.split('-');
+    const inicio = parseInicio(
       inicioStr,
-      new Date(agora.getFullYear(), agora.getMonth(), 1),
+      parseDataBrasilInicioDoDia(`${yy}-${mm}-01`),
     )!;
-    const fim = parseDateParam(fimStr, endOfDay(agora))!;
+    const fim = parseFim(fimStr, parseDataBrasilFimDoDia(hojeYmd))!;
 
-    const [recebidoAgg, bonificadoAgg, aReceberAgg, vencidoAgg, saidasAgg] =
+    const pagoWhere = {
+      status: 'PAGO' as const,
+      dataPagamento: { gte: inicio, lte: fim },
+      NOT: { formaPagamento: 'BONIFICACAO' },
+    };
+
+    const [recebidoAgg, liquidoRows, bonificadoAgg, aReceberAgg, vencidoAgg, saidasAgg] =
       await Promise.all([
-      this.prisma.cobranca.aggregate({
-        _sum: { valor: true },
-        _count: true,
-        where: {
-          status: 'PAGO',
-          dataPagamento: { gte: inicio, lte: fim },
-          NOT: { formaPagamento: 'BONIFICACAO' },
-        },
-      }),
-      this.prisma.cobranca.aggregate({
-        _sum: { valor: true },
-        _count: true,
-        where: {
-          status: 'PAGO',
-          dataPagamento: { gte: inicio, lte: fim },
-          formaPagamento: 'BONIFICACAO',
-        },
-      }),
-      this.prisma.cobranca.aggregate({
-        _sum: { valor: true },
-        _count: true,
-        where: { status: 'PENDENTE' },
-      }),
-      this.prisma.cobranca.aggregate({
-        _sum: { valor: true },
-        _count: true,
-        where: { status: 'VENCIDO' },
-      }),
-      this.prisma.despesaFinanceira.aggregate({
-        _sum: { valor: true },
-        _count: true,
-        where: { data: { gte: inicio, lte: fim } },
-      }),
-    ]);
+        this.prisma.cobranca.aggregate({
+          _sum: { valor: true },
+          _count: true,
+          where: pagoWhere,
+        }),
+        this.prisma.cobranca.findMany({
+          where: pagoWhere,
+          select: { valor: true, valorLiquido: true, taxaAsaas: true },
+        }),
+        this.prisma.cobranca.aggregate({
+          _sum: { valor: true },
+          _count: true,
+          where: {
+            status: 'PAGO',
+            dataPagamento: { gte: inicio, lte: fim },
+            formaPagamento: 'BONIFICACAO',
+          },
+        }),
+        this.prisma.cobranca.aggregate({
+          _sum: { valor: true },
+          _count: true,
+          where: { status: 'PENDENTE' },
+        }),
+        this.prisma.cobranca.aggregate({
+          _sum: { valor: true },
+          _count: true,
+          where: { status: 'VENCIDO' },
+        }),
+        this.prisma.despesaFinanceira.aggregate({
+          _sum: { valor: true },
+          _count: true,
+          where: { data: { gte: inicio, lte: fim } },
+        }),
+      ]);
 
     const recebido = toNum(recebidoAgg._sum.valor);
+    let recebidoLiquido = 0;
+    let taxasAsaas = 0;
+    for (const row of liquidoRows) {
+      const bruto = toNum(row.valor);
+      const liquido = row.valorLiquido != null ? toNum(row.valorLiquido) : bruto;
+      const taxa =
+        row.taxaAsaas != null ? toNum(row.taxaAsaas) : Math.max(0, bruto - liquido);
+      recebidoLiquido += liquido;
+      taxasAsaas += taxa;
+    }
+
     const bonificado = toNum(bonificadoAgg._sum.valor);
     const aReceber = toNum(aReceberAgg._sum.valor);
     const vencido = toNum(vencidoAgg._sum.valor);
@@ -99,6 +140,8 @@ export class AdminFinanceiroService {
       periodo: { inicio: inicio.toISOString(), fim: fim.toISOString() },
       recebido,
       recebidoCount: recebidoAgg._count,
+      recebidoLiquido: Math.round(recebidoLiquido * 100) / 100,
+      taxasAsaas: Math.round(taxasAsaas * 100) / 100,
       bonificado,
       bonificadoCount: bonificadoAgg._count,
       aReceber,
@@ -107,7 +150,8 @@ export class AdminFinanceiroService {
       vencidoCount: vencidoAgg._count,
       saidas,
       saidasCount: saidasAgg._count,
-      saldoLiquido: recebido - saidas,
+      saldoLiquido: Math.round((recebidoLiquido - saidas) * 100) / 100,
+      saldoBruto: Math.round((recebido - saidas) * 100) / 100,
     };
   }
 
@@ -124,8 +168,8 @@ export class AdminFinanceiroService {
     const page = Math.max(1, Number(query.page || 1));
     const pageSize = Math.min(100, Math.max(1, Number(query.pageSize || 20)));
     const periodoCampo = query.periodoCampo === 'pagamento' ? 'pagamento' : 'vencimento';
-    const inicio = parseDateParam(query.inicio);
-    const fim = parseDateParam(query.fim);
+    const inicio = parseInicio(query.inicio);
+    const fim = parseFim(query.fim);
 
     const where: Prisma.CobrancaWhereInput = {};
     if (query.status) where.status = query.status;
@@ -190,11 +234,17 @@ export class AdminFinanceiroService {
           c.empresa.nomeCompleto ||
           'Empresa',
         valor: toNum(c.valor),
+        valorLiquido: c.valorLiquido != null ? toNum(c.valorLiquido) : null,
+        taxaAsaas: c.taxaAsaas != null ? toNum(c.taxaAsaas) : null,
         status: c.status,
         formaPagamento: c.formaPagamento,
         mesReferencia: c.mesReferencia,
         dataVencimento: c.dataVencimento,
         dataPagamento: c.dataPagamento,
+        idNotaAsaas: c.idNotaAsaas,
+        statusNota: c.statusNota,
+        notaPdfUrl: c.notaPdfUrl,
+        notaXmlUrl: c.notaXmlUrl,
         aging:
           openStatuses.includes(c.status)
             ? agingBucket(c.dataVencimento, agora)
@@ -205,11 +255,12 @@ export class AdminFinanceiroService {
 
   async getFluxoCaixa(inicioStr?: string, fimStr?: string, granularidade: 'dia' | 'mes' = 'dia') {
     const agora = new Date();
-    const inicio = parseDateParam(
+    const defaultInicio = new Date(agora.getFullYear(), agora.getMonth() - 2, 1);
+    const inicio = parseInicio(
       inicioStr,
-      new Date(agora.getFullYear(), agora.getMonth() - 2, 1),
+      parseDataBrasilInicioDoDia(toInputDateBrasil(defaultInicio)),
     )!;
-    const fim = parseDateParam(fimStr, endOfDay(agora))!;
+    const fim = parseFim(fimStr, parseDataBrasilFimDoDia(toInputDateBrasil(agora)))!;
 
     const [pagos, despesas] = await Promise.all([
       this.prisma.cobranca.findMany({
@@ -218,7 +269,7 @@ export class AdminFinanceiroService {
           dataPagamento: { gte: inicio, lte: fim },
           NOT: { formaPagamento: 'BONIFICACAO' },
         },
-        select: { valor: true, dataPagamento: true },
+        select: { valor: true, valorLiquido: true, dataPagamento: true },
       }),
       this.prisma.despesaFinanceira.findMany({
         where: { data: { gte: inicio, lte: fim } },
@@ -230,7 +281,8 @@ export class AdminFinanceiroService {
 
     const keyFor = (d: Date) => {
       if (granularidade === 'mes') {
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const parts = toInputDateBrasil(d).split('-');
+        return `${parts[0]}-${parts[1]}`;
       }
       return ymd(d);
     };
@@ -239,7 +291,7 @@ export class AdminFinanceiroService {
       if (!p.dataPagamento) continue;
       const k = keyFor(p.dataPagamento);
       const row = map.get(k) || { periodo: k, entradas: 0, saidas: 0 };
-      row.entradas += toNum(p.valor);
+      row.entradas += p.valorLiquido != null ? toNum(p.valorLiquido) : toNum(p.valor);
       map.set(k, row);
     }
     for (const d of despesas) {
@@ -329,7 +381,6 @@ export class AdminFinanceiroService {
       });
     }
 
-    // Projeta 1 ocorrência mensal de cada despesa recorrente no horizonte
     for (const d of despesasRecorrentes) {
       let cursor = new Date(agora.getFullYear(), agora.getMonth(), d.data.getDate());
       if (cursor < agora) {
@@ -384,8 +435,8 @@ export class AdminFinanceiroService {
 
   async listarDespesas(inicioStr?: string, fimStr?: string) {
     const where: Prisma.DespesaFinanceiraWhereInput = {};
-    const inicio = parseDateParam(inicioStr);
-    const fim = parseDateParam(fimStr);
+    const inicio = parseInicio(inicioStr);
+    const fim = parseFim(fimStr);
     if (inicio || fim) {
       where.data = {};
       if (inicio) where.data.gte = inicio;
@@ -401,12 +452,17 @@ export class AdminFinanceiroService {
     }));
   }
 
+  async sincronizarAsaas() {
+    return this.cobrancaService.sincronizarAsaasFinanceiro(80);
+  }
+
   async criarDespesa(dto: CriarDespesaFinanceiraDto, createdBy?: string) {
+    const dataStr = dto.data.slice(0, 10);
     const created = await this.prisma.despesaFinanceira.create({
       data: {
         descricao: dto.descricao.trim(),
         valor: dto.valor,
-        data: new Date(dto.data),
+        data: parseDataBrasilInicioDoDia(dataStr),
         categoria: (dto.categoria || 'outro').trim().toLowerCase(),
         recorrente: !!dto.recorrente,
         observacao: dto.observacao?.trim() || null,
@@ -425,7 +481,9 @@ export class AdminFinanceiroService {
       data: {
         ...(dto.descricao !== undefined ? { descricao: dto.descricao.trim() } : {}),
         ...(dto.valor !== undefined ? { valor: dto.valor } : {}),
-        ...(dto.data !== undefined ? { data: new Date(dto.data) } : {}),
+        ...(dto.data !== undefined
+          ? { data: parseDataBrasilInicioDoDia(dto.data.slice(0, 10)) }
+          : {}),
         ...(dto.categoria !== undefined
           ? { categoria: dto.categoria.trim().toLowerCase() }
           : {}),

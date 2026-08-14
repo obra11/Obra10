@@ -70,6 +70,11 @@ export class AdminFinanceiroController {
     return this.financeiro.listarDespesas(inicio, fim);
   }
 
+  @Post('sincronizar-asaas')
+  sincronizarAsaas() {
+    return this.financeiro.sincronizarAsaas();
+  }
+
   @Post('despesas')
   criarDespesa(@Body() dto: CriarDespesaFinanceiraDto, @Req() req: any) {
     return this.financeiro.criarDespesa(dto, req.user?.sub);

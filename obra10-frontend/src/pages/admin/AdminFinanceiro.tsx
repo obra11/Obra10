@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   DollarSign,
@@ -10,6 +10,9 @@ import {
   Trash2,
   Wallet,
   Gift,
+  RefreshCw,
+  FileText,
+  Percent,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -25,6 +28,11 @@ import {
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import api from '../../services/api';
+import {
+  formatDataBrasil,
+  rangePreset,
+  type PeriodoPreset,
+} from '../../utils/cupomData';
 
 type Tab = 'resumo' | 'recebimentos' | 'fluxo' | 'projecao' | 'despesas';
 
@@ -41,7 +49,17 @@ const statusBadge = (status: string) => {
   return map[status] || 'bg-gray-50 text-gray-600 border-gray-200';
 };
 
+const PRESETS: { id: PeriodoPreset; label: string }[] = [
+  { id: 'este_mes', label: 'Este mês' },
+  { id: 'mes_anterior', label: 'Mês anterior' },
+  { id: 'ultimos_30', label: 'Últimos 30 dias' },
+  { id: 'ultimos_90', label: 'Últimos 90 dias' },
+  { id: 'ano_atual', label: 'Ano atual' },
+  { id: 'personalizado', label: 'Personalizado' },
+];
+
 export const AdminFinanceiro: React.FC = () => {
+  const initialRange = rangePreset('este_mes');
   const [tab, setTab] = useState<Tab>('resumo');
   const [loading, setLoading] = useState(true);
   const [resumo, setResumo] = useState<any>(null);
@@ -50,36 +68,62 @@ export const AdminFinanceiro: React.FC = () => {
   const [projecao, setProjecao] = useState<any>(null);
   const [despesas, setDespesas] = useState<any[]>([]);
   const [statusFiltro, setStatusFiltro] = useState('');
+  const [periodoCampo, setPeriodoCampo] = useState<'vencimento' | 'pagamento'>(
+    'pagamento',
+  );
+  const [preset, setPreset] = useState<PeriodoPreset>('este_mes');
+  const [inicio, setInicio] = useState(initialRange.inicio);
+  const [fim, setFim] = useState(initialRange.fim);
   const [horizonte, setHorizonte] = useState(90);
   const [showDespesa, setShowDespesa] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [form, setForm] = useState({
     descricao: '',
     valor: '',
-    data: new Date().toISOString().slice(0, 10),
+    data: initialRange.fim,
     categoria: 'outro',
     recorrente: false,
     observacao: '',
   });
 
+  const periodoParams = useMemo(
+    () => ({ inicio, fim }),
+    [inicio, fim],
+  );
+
+  const aplicarPreset = (p: PeriodoPreset) => {
+    setPreset(p);
+    if (p === 'personalizado') return;
+    const r = rangePreset(p);
+    setInicio(r.inicio);
+    setFim(r.fim);
+  };
+
   const loadResumo = useCallback(async () => {
-    const res = await api.get('/admin/financeiro/resumo');
+    const res = await api.get('/admin/financeiro/resumo', { params: periodoParams });
     setResumo(res.data);
-  }, []);
+  }, [periodoParams]);
 
   const loadRecebimentos = useCallback(async () => {
-    const params: any = { page: 1, pageSize: 50 };
+    const params: any = {
+      page: 1,
+      pageSize: 50,
+      inicio: periodoParams.inicio,
+      fim: periodoParams.fim,
+      periodoCampo,
+    };
     if (statusFiltro) params.status = statusFiltro;
     const res = await api.get('/admin/financeiro/recebimentos', { params });
     setRecebimentos(res.data);
-  }, [statusFiltro]);
+  }, [statusFiltro, periodoCampo, periodoParams]);
 
   const loadFluxo = useCallback(async () => {
     const res = await api.get('/admin/financeiro/fluxo-caixa', {
-      params: { granularidade: 'mes' },
+      params: { ...periodoParams, granularidade: 'mes' },
     });
     setFluxo(res.data);
-  }, []);
+  }, [periodoParams]);
 
   const loadProjecao = useCallback(async () => {
     const res = await api.get('/admin/financeiro/projecao', {
@@ -89,9 +133,11 @@ export const AdminFinanceiro: React.FC = () => {
   }, [horizonte]);
 
   const loadDespesas = useCallback(async () => {
-    const res = await api.get('/admin/financeiro/despesas');
+    const res = await api.get('/admin/financeiro/despesas', {
+      params: periodoParams,
+    });
     setDespesas(res.data);
-  }, []);
+  }, [periodoParams]);
 
   useEffect(() => {
     setLoading(true);
@@ -127,7 +173,7 @@ export const AdminFinanceiro: React.FC = () => {
       setForm({
         descricao: '',
         valor: '',
-        data: new Date().toISOString().slice(0, 10),
+        data: fim,
         categoria: 'outro',
         recorrente: false,
         observacao: '',
@@ -151,6 +197,23 @@ export const AdminFinanceiro: React.FC = () => {
     }
   };
 
+  const handleSyncAsaas = async () => {
+    setSyncing(true);
+    try {
+      const res = await api.post('/admin/financeiro/sincronizar-asaas');
+      alert(
+        `Sincronização Asaas: ${res.data.atualizados}/${res.data.processados} cobrança(s) atualizada(s).`,
+      );
+      if (tab === 'resumo') await loadResumo();
+      if (tab === 'recebimentos') await loadRecebimentos();
+      if (tab === 'fluxo') await loadFluxo();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Erro ao sincronizar com Asaas');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const tabs: { id: Tab; label: string }[] = [
     { id: 'resumo', label: 'Resumo' },
     { id: 'recebimentos', label: 'Recebimentos' },
@@ -158,6 +221,8 @@ export const AdminFinanceiro: React.FC = () => {
     { id: 'projecao', label: 'Projeção' },
     { id: 'despesas', label: 'Despesas' },
   ];
+
+  const showPeriodo = tab !== 'projecao';
 
   return (
     <div className="space-y-6">
@@ -167,9 +232,22 @@ export const AdminFinanceiro: React.FC = () => {
             Financeiro
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Recebimentos, fluxo de caixa e projeção da plataforma
+            Recebimentos, fluxo de caixa, Asaas e notas fiscais da plataforma
           </p>
         </div>
+        <button
+          type="button"
+          onClick={handleSyncAsaas}
+          disabled={syncing}
+          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold border border-gray-200 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-60"
+        >
+          {syncing ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <RefreshCw size={16} />
+          )}
+          Sincronizar Asaas
+        </button>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -189,6 +267,64 @@ export const AdminFinanceiro: React.FC = () => {
         ))}
       </div>
 
+      {showPeriodo && (
+        <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+            Abrangência do período
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {PRESETS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => aplicarPreset(p.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
+                  preset === p.id
+                    ? 'bg-gray-900 text-white border-gray-900'
+                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+                De
+              </label>
+              <input
+                type="date"
+                value={inicio}
+                onChange={(e) => {
+                  setPreset('personalizado');
+                  setInicio(e.target.value);
+                }}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+                Até
+              </label>
+              <input
+                type="date"
+                value={fim}
+                onChange={(e) => {
+                  setPreset('personalizado');
+                  setFim(e.target.value);
+                }}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+              />
+            </div>
+            <p className="text-xs text-gray-400 pb-2">
+              Calendário de Brasília · {formatDataBrasil(inicio + 'T12:00:00')} —{' '}
+              {formatDataBrasil(fim + 'T12:00:00')}
+            </p>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-20 text-gray-400">
           <Loader2 className="animate-spin mr-2" size={22} />
@@ -200,11 +336,25 @@ export const AdminFinanceiro: React.FC = () => {
             <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
               {[
                 {
-                  label: 'Recebido no período',
+                  label: 'Recebido bruto',
                   value: money(resumo.recebido),
                   sub: `${resumo.recebidoCount} cobranças`,
                   icon: TrendingUp,
                   color: 'text-green-600 bg-green-50',
+                },
+                {
+                  label: 'Taxas Asaas',
+                  value: money(resumo.taxasAsaas || 0),
+                  sub: 'estimado no período',
+                  icon: Percent,
+                  color: 'text-orange-600 bg-orange-50',
+                },
+                {
+                  label: 'Recebido líquido',
+                  value: money(resumo.recebidoLiquido ?? resumo.recebido),
+                  sub: 'após taxas Asaas',
+                  icon: Wallet,
+                  color: 'text-emerald-700 bg-emerald-50',
                 },
                 {
                   label: 'Bonificado no período',
@@ -237,7 +387,7 @@ export const AdminFinanceiro: React.FC = () => {
                 {
                   label: 'Saldo líquido',
                   value: money(resumo.saldoLiquido),
-                  sub: 'recebido − saídas (sem bonificações)',
+                  sub: 'líquido Asaas − saídas',
                   icon: Wallet,
                   color:
                     resumo.saldoLiquido >= 0
@@ -279,6 +429,16 @@ export const AdminFinanceiro: React.FC = () => {
                   <option value="VENCIDO">Vencido</option>
                   <option value="PAGO">Pago</option>
                 </select>
+                <select
+                  value={periodoCampo}
+                  onChange={(e) =>
+                    setPeriodoCampo(e.target.value as 'vencimento' | 'pagamento')
+                  }
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+                >
+                  <option value="pagamento">Filtrar por pagamento</option>
+                  <option value="vencimento">Filtrar por vencimento</option>
+                </select>
                 <div className="text-xs text-gray-500 flex flex-wrap gap-3">
                   <span>Aging em dia: {money(recebimentos.aging?.em_dia || 0)}</span>
                   <span>1–7d: {money(recebimentos.aging?.['1_7'] || 0)}</span>
@@ -294,17 +454,19 @@ export const AdminFinanceiro: React.FC = () => {
                       <tr>
                         <th className="px-4 py-3">Empresa</th>
                         <th className="px-4 py-3">Referência</th>
-                        <th className="px-4 py-3">Valor</th>
+                        <th className="px-4 py-3">Bruto</th>
+                        <th className="px-4 py-3">Líquido</th>
                         <th className="px-4 py-3">Vencimento</th>
                         <th className="px-4 py-3">Pagamento</th>
                         <th className="px-4 py-3">Status</th>
                         <th className="px-4 py-3">Forma</th>
+                        <th className="px-4 py-3">NF</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {recebimentos.items?.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                          <td colSpan={9} className="px-4 py-8 text-center text-gray-400">
                             Nenhuma cobrança encontrada
                           </td>
                         </tr>
@@ -327,12 +489,22 @@ export const AdminFinanceiro: React.FC = () => {
                           <td className="px-4 py-3 font-semibold">
                             {money(item.valor)}
                           </td>
+                          <td className="px-4 py-3 text-gray-700">
+                            {item.valorLiquido != null
+                              ? money(item.valorLiquido)
+                              : '—'}
+                            {item.taxaAsaas != null && item.taxaAsaas > 0 && (
+                              <span className="block text-[10px] text-orange-600">
+                                taxa {money(item.taxaAsaas)}
+                              </span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-gray-600">
-                            {format(new Date(item.dataVencimento), 'dd/MM/yyyy')}
+                            {formatDataBrasil(item.dataVencimento)}
                           </td>
                           <td className="px-4 py-3 text-gray-600">
                             {item.dataPagamento
-                              ? format(new Date(item.dataPagamento), 'dd/MM/yyyy')
+                              ? formatDataBrasil(item.dataPagamento)
                               : '—'}
                           </td>
                           <td className="px-4 py-3">
@@ -355,6 +527,24 @@ export const AdminFinanceiro: React.FC = () => {
                                 : item.formaPagamento}
                             </span>
                           </td>
+                          <td className="px-4 py-3">
+                            {item.notaPdfUrl ? (
+                              <a
+                                href={item.notaPdfUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-xs font-bold text-red-600 hover:underline"
+                              >
+                                <FileText size={14} /> PDF
+                              </a>
+                            ) : item.statusNota ? (
+                              <span className="text-xs text-gray-500">
+                                {item.statusNota}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-300">—</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -370,7 +560,7 @@ export const AdminFinanceiro: React.FC = () => {
           {tab === 'fluxo' && fluxo && (
             <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6">
               <h2 className="font-bold text-gray-900 mb-4">
-                Entradas × saídas (mensal)
+                Entradas líquidas × saídas (mensal)
               </h2>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
@@ -530,15 +720,13 @@ export const AdminFinanceiro: React.FC = () => {
                     {despesas.length === 0 && (
                       <tr>
                         <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                          Nenhuma despesa cadastrada
+                          Nenhuma despesa no período
                         </td>
                       </tr>
                     )}
                     {despesas.map((d) => (
                       <tr key={d.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          {format(new Date(d.data), 'dd/MM/yyyy')}
-                        </td>
+                        <td className="px-4 py-3">{formatDataBrasil(d.data)}</td>
                         <td className="px-4 py-3 font-medium">{d.descricao}</td>
                         <td className="px-4 py-3 text-gray-600 capitalize">
                           {d.categoria}

@@ -3,11 +3,17 @@
  * Evita o bug de "dia seguinte / dia anterior" ao usar `new Date('YYYY-MM-DD')` (UTC).
  */
 
+/** Converte YYYY-MM-DD → instante no início do dia em America/Sao_Paulo. */
+export function parseDataBrasilInicioDoDia(yyyyMmDd: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(yyyyMmDd.trim());
+  if (!m) throw new Error(`Data inválida: ${yyyyMmDd}`);
+  return new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00.000-03:00`);
+}
+
 /** Converte YYYY-MM-DD → instante no fim do dia em America/Sao_Paulo. */
 export function parseDataBrasilFimDoDia(yyyyMmDd: string): Date {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(yyyyMmDd.trim());
   if (!m) throw new Error(`Data inválida: ${yyyyMmDd}`);
-  // Offset fixo -03:00 cobre o uso prático de validade (sem depender de DST histórico)
   return new Date(`${m[1]}-${m[2]}-${m[3]}T23:59:59.999-03:00`);
 }
 

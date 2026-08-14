@@ -39,9 +39,18 @@ SUPER_ADMIN_SENHA=suasenha
 # Asaas (deixar vazio em dev → modo MOCK automático)
 ASAAS_API_KEY=
 ASAAS_BASE_URL=https://sandbox.asaas.com/api/v3
+ASAAS_ENVIRONMENT=sandbox
 
 # Webhook — gerar com: node -e "console.log(require('crypto').randomUUID())"
 ASAAS_WEBHOOK_TOKEN=
+
+# NFS-e automática via Asaas (opcional — exige info fiscal na conta Asaas)
+ASAAS_NF_ENABLED=false
+ASAAS_MUNICIPAL_SERVICE_ID=
+ASAAS_MUNICIPAL_SERVICE_CODE=
+ASAAS_MUNICIPAL_SERVICE_NAME=Serviços de tecnologia
+ASAAS_NF_SERVICE_DESCRIPTION=Assinatura Obra 10 — módulos contratados
+ASAAS_NF_OBSERVATIONS=Licença de uso de software Obra 10
 
 # E-mail (deixar vazio em dev → modo MOCK automático)
 RESEND_API_KEY=

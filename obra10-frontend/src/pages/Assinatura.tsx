@@ -567,8 +567,19 @@ export const Assinatura: React.FC = () => {
                             Aplicar Cupom
                           </button>
                         </>
+                      ) : c.notaPdfUrl ? (
+                        <a
+                          href={c.notaPdfUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-lg font-bold text-xs hover:bg-red-100"
+                        >
+                          Nota fiscal
+                        </a>
                       ) : (
-                        <span className="text-gray-400 text-xs">Sem ações</span>
+                        <span className="text-gray-400 text-xs">
+                          {c.statusNota ? `NF: ${c.statusNota}` : 'Sem ações'}
+                        </span>
                       )}
                     </td>
                   </tr>

@@ -335,7 +335,10 @@ export class CobrancaCron {
           payload?.event === 'PAYMENT_RECEIVED' ||
           payload?.event === 'PAYMENT_CONFIRMED'
         ) {
-          await this.cobrancaService.confirmarPagamento(payload?.payment?.id);
+          await this.cobrancaService.confirmarPagamento(
+            payload?.payment?.id,
+            payload?.payment,
+          );
         }
         await this.prisma.webhookEvent.update({
           where: { id: ev.id },
