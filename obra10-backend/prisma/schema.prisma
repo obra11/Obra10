@@ -107,6 +107,7 @@ model Usuario {
   usuarioModulos UsuarioModulo[]
   empresa        Empresa         @relation(fields: [empresaId], references: [id])
   chamadosSuporte ChamadoSuporte[]
+  mensagensSuporte MensagemChamadoSuporte[]
 
   @@unique([empresaId, email])
   @@index([empresaId])
@@ -618,6 +619,11 @@ enum CategoriaChamadoSuporte {
   OUTRO
 }
 
+enum AutorMensagemSuporte {
+  USUARIO
+  SUPORTE
+}
+
 model ChamadoSuporte {
   id                 String                  @id @default(uuid())
   empresaId          String                  @map("empresa_id")
@@ -632,9 +638,26 @@ model ChamadoSuporte {
 
   empresa            Empresa                 @relation(fields: [empresaId], references: [id])
   usuario            Usuario                 @relation(fields: [usuarioId], references: [id])
+  mensagens          MensagemChamadoSuporte[]
 
   @@index([empresaId])
   @@index([usuarioId])
   @@index([status])
   @@map("chamados_suporte")
+}
+
+model MensagemChamadoSuporte {
+  id        String                @id @default(uuid())
+  chamadoId String                @map("chamado_id")
+  autorId   String                @map("autor_id")
+  autorTipo AutorMensagemSuporte  @map("autor_tipo")
+  corpo     String
+  createdAt DateTime              @default(now()) @map("created_at")
+
+  chamado   ChamadoSuporte        @relation(fields: [chamadoId], references: [id], onDelete: Cascade)
+  autor     Usuario               @relation(fields: [autorId], references: [id])
+
+  @@index([chamadoId])
+  @@index([autorId])
+  @@map("mensagens_chamado_suporte")
 }

@@ -20,6 +20,14 @@ import {
 
 type Tab = 'faq' | 'chamados' | 'novo';
 
+type Mensagem = {
+  id: string;
+  corpo: string;
+  autorTipo: 'USUARIO' | 'SUPORTE';
+  createdAt: string;
+  autor?: { id: string; nome: string; email: string };
+};
+
 type Chamado = {
   id: string;
   assunto: string;
@@ -31,6 +39,7 @@ type Chamado = {
   updatedAt: string;
   usuario?: { id: string; nome: string; email: string };
   empresa?: { id: string; razaoSocial?: string; nomeFantasia?: string };
+  mensagens?: Mensagem[];
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -57,6 +66,10 @@ export const SuportePage: React.FC = () => {
 
   const [chamados, setChamados] = useState<Chamado[]>([]);
   const [loadingLista, setLoadingLista] = useState(false);
+  const [chamadoAberto, setChamadoAberto] = useState<Chamado | null>(null);
+  const [loadingDetalhe, setLoadingDetalhe] = useState(false);
+  const [resposta, setResposta] = useState('');
+  const [enviandoResposta, setEnviandoResposta] = useState(false);
 
   const [assunto, setAssunto] = useState('');
   const [categoria, setCategoria] = useState('TECNICO');
@@ -83,6 +96,39 @@ export const SuportePage: React.FC = () => {
   useEffect(() => {
     if (tab === 'chamados') carregarChamados();
   }, [tab, carregarChamados]);
+
+  const abrirChamado = async (id: string) => {
+    setLoadingDetalhe(true);
+    setResposta('');
+    setError('');
+    try {
+      const res = await api.get(`/suporte/chamados/${id}`);
+      setChamadoAberto(res.data);
+    } catch {
+      setError('Não foi possível abrir o chamado.');
+    } finally {
+      setLoadingDetalhe(false);
+    }
+  };
+
+  const enviarResposta = async () => {
+    if (!chamadoAberto || !resposta.trim()) return;
+    setEnviandoResposta(true);
+    setError('');
+    try {
+      const res = await api.post(`/suporte/chamados/${chamadoAberto.id}/mensagens`, {
+        corpo: resposta.trim(),
+      });
+      setChamadoAberto(res.data);
+      setResposta('');
+      setSuccess('Mensagem enviada.');
+      await carregarChamados();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || 'Erro ao enviar mensagem.');
+    } finally {
+      setEnviandoResposta(false);
+    }
+  };
 
   const handleWhatsAppRapido = () => {
     const msg = buildSupportWhatsAppMessage({
@@ -272,29 +318,123 @@ export const SuportePage: React.FC = () => {
             ) : (
               <ul className="divide-y divide-gray-100">
                 {chamados.map((c) => (
-                  <li key={c.id} className="px-5 py-4">
-                    <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
-                      <p className="font-semibold text-lunardeli-dark">{c.assunto}</p>
-                      <span
-                        className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                          STATUS_COLOR[c.status] || STATUS_COLOR.FECHADO
-                        }`}
-                      >
-                        {STATUS_LABEL[c.status] || c.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 mb-2">
-                      {c.categoria} ·{' '}
-                      {new Date(c.createdAt).toLocaleString('pt-BR')}
-                      {c.usuario?.nome ? ` · ${c.usuario.nome}` : ''}
-                    </p>
-                    <p className="text-sm text-gray-600 whitespace-pre-wrap line-clamp-3">
-                      {c.descricao}
-                    </p>
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => abrirChamado(c.id)}
+                      className="w-full text-left px-5 py-4 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
+                        <p className="font-semibold text-lunardeli-dark">{c.assunto}</p>
+                        <span
+                          className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                            STATUS_COLOR[c.status] || STATUS_COLOR.FECHADO
+                          }`}
+                        >
+                          {STATUS_LABEL[c.status] || c.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-2">
+                        {c.categoria} ·{' '}
+                        {new Date(c.updatedAt || c.createdAt).toLocaleString('pt-BR')}
+                        {c.usuario?.nome ? ` · ${c.usuario.nome}` : ''}
+                      </p>
+                      <p className="text-sm text-gray-600 whitespace-pre-wrap line-clamp-2">
+                        {c.descricao}
+                      </p>
+                      <p className="text-xs font-semibold text-lunardeli-red mt-2">
+                        Ver conversa →
+                      </p>
+                    </button>
                   </li>
                 ))}
               </ul>
             )}
+          </div>
+        )}
+
+        {chamadoAberto && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+            <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl shadow-xl max-h-[92vh] flex flex-col">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-bold text-lunardeli-dark truncate">
+                      {chamadoAberto.assunto}
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {STATUS_LABEL[chamadoAberto.status] || chamadoAberto.status}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setChamadoAberto(null)}
+                    className="text-sm font-semibold text-gray-500 hover:text-lunardeli-red"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 bg-gray-50">
+                {loadingDetalhe ? (
+                  <div className="py-12 flex justify-center text-gray-400">
+                    <Loader2 className="animate-spin" size={28} />
+                  </div>
+                ) : (
+                  (
+                    chamadoAberto.mensagens?.length
+                      ? chamadoAberto.mensagens
+                      : [
+                          {
+                            id: 'seed',
+                            corpo: chamadoAberto.descricao,
+                            autorTipo: 'USUARIO' as const,
+                            createdAt: chamadoAberto.createdAt,
+                          },
+                        ]
+                  ).map((m) => {
+                    const meu = m.autorTipo === 'USUARIO';
+                    return (
+                      <div
+                        key={m.id}
+                        className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm ${
+                          meu
+                            ? 'ml-auto bg-lunardeli-red text-white'
+                            : 'mr-auto bg-white border border-gray-200 text-gray-800'
+                        }`}
+                      >
+                        <p className="text-[10px] font-bold uppercase tracking-wide opacity-80 mb-1">
+                          {meu ? 'Você' : 'Suporte Obra 10'}
+                        </p>
+                        <p className="whitespace-pre-wrap leading-relaxed">{m.corpo}</p>
+                        <p className={`text-[10px] mt-2 ${meu ? 'text-red-100' : 'text-gray-400'}`}>
+                          {new Date(m.createdAt).toLocaleString('pt-BR')}
+                        </p>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              {chamadoAberto.status !== 'FECHADO' && chamadoAberto.status !== 'RESOLVIDO' && (
+                <div className="px-5 py-4 border-t border-gray-100 space-y-2">
+                  <textarea
+                    value={resposta}
+                    onChange={(e) => setResposta(e.target.value)}
+                    rows={3}
+                    placeholder="Escreva uma mensagem para o suporte…"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red/30"
+                  />
+                  <button
+                    type="button"
+                    disabled={enviandoResposta || !resposta.trim()}
+                    onClick={enviarResposta}
+                    className="w-full py-2.5 bg-lunardeli-red hover:bg-red-700 disabled:opacity-50 text-white font-bold rounded-lg text-sm"
+                  >
+                    {enviandoResposta ? 'Enviando…' : 'Enviar mensagem'}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

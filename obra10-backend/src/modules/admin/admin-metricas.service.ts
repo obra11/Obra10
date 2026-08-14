@@ -168,6 +168,40 @@ export class AdminMetricasService {
         gravidade: 'ALTA'
       });
     }
+
+    // ALERTA: Chamados de suporte abertos / novos
+    const chamadosAbertos = await this.prisma.chamadoSuporte.findMany({
+      where: {
+        status: { in: ['ABERTO', 'EM_ANDAMENTO'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+      include: {
+        empresa: { select: { id: true, nomeFantasia: true, razaoSocial: true } },
+        usuario: { select: { nome: true } },
+      },
+    });
+    const totalAbertos = await this.prisma.chamadoSuporte.count({
+      where: { status: { in: ['ABERTO', 'EM_ANDAMENTO', 'AGUARDANDO_USUARIO'] } },
+    });
+    if (totalAbertos > 0) {
+      alertas.push({
+        tipo: 'SUPORTE_ABERTO',
+        mensagem: `${totalAbertos} chamado(s) de suporte em andamento — abrir Central de Suporte`,
+        gravidade: chamadosAbertos.some((c) => c.status === 'ABERTO')
+          ? 'ALTA'
+          : 'MEDIA',
+      });
+    }
+    for (const ch of chamadosAbertos.filter((c) => c.status === 'ABERTO').slice(0, 5)) {
+      alertas.push({
+        tipo: 'SUPORTE_NOVO',
+        mensagem: `Novo chamado: “${ch.assunto}” — ${ch.empresa?.nomeFantasia || ch.empresa?.razaoSocial || 'Empresa'} (${ch.usuario?.nome || 'usuário'})`,
+        empresaId: ch.empresa?.id,
+        chamadoId: ch.id,
+        gravidade: 'ALTA',
+      });
+    }
     
     // ALERTA: Empresas inativas 30 dias
     const trintaDiasAtras = new Date(agora.getTime() - 30 * 24 * 60 * 60 * 1000);

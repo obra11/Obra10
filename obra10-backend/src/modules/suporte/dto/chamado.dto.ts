@@ -30,3 +30,9 @@ export class UpdateChamadoDto {
   @IsOptional()
   marcarWhatsapp?: boolean;
 }
+
+export class CreateMensagemChamadoDto {
+  @IsString()
+  @MinLength(1, { message: 'Mensagem não pode ser vazia.' })
+  corpo: string;
+}

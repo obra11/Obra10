@@ -11,7 +11,11 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { SuporteService } from './suporte.service';
-import { CreateChamadoDto, UpdateChamadoDto } from './dto/chamado.dto';
+import {
+  CreateChamadoDto,
+  CreateMensagemChamadoDto,
+  UpdateChamadoDto,
+} from './dto/chamado.dto';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { PerfilGlobal } from '@prisma/client';
 
@@ -62,6 +66,24 @@ export class SuporteController {
     const usuarioId = req.user.sub;
     const perfilGlobal = req.user.perfilGlobal;
     return this.suporteService.atualizar(
+      id,
+      empresaId,
+      usuarioId,
+      perfilGlobal,
+      dto,
+    );
+  }
+
+  @Post('chamados/:id/mensagens')
+  async adicionarMensagem(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: CreateMensagemChamadoDto,
+  ) {
+    const empresaId = req.user.empresaId || req.user.empresa_id;
+    const usuarioId = req.user.sub;
+    const perfilGlobal = req.user.perfilGlobal;
+    return this.suporteService.adicionarMensagem(
       id,
       empresaId,
       usuarioId,

@@ -34,7 +34,7 @@ interface Metricas {
   rdosSemanaAnterior: number;
   mediaRdosPorObra: number;
   topEmpresasUso: { nome: string; totalRdos: number; ultimoRdo: string | null }[];
-  alertas: { tipo: string; mensagem: string; empresaId?: string; cupomId?: string; gravidade: 'ALTA' | 'MEDIA' | 'BAIXA' }[];
+  alertas: { tipo: string; mensagem: string; empresaId?: string; cupomId?: string; chamadoId?: string; gravidade: 'ALTA' | 'MEDIA' | 'BAIXA' }[];
 }
 
 export const AdminDashboard: React.FC = () => {
@@ -124,7 +124,9 @@ export const AdminDashboard: React.FC = () => {
               <div 
                 key={idx} 
                 onClick={() => {
-                  if (alerta.empresaId) navigate(`/admin/empresas/${alerta.empresaId}`);
+                  if (alerta.tipo === 'SUPORTE_ABERTO' || alerta.tipo === 'SUPORTE_NOVO') {
+                    navigate('/admin/suporte');
+                  } else if (alerta.empresaId) navigate(`/admin/empresas/${alerta.empresaId}`);
                   else if (alerta.cupomId) navigate('/admin/cupons');
                   else if (alerta.tipo === 'INADIMPLENCIA') navigate('/admin/empresas');
                 }}
