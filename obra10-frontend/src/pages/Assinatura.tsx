@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CreditCard, ShieldCheck, Clock, Users, Package } from 'lucide-react';
+import { ArrowLeft, CreditCard, ShieldCheck, Clock, Users, Package, Building2 } from 'lucide-react';
 import api from '../services/api';
 import { format } from 'date-fns';
+import { labelPacote } from '../utils/pacotesObras';
 
 export const Assinatura: React.FC = () => {
   const navigate = useNavigate();
@@ -80,6 +81,14 @@ export const Assinatura: React.FC = () => {
             </button>
           </div>
           <div className="flex flex-col justify-center space-y-4">
+            <div className="flex items-center text-gray-700">
+              <Building2 className="text-gray-400 mr-3" size={20} />
+              <span>
+                Pacote de obras: <strong>{labelPacote(dados?.pacoteObras)}</strong>
+                {' '}
+                ({dados?.limiteObras == null ? 'ilimitado' : `até ${dados.limiteObras}`})
+              </span>
+            </div>
             <div className="flex items-center text-gray-700">
               <Users className="text-gray-400 mr-3" size={20} />
               <span>Limite de Usuários: <strong>{dados?.usuariosAtivos} / {dados?.limiteUsuarios}</strong></span>

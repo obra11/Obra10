@@ -1,9 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import {
   Package, Loader2, CheckCircle, CreditCard, QrCode, ChevronRight, ChevronDown, Tag, X
 } from 'lucide-react';
+import {
+  PACOTE_KEYS,
+  PACOTES_OBRAS,
+  precoComPacote,
+  resolvePacoteObras,
+} from '../utils/pacotesObras';
+import type { PacoteObras } from '../utils/pacotesObras';
 
 interface SubModulo { slug: string; nome: string; descricao?: string; }
 
@@ -39,11 +46,18 @@ const GRUPO_COLORS: Record<string, string> = {
 
 export const Contratacao: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [modulos, setModulos] = useState<Modulo[]>([]);
   const [selecionados, setSelecionados] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [formaPagamento, setFormaPagamento] = useState<'PIX' | 'CARTAO'>('PIX');
   const [periodicidade, setPeriodicidade] = useState<'MENSAL' | 'ANUAL'>('MENSAL');
+  const [pacoteObras, setPacoteObras] = useState<PacoteObras>(() =>
+    resolvePacoteObras(
+      searchParams.get('pacote') ||
+        (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('pacoteObras') : null),
+    ),
+  );
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -69,11 +83,12 @@ export const Contratacao: React.FC = () => {
   const toggleExpand = (slug: string) => setExpanded(p => ({ ...p, [slug]: !p[slug] }));
 
   const precoModulo = (m: Modulo) => {
+    let base = Number(m.preco);
     if (periodicidade === 'ANUAL') {
       const anual = Number(m.precoAnual || 0);
-      return anual > 0 ? anual : Number(m.preco) * 11;
+      base = anual > 0 ? anual : Number(m.preco) * 11;
     }
-    return Number(m.preco);
+    return precoComPacote(base, pacoteObras);
   };
 
   // Base total (before coupon)
@@ -98,6 +113,7 @@ export const Contratacao: React.FC = () => {
 
   const total = calcularTotalComDesconto();
   const temDesconto = cupomValidado && total < totalBase;
+  const pacoteInfo = PACOTES_OBRAS[pacoteObras];
 
   // Group modules by category
   const grupos = GRUPO_ORDER.reduce<Record<string, Modulo[]>>((acc, g) => {
@@ -135,6 +151,7 @@ export const Contratacao: React.FC = () => {
         modulosSelecionados: selecionados,
         formaPagamento,
         periodicidade,
+        pacoteObras,
         cupom: cupomValidado ? codigoCupom.trim() : undefined,
       });
 
@@ -166,7 +183,35 @@ export const Contratacao: React.FC = () => {
         <div className="text-center mb-8">
           <Package size={48} className="mx-auto mb-4 text-red-600" />
           <h1 className="text-3xl font-bold text-gray-900">Escolha seus módulos</h1>
-          <p className="text-gray-500 mt-2">Pague apenas pelo que usar — mensal ou anual.</p>
+          <p className="text-gray-500 mt-2">
+            Preços a partir da tabela cadastrada (pacote até 5 obras). Ajuste o pacote conforme o número de obras.
+          </p>
+        </div>
+
+        {/* Pacote de obras */}
+        <div className="grid sm:grid-cols-3 gap-2 mb-4">
+          {PACOTE_KEYS.map((key) => {
+            const p = PACOTES_OBRAS[key];
+            const selected = pacoteObras === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setPacoteObras(key)}
+                className={`text-left p-4 rounded-xl border-2 transition-all ${
+                  selected
+                    ? 'border-red-500 bg-red-50'
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                }`}
+              >
+                <p className="font-bold text-gray-900 text-sm">{p.label}</p>
+                <p className="text-xs text-gray-500 mt-1">{p.descricao}</p>
+                <p className="text-[11px] font-semibold text-gray-400 mt-2">
+                  {key === 'ATE_5' ? 'Preço de tabela' : key === 'ATE_3' ? '−20% sobre a tabela' : '+50% sobre a tabela'}
+                </p>
+              </button>
+            );
+          })}
         </div>
 
         {/* Periodicidade */}
@@ -353,6 +398,9 @@ export const Contratacao: React.FC = () => {
 
         {/* Total + CTA */}
         <div className="bg-white rounded-xl border-2 border-red-100 p-5">
+          <p className="text-xs text-gray-500 mb-2">
+            Pacote: <span className="font-semibold text-gray-700">{pacoteInfo.label}</span>
+          </p>
           <div className="flex justify-between items-center mb-4">
             <span className="text-gray-600 font-medium">
               Total {periodicidade === 'ANUAL' ? 'anual' : 'mensal'}

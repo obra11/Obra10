@@ -2,6 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { Loader2, ArrowRight } from 'lucide-react';
+import {
+  PACOTE_KEYS,
+  PACOTES_OBRAS,
+  precoComPacote,
+} from '../utils/pacotesObras';
+import type { PacoteObras } from '../utils/pacotesObras';
 
 interface Modulo {
   slug: string;
@@ -15,6 +21,7 @@ export const Precos: React.FC = () => {
   const [modulos, setModulos] = useState<Modulo[]>([]);
   const [loading, setLoading] = useState(true);
   const [periodicidade, setPeriodicidade] = useState<'MENSAL' | 'ANUAL'>('MENSAL');
+  const [pacoteObras, setPacoteObras] = useState<PacoteObras>('ATE_5');
 
   useEffect(() => {
     api
@@ -29,11 +36,12 @@ export const Precos: React.FC = () => {
   const precoDe = (m: Modulo) => {
     const mensal = parseFloat(String(m.preco || '0'));
     const anual = parseFloat(String(m.precoAnual || '0'));
-    if (periodicidade === 'ANUAL') return anual > 0 ? anual : mensal * 11;
-    return mensal;
+    const base = periodicidade === 'ANUAL' ? (anual > 0 ? anual : mensal * 11) : mensal;
+    return precoComPacote(base, pacoteObras);
   };
 
   const total = modulos.reduce((s, m) => s + precoDe(m), 0);
+  const pacoteInfo = PACOTES_OBRAS[pacoteObras];
 
   return (
     <div>
@@ -46,28 +54,54 @@ export const Precos: React.FC = () => {
             Preços simples e transparentes.
           </h1>
           <p className="mt-5 text-white/80 text-lg max-w-2xl">
-            Pagamento por módulo. Escolha mensal ou anual. Ative só o que a obra
-            precisa.
+            Pagamento por módulo. Escolha o pacote de obras, mensal ou anual.
+            Os preços exibidos partem dos valores cadastrados (pacote até 5 obras).
           </p>
-          <div className="mt-8 inline-flex bg-white/10 rounded-lg p-1 gap-1">
-            <button
-              type="button"
-              onClick={() => setPeriodicidade('MENSAL')}
-              className={`px-5 py-2.5 rounded-md text-sm font-bold transition-colors ${
-                periodicidade === 'MENSAL' ? 'bg-white text-lunardeli-dark' : 'text-white/80'
-              }`}
-            >
-              Mensal
-            </button>
-            <button
-              type="button"
-              onClick={() => setPeriodicidade('ANUAL')}
-              className={`px-5 py-2.5 rounded-md text-sm font-bold transition-colors ${
-                periodicidade === 'ANUAL' ? 'bg-white text-lunardeli-dark' : 'text-white/80'
-              }`}
-            >
-              Anual
-            </button>
+          <div className="mt-8 flex flex-col gap-4">
+            <div className="grid sm:grid-cols-3 gap-2">
+              {PACOTE_KEYS.map((key) => {
+                const p = PACOTES_OBRAS[key];
+                const selected = pacoteObras === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setPacoteObras(key)}
+                    className={`text-left px-4 py-3 rounded-lg border transition-colors ${
+                      selected
+                        ? 'bg-white text-lunardeli-dark border-white'
+                        : 'bg-white/5 text-white border-white/20 hover:bg-white/10'
+                    }`}
+                  >
+                    <p className="text-sm font-bold">{p.label}</p>
+                    <p className={`text-xs mt-0.5 ${selected ? 'text-gray-500' : 'text-white/70'}`}>
+                      {p.descricao}
+                      {key === 'ATE_5' ? ' · preço de tabela' : key === 'ATE_3' ? ' · −20%' : ' · +50%'}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="inline-flex bg-white/10 rounded-lg p-1 gap-1 w-max">
+              <button
+                type="button"
+                onClick={() => setPeriodicidade('MENSAL')}
+                className={`px-5 py-2.5 rounded-md text-sm font-bold transition-colors ${
+                  periodicidade === 'MENSAL' ? 'bg-white text-lunardeli-dark' : 'text-white/80'
+                }`}
+              >
+                Mensal
+              </button>
+              <button
+                type="button"
+                onClick={() => setPeriodicidade('ANUAL')}
+                className={`px-5 py-2.5 rounded-md text-sm font-bold transition-colors ${
+                  periodicidade === 'ANUAL' ? 'bg-white text-lunardeli-dark' : 'text-white/80'
+                }`}
+              >
+                Anual
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -109,11 +143,11 @@ export const Precos: React.FC = () => {
                         {valor.toFixed(2).replace('.', ',')}
                       </p>
                       <p className="text-xs text-gray-500">
-                        /{periodicidade === 'ANUAL' ? 'ano' : 'mês'}
+                        /{periodicidade === 'ANUAL' ? 'ano' : 'mês'} · {pacoteInfo.label}
                       </p>
                       {periodicidade === 'ANUAL' && mensal > 0 && (
                         <p className="text-[11px] text-gray-400 mt-1">
-                          mensal: R$ {mensal.toFixed(2).replace('.', ',')}
+                          mensal tabela: R$ {mensal.toFixed(2).replace('.', ',')}
                         </p>
                       )}
                     </div>
@@ -128,12 +162,12 @@ export const Precos: React.FC = () => {
               </h2>
               <p className="mt-2 text-white/90 text-sm sm:text-base max-w-xl">
                 {modulos.length
-                  ? `Pacote completo estimado: R$ ${total.toFixed(2).replace('.', ',')}/${periodicidade === 'ANUAL' ? 'ano' : 'mês'} — escolha só os módulos que precisa no cadastro.`
+                  ? `${pacoteInfo.label}: R$ ${total.toFixed(2).replace('.', ',')}/${periodicidade === 'ANUAL' ? 'ano' : 'mês'} (todos os módulos) — escolha só o que precisa no cadastro.`
                   : 'Crie sua conta e escolha os módulos no onboarding.'}
               </p>
               <div className="mt-6 flex flex-col sm:flex-row gap-3">
                 <Link
-                  to="/register"
+                  to={`/register?pacote=${pacoteObras}`}
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white text-lunardeli-red font-bold rounded-lg hover:bg-gray-100"
                 >
                   Criar conta <ArrowRight size={18} />

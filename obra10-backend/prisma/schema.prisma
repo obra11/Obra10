@@ -16,6 +16,10 @@ model Empresa {
   deletedAt           DateTime?      @map("deleted_at")
   ativo               Boolean        @default(true)
   limiteUsuarios      Int            @default(5) @map("limite_usuarios")
+  /** ATE_3 | ATE_5 | ILIMITADO — base de preço = ATE_5 (preços cadastrados) */
+  pacoteObras         String         @default("ATE_5") @map("pacote_obras")
+  /** null = ilimitado */
+  limiteObras         Int?           @default(5) @map("limite_obras")
   plano               Plano          @default(BASICO)
   tipoPessoa          TipoPessoa     @default(JURIDICA) @map("tipo_pessoa")
   cpfCnpj             String?        @unique @map("cpf_cnpj")
@@ -410,6 +414,7 @@ model Cobranca {
   status         String    @default("PENDENTE")
   formaPagamento String    @map("forma_pagamento")
   periodicidade  String    @default("MENSAL") // MENSAL | ANUAL
+  pacoteObras    String    @default("ATE_5") @map("pacote_obras")
   modulosSlugs   String[]  @default([]) @map("modulos_slugs")
   mesReferencia  DateTime  @map("mes_referencia")
   dataVencimento DateTime  @map("data_vencimento")

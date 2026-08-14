@@ -10,6 +10,12 @@ import { AsaasService } from './asaas.service';
 import { EmailService } from '../email/email.service';
 import { CupomService } from '../cupom/cupom.service';
 import { CryptoService } from '../../core/services/crypto.service';
+import {
+  limiteObrasDoPacote,
+  precoComPacote,
+  resolvePacoteObras,
+  type PacoteObras,
+} from './pacotes-obras';
 
 const PLANO_PRECOS: Record<string, number> = {};
 
@@ -18,6 +24,7 @@ export interface ContratarDto {
   modulosSelecionados: string[];
   formaPagamento: 'PIX' | 'CARTAO';
   periodicidade?: 'MENSAL' | 'ANUAL';
+  pacoteObras?: PacoteObras;
   tokenCartao?: string;
   cupom?: string;
 }
@@ -54,15 +61,19 @@ export class CobrancaService {
       throw new BadRequestException('Nenhum módulo válido selecionado.');
 
     const periodicidade = dto.periodicidade === 'ANUAL' ? 'ANUAL' : 'MENSAL';
+    const pacoteObras = resolvePacoteObras(dto.pacoteObras);
 
-    // Calculate base price from modules (mensal ou anual)
+    // Calculate base price from modules (mensal ou anual) × fator do pacote de obras
     const valorBase = modulos.reduce((sum, m) => {
       const mensal = Number(m.preco);
       const anual = Number((m as any).precoAnual || 0);
-      if (periodicidade === 'ANUAL') {
-        return sum + (anual > 0 ? anual : mensal * 11);
-      }
-      return sum + mensal;
+      const base =
+        periodicidade === 'ANUAL'
+          ? anual > 0
+            ? anual
+            : mensal * 11
+          : mensal;
+      return sum + precoComPacote(base, pacoteObras);
     }, 0);
 
     // Apply coupon if provided
@@ -90,8 +101,17 @@ export class CobrancaService {
     const now = new Date();
     const mesRef = new Date(now.getFullYear(), now.getMonth(), 1);
     const vencimento = new Date(now.getFullYear(), now.getMonth() + 1, 5);
-    const idempotencyKey = `${dto.empresaId}-${periodicidade}-${mesRef.toISOString().slice(0, 7)}`;
+    const idempotencyKey = `${dto.empresaId}-${pacoteObras}-${periodicidade}-${mesRef.toISOString().slice(0, 7)}`;
     const modulosSlugs = dto.modulosSelecionados;
+
+    // Persist package on empresa at contract time (limit applies after payment / activation)
+    await this.prisma.empresa.update({
+      where: { id: dto.empresaId },
+      data: {
+        pacoteObras,
+        limiteObras: limiteObrasDoPacote(pacoteObras),
+      },
+    });
 
     // Idempotency check
     const existente = await this.prisma.cobranca.findUnique({
@@ -133,6 +153,7 @@ export class CobrancaService {
           status: 'PAGO',
           formaPagamento: dto.formaPagamento,
           periodicidade,
+          pacoteObras,
           modulosSlugs,
           mesReferencia: mesRef,
           dataVencimento: vencimento,
@@ -151,6 +172,7 @@ export class CobrancaService {
         cupomAplicado,
         status: 'PAGO',
         periodicidade,
+        pacoteObras,
         mensagem: 'Módulos ativados com sucesso! Cupom de desconto aplicado.',
       };
     }
@@ -160,7 +182,7 @@ export class CobrancaService {
         idAsaasCliente,
         valor: Math.max(valor, 0.01),
         vencimento: vencimento.toISOString().split('T')[0],
-        descricao: `OBRA 10 ${periodicidade} — ${modulos.map((m) => m.slug).join(', ')}`,
+        descricao: `OBRA 10 ${pacoteObras} ${periodicidade} — ${modulos.map((m) => m.slug).join(', ')}`,
       });
 
       cobranca = await this.prisma.cobranca.create({
@@ -170,6 +192,7 @@ export class CobrancaService {
           status: 'PENDENTE',
           formaPagamento: 'PIX',
           periodicidade,
+          pacoteObras,
           modulosSlugs,
           mesReferencia: mesRef,
           dataVencimento: vencimento,
@@ -197,6 +220,7 @@ export class CobrancaService {
         formaPagamento: 'PIX',
         valor,
         periodicidade,
+        pacoteObras,
         qrCode: pix.qrCode,
         qrCodeBase64: pix.qrCodeBase64,
         linkPagamento: pix.linkPagamento,
@@ -218,6 +242,7 @@ export class CobrancaService {
         status: card.status === 'CONFIRMED' ? 'PAGO' : 'PENDENTE',
         formaPagamento: 'CARTAO',
         periodicidade,
+        pacoteObras,
         modulosSlugs,
         mesReferencia: mesRef,
         dataVencimento: vencimento,
@@ -261,6 +286,7 @@ export class CobrancaService {
       formaPagamento: 'CARTAO',
       valor,
       periodicidade,
+      pacoteObras,
       status: card.status,
     };
   }

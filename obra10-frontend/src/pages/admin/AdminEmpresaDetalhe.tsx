@@ -245,8 +245,14 @@ export const AdminEmpresaDetalhe: React.FC = () => {
             <p className="text-gray-500 text-sm mt-1">
               Documento Principal: {empresa.cpfCnpj || empresa.cnpj || 'Não informado'} • Cadastro: {format(new Date(empresa.createdAt), 'dd/MM/yyyy')}
             </p>
-            <div className="flex gap-2 items-center mt-2">
+            <div className="flex gap-2 items-center mt-2 flex-wrap">
               <div className="text-sm font-semibold uppercase tracking-wider text-red-600 border border-red-200 bg-red-50 rounded px-2 w-max">Plano {empresa.plano}</div>
+              {empresa.pacoteObras && (
+                <div className="text-sm font-semibold uppercase tracking-wider text-gray-700 border border-gray-200 bg-gray-50 rounded px-2 w-max">
+                  {empresa.pacoteObras === 'ATE_3' ? 'Até 3 obras' : empresa.pacoteObras === 'ILIMITADO' ? 'Obras ilimitadas' : 'Até 5 obras'}
+                  {empresa.limiteObras != null ? ` · limite ${empresa.limiteObras}` : ''}
+                </div>
+              )}
                {empresa.cupons?.find((c: any) => c.ativo)?.cupom && (
                 <div className="text-[11px] font-bold uppercase tracking-wider text-green-700 bg-green-100 border border-green-200 rounded px-2">
                   Cupom: {empresa.cupons.find((c: any) => c.ativo).cupom.codigo} ({empresa.cupons.find((c: any) => c.ativo).cupom.tipo.replace('_', ' ')})

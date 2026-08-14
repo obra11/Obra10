@@ -425,6 +425,8 @@ export class TenantService {
       plano: empresa.plano,
       limiteUsuarios: empresa.limiteUsuarios,
       usuariosAtivos: empresa._count.usuarios,
+      pacoteObras: (empresa as any).pacoteObras ?? 'ATE_5',
+      limiteObras: (empresa as any).limiteObras ?? 5,
       ativo: empresa.ativo,
       suspensa: empresa.suspensa,
       diasInadimplente: empresa.diasInadimplente,

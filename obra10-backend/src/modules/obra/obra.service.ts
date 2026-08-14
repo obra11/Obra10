@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 
@@ -55,6 +55,26 @@ export class ObraService {
     usuarioId: string,
     data: { nome: string; endereco?: string },
   ) {
+    const empresa = await this.prisma.empresa.findUnique({
+      where: { id: empresaId },
+      select: { limiteObras: true },
+    });
+    if (!empresa) {
+      throw new BadRequestException('Empresa não encontrada.');
+    }
+
+    // null = ilimitado; senão conta obras não excluídas
+    if (empresa.limiteObras != null) {
+      const totalObras = await this.prisma.obra.count({
+        where: { empresaId, deletedAt: null },
+      });
+      if (totalObras >= empresa.limiteObras) {
+        throw new BadRequestException(
+          `Limite do pacote atingido (${empresa.limiteObras} obra${empresa.limiteObras === 1 ? '' : 's'}). Faça upgrade do plano para cadastrar mais obras.`,
+        );
+      }
+    }
+
     // 1. Garante que o perfil ENGENHEIRO existe (FORA da transação para não abortar em caso de erro de constraint)
     let perfil = await this.prisma.perfil.findUnique({
       where: { nomeInterno: 'ENGENHEIRO' },

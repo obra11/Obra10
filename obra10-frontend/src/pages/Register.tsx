@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { ArrowRight, ArrowLeft, Loader2, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { resolvePacoteObras } from '../utils/pacotesObras';
 
 type TipoPessoa = 'FISICA' | 'JURIDICA';
 type Step = 1 | 2 | 3 | 4;
 
 export const Register: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { logout } = useAuth();
   const [step, setStep] = useState<Step>(1);
   const [tipo, setTipo] = useState<TipoPessoa>('JURIDICA');
@@ -18,6 +20,11 @@ export const Register: React.FC = () => {
   useEffect(() => {
     logout();
   }, [logout]);
+
+  useEffect(() => {
+    const pacote = resolvePacoteObras(searchParams.get('pacote'));
+    sessionStorage.setItem('pacoteObras', pacote);
+  }, [searchParams]);
 
   const [form, setForm] = useState({
     cpfCnpj: '', razaoSocial: '', nomeFantasia: '', nomeCompleto: '',

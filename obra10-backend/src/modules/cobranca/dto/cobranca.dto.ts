@@ -16,6 +16,12 @@ export class ContratarModulosDto {
   @IsOptional()
   periodicidade?: 'MENSAL' | 'ANUAL';
 
+  @IsEnum(['ATE_3', 'ATE_5', 'ILIMITADO'], {
+    message: 'pacoteObras deve ser ATE_3, ATE_5 ou ILIMITADO.',
+  })
+  @IsOptional()
+  pacoteObras?: 'ATE_3' | 'ATE_5' | 'ILIMITADO';
+
   @IsString()
   @IsOptional()
   tokenCartao?: string;

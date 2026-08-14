@@ -6,6 +6,10 @@ import { AsaasService } from './asaas.service';
 import { EmailService } from '../email/email.service';
 import { CupomService } from '../cupom/cupom.service';
 import { CryptoService } from '../../core/services/crypto.service';
+import {
+  precoComPacote,
+  resolvePacoteObras,
+} from './pacotes-obras';
 
 @Injectable()
 export class CobrancaCron {
@@ -66,6 +70,7 @@ export class CobrancaCron {
 
         // Cobrar módulos mensais + anuais vencidos (renovação)
         const agora = new Date();
+        const pacoteObras = resolvePacoteObras((empresa as any).pacoteObras);
         let valorBase = 0;
         const anuaisVencidosSlugs: string[] = [];
         for (const tm of empresa.tenantModulos) {
@@ -74,10 +79,11 @@ export class CobrancaCron {
           const period = (tm as any).periodicidade || 'MENSAL';
           if (period === 'ANUAL') {
             if (tm.expiresAt && tm.expiresAt > agora) continue;
-            valorBase += anual > 0 ? anual : mensal * 11;
+            const base = anual > 0 ? anual : mensal * 11;
+            valorBase += precoComPacote(base, pacoteObras);
             anuaisVencidosSlugs.push(tm.modulo.slug);
           } else {
-            valorBase += mensal;
+            valorBase += precoComPacote(mensal, pacoteObras);
           }
         }
         const cobrancaPeriodicidade =
@@ -108,6 +114,7 @@ export class CobrancaCron {
               status: 'PAGO',
               formaPagamento: 'CUPOM',
               periodicidade: cobrancaPeriodicidade,
+              pacoteObras,
               modulosSlugs: cobrancaModulosSlugs,
               mesReferencia: mesRef,
               dataVencimento: vencimento,
@@ -167,6 +174,7 @@ export class CobrancaCron {
               status: result.status === 'CONFIRMED' ? 'PAGO' : 'PENDENTE',
               formaPagamento: 'CARTAO',
               periodicidade: cobrancaPeriodicidade,
+              pacoteObras,
               modulosSlugs: cobrancaModulosSlugs,
               mesReferencia: mesRef,
               dataVencimento: vencimento,
@@ -203,6 +211,7 @@ export class CobrancaCron {
               status: 'PENDENTE',
               formaPagamento: 'PIX',
               periodicidade: cobrancaPeriodicidade,
+              pacoteObras,
               modulosSlugs: cobrancaModulosSlugs,
               mesReferencia: mesRef,
               dataVencimento: vencimento,
