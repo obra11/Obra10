@@ -7,7 +7,7 @@ import {
   PLANO_KEYS,
   labelPlano,
   pacoteDoPlano,
-  precoComPacote,
+  precoModuloPorPacote,
   resumoPlano,
 } from '../utils/pacotesObras';
 import type { PlanoNome } from '../utils/pacotesObras';
@@ -18,6 +18,10 @@ interface Modulo {
   descricao: string;
   preco: string | number;
   precoAnual?: string | number;
+  precoBasico?: string | number;
+  precoAnualBasico?: string | number;
+  precoEnterprise?: string | number;
+  precoAnualEnterprise?: string | number;
 }
 
 export const Precos: React.FC = () => {
@@ -38,12 +42,8 @@ export const Precos: React.FC = () => {
 
   const pacoteObras = pacoteDoPlano(plano);
 
-  const precoDe = (m: Modulo) => {
-    const mensal = parseFloat(String(m.preco || '0'));
-    const anual = parseFloat(String(m.precoAnual || '0'));
-    const base = periodicidade === 'ANUAL' ? (anual > 0 ? anual : mensal * 11) : mensal;
-    return precoComPacote(base, pacoteObras);
-  };
+  const precoDe = (m: Modulo) =>
+    precoModuloPorPacote(m, pacoteObras, periodicidade);
 
   const total = modulos.reduce((s, m) => s + precoDe(m), 0);
 
@@ -59,7 +59,7 @@ export const Precos: React.FC = () => {
           </h1>
           <p className="mt-5 text-white/80 text-lg max-w-2xl">
             Escolha o plano (Básico, Pro ou Enterprise), mensal ou anual, e pague só pelos
-            módulos que a obra precisa. O Pro usa os preços de tabela.
+            módulos que a obra precisa.
           </p>
           <div className="mt-8 flex flex-col gap-4">
             <div className="grid sm:grid-cols-3 gap-2">

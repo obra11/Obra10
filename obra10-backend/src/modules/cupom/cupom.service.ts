@@ -60,7 +60,13 @@ export class CupomService {
         mesesGratuitos: dto.mesesGratuitos ?? null,
         duracaoMeses: dto.duracaoMeses ?? null,
         usosMaximos: dto.usosMaximos ?? null,
-        expiraEm: dto.expiraEm ? new Date(dto.expiraEm) : null,
+        expiraEm: dto.expiraEm
+          ? (() => {
+              const raw = dto.expiraEm.slice(0, 10);
+              // Fim do dia em Brasília — evita dia “à frente/atrás” com UTC
+              return new Date(`${raw}T23:59:59.999-03:00`);
+            })()
+          : null,
       },
     });
 

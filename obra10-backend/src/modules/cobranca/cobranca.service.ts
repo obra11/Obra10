@@ -14,7 +14,7 @@ import {
   limiteObrasDoPacote,
   PLAN_LIMITS,
   planoDoPacote,
-  precoComPacote,
+  precoModuloPorPacote,
   resolvePacoteObras,
   type PacoteObras,
 } from './pacotes-obras';
@@ -65,18 +65,11 @@ export class CobrancaService {
     const periodicidade = dto.periodicidade === 'ANUAL' ? 'ANUAL' : 'MENSAL';
     const pacoteObras = resolvePacoteObras(dto.pacoteObras);
 
-    // Calculate base price from modules (mensal ou anual) × fator do pacote de obras
-    const valorBase = modulos.reduce((sum, m) => {
-      const mensal = Number(m.preco);
-      const anual = Number((m as any).precoAnual || 0);
-      const base =
-        periodicidade === 'ANUAL'
-          ? anual > 0
-            ? anual
-            : mensal * 11
-          : mensal;
-      return sum + precoComPacote(base, pacoteObras);
-    }, 0);
+    // Preço absoluto por plano (Básico/Pro/Enterprise) cadastrado no módulo
+    const valorBase = modulos.reduce(
+      (sum, m) => sum + precoModuloPorPacote(m as any, pacoteObras, periodicidade),
+      0,
+    );
 
     // Apply coupon if provided
     let cupomAplicado: string | null = null;

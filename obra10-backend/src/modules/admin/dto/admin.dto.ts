@@ -149,23 +149,31 @@ export class CriarCupomAdminDto {
 export class AtualizarCupomAdminDto {
   @IsNumber()
   @IsOptional()
-  valor?: number;
+  valor?: number | null;
 
   @IsNumber()
   @IsOptional()
-  duracaoMeses?: number;
+  mesesGratuitos?: number | null;
 
   @IsNumber()
   @IsOptional()
-  usosMaximos?: number;
+  duracaoMeses?: number | null;
 
-  @IsDateString()
+  @IsNumber()
   @IsOptional()
-  expiraEm?: string;
+  usosMaximos?: number | null;
+
+  /** YYYY-MM-DD — prazo máximo de resgate (fim do dia em Brasília). String vazia limpa. */
+  @IsOptional()
+  expiraEm?: string | null;
 
   @IsBoolean()
   @IsOptional()
   ativo?: boolean;
+
+  @IsEnum(TipoCupom)
+  @IsOptional()
+  tipo?: TipoCupom;
 }
 
 export class EnviarCupomAdminDto {
@@ -185,6 +193,7 @@ export class AtualizarModuloAdminDto {
   @IsOptional()
   descricao?: string;
 
+  /** Preço Pro (tabela) mensal */
   @IsNumber()
   @IsOptional()
   preco?: number;
@@ -192,6 +201,22 @@ export class AtualizarModuloAdminDto {
   @IsNumber()
   @IsOptional()
   precoAnual?: number;
+
+  @IsNumber()
+  @IsOptional()
+  precoBasico?: number;
+
+  @IsNumber()
+  @IsOptional()
+  precoAnualBasico?: number;
+
+  @IsNumber()
+  @IsOptional()
+  precoEnterprise?: number;
+
+  @IsNumber()
+  @IsOptional()
+  precoAnualEnterprise?: number;
 
   @IsBoolean()
   @IsOptional()

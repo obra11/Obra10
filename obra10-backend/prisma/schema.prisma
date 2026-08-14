@@ -339,6 +339,12 @@ model Modulo {
   createdAt      DateTime        @default(now()) @map("created_at")
   preco          Decimal         @default(0) @db.Decimal(10, 2)
   precoAnual     Decimal         @default(0) @map("preco_anual") @db.Decimal(10, 2)
+  /** Preço absoluto Plano Básico (ATE_3). Se 0, usa fator sobre Pro. */
+  precoBasico         Decimal @default(0) @map("preco_basico") @db.Decimal(10, 2)
+  precoAnualBasico    Decimal @default(0) @map("preco_anual_basico") @db.Decimal(10, 2)
+  /** Preço absoluto Plano Enterprise (ILIMITADO). Se 0, usa fator sobre Pro. */
+  precoEnterprise      Decimal @default(0) @map("preco_enterprise") @db.Decimal(10, 2)
+  precoAnualEnterprise Decimal @default(0) @map("preco_anual_enterprise") @db.Decimal(10, 2)
   sigla          String?
   grupo          String          @default("GERAL")
   versao         String          @default("1.0.0")

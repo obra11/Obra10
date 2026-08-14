@@ -21,7 +21,7 @@ import {
   PLANOS,
   PLANO_KEYS,
   pacoteDoPlano,
-  precoComPacote,
+  precoModuloPorPacote,
   resolvePlano,
   resumoPlano,
 } from '../utils/pacotesObras';
@@ -36,6 +36,10 @@ interface ModuloCatalogo {
   descricao?: string;
   preco: number;
   precoAnual?: number;
+  precoBasico?: number;
+  precoAnualBasico?: number;
+  precoEnterprise?: number;
+  precoAnualEnterprise?: number;
 }
 
 export const Assinatura: React.FC = () => {
@@ -159,17 +163,10 @@ export const Assinatura: React.FC = () => {
   const pacoteSelecionado = pacoteDoPlano(planoSelecionado);
   const totalNovos = modulosCatalogo
     .filter((m) => modulosNovos.includes(m.slug))
-    .reduce((sum, m) => {
-      const mensal = Number(m.preco || 0);
-      const anualCad = Number(m.precoAnual || 0);
-      const base =
-        periodicidade === 'ANUAL'
-          ? anualCad > 0
-            ? anualCad
-            : mensal * 11
-          : mensal;
-      return sum + precoComPacote(base, pacoteSelecionado);
-    }, 0);
+    .reduce(
+      (sum, m) => sum + precoModuloPorPacote(m, pacoteSelecionado, periodicidade),
+      0,
+    );
 
   const toggleModulo = (slug: string) => {
     // Módulos já ativos ficam travados (não desativa por aqui)
@@ -642,15 +639,7 @@ export const Assinatura: React.FC = () => {
                 modulosCatalogo.map((m) => {
                   const ativo = slugsAtivos.has(m.slug);
                   const selected = modulosSelecionados.includes(m.slug);
-                  const mensal = Number(m.preco || 0);
-                  const anualCad = Number(m.precoAnual || 0);
-                  const base =
-                    periodicidade === 'ANUAL'
-                      ? anualCad > 0
-                        ? anualCad
-                        : mensal * 11
-                      : mensal;
-                  const preco = precoComPacote(base, pacoteSelecionado);
+                  const preco = precoModuloPorPacote(m, pacoteSelecionado, periodicidade);
                   return (
                     <button
                       key={m.slug}

@@ -4,6 +4,7 @@ import { CryptoService } from '../../core/services/crypto.service';
 import { SuperAdminGuard } from '../../core/guards/super-admin.guard';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { CriarCupomAdminDto, AtualizarCupomAdminDto, EnviarCupomAdminDto } from './dto/admin.dto';
+import { parseDataBrasilFimDoDia } from '../cupom/cupom-data';
 
 @Controller('admin/cupons')
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
@@ -30,6 +31,15 @@ export class AdminCuponsController {
       throw new BadRequestException('Já existe um cupom com este código.');
     }
 
+    let expiraEm: Date | null = null;
+    if (dto.expiraEm) {
+      try {
+        expiraEm = parseDataBrasilFimDoDia(dto.expiraEm.slice(0, 10));
+      } catch {
+        throw new BadRequestException('Data de validade inválida. Use AAAA-MM-DD.');
+      }
+    }
+
     return this.prisma.cupomDesconto.create({
       data: {
         codigo: dto.codigo.toUpperCase(),
@@ -38,7 +48,7 @@ export class AdminCuponsController {
         mesesGratuitos: dto.mesesGratuitos ? dto.mesesGratuitos : null,
         duracaoMeses: dto.duracaoMeses ? dto.duracaoMeses : null,
         usosMaximos: dto.usosMaximos ? dto.usosMaximos : null,
-        expiraEm: dto.expiraEm ? new Date(dto.expiraEm) : null,
+        expiraEm,
         ativo: true
       }
     });
@@ -46,14 +56,33 @@ export class AdminCuponsController {
 
   @Patch(':id')
   async updateCupom(@Param('id') id: string, @Body() dto: AtualizarCupomAdminDto) {
+    const cupom = await this.prisma.cupomDesconto.findUnique({ where: { id } });
+    if (!cupom) throw new NotFoundException('Cupom não encontrado');
+
+    const data: Record<string, unknown> = {};
+
+    if (dto.tipo !== undefined) data.tipo = dto.tipo;
+    if (dto.valor !== undefined) data.valor = dto.valor;
+    if (dto.mesesGratuitos !== undefined) data.mesesGratuitos = dto.mesesGratuitos;
+    if (dto.duracaoMeses !== undefined) data.duracaoMeses = dto.duracaoMeses;
+    if (dto.usosMaximos !== undefined) data.usosMaximos = dto.usosMaximos;
+    if (dto.ativo !== undefined) data.ativo = dto.ativo;
+
+    if (dto.expiraEm !== undefined) {
+      if (dto.expiraEm === null || dto.expiraEm === '') {
+        data.expiraEm = null;
+      } else {
+        try {
+          data.expiraEm = parseDataBrasilFimDoDia(String(dto.expiraEm).slice(0, 10));
+        } catch {
+          throw new BadRequestException('Data de validade inválida. Use AAAA-MM-DD.');
+        }
+      }
+    }
+
     return this.prisma.cupomDesconto.update({
       where: { id },
-      data: {
-        valor: dto.valor,
-        duracaoMeses: dto.duracaoMeses,
-        usosMaximos: dto.usosMaximos,
-        expiraEm: dto.expiraEm ? new Date(dto.expiraEm) : null,
-      }
+      data,
     });
   }
 
@@ -74,12 +103,10 @@ export class AdminCuponsController {
 
     let empresa: any = null;
     
-    // First try by ID if it looks like a UUID
     if (dto.empresaId.length > 20) {
       empresa = await this.prisma.empresa.findUnique({ where: { id: dto.empresaId } });
     }
     
-    // Then try by CNPJ or CPF (decrypted in-memory comparison since columns are encrypted using random IVs)
     if (!empresa) {
       const todasEmpresas = await this.prisma.empresa.findMany();
       empresa = todasEmpresas.find(emp => {

@@ -9,7 +9,7 @@ import {
   PLANO_KEYS,
   pacoteDoPlano,
   planoDoPacote,
-  precoComPacote,
+  precoModuloPorPacote,
   resolvePacoteObras,
   resumoPlano,
   labelPlano,
@@ -26,6 +26,10 @@ interface Modulo {
   descricao?: string;
   preco: number;
   precoAnual?: number;
+  precoBasico?: number;
+  precoAnualBasico?: number;
+  precoEnterprise?: number;
+  precoAnualEnterprise?: number;
   submodulos: SubModulo[];
 }
 
@@ -88,14 +92,8 @@ export const Contratacao: React.FC = () => {
 
   const toggleExpand = (slug: string) => setExpanded(p => ({ ...p, [slug]: !p[slug] }));
 
-  const precoModulo = (m: Modulo) => {
-    let base = Number(m.preco);
-    if (periodicidade === 'ANUAL') {
-      const anual = Number(m.precoAnual || 0);
-      base = anual > 0 ? anual : Number(m.preco) * 11;
-    }
-    return precoComPacote(base, pacoteObras);
-  };
+  const precoModulo = (m: Modulo) =>
+    precoModuloPorPacote(m, pacoteObras, periodicidade);
 
   // Base total (before coupon)
   const totalBase = modulos

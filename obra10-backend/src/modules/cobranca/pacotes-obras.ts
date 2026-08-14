@@ -77,3 +77,48 @@ export function precoComPacote(
   const fator = fatorPrecoPacote(pacote);
   return Math.round(Number(precoBase) * fator * 100) / 100;
 }
+
+/** Campos de preço de um módulo (Pro + opcionais Básico/Enterprise). */
+export type PrecosModulo = {
+  preco: number | string;
+  precoAnual?: number | string | null;
+  precoBasico?: number | string | null;
+  precoAnualBasico?: number | string | null;
+  precoEnterprise?: number | string | null;
+  precoAnualEnterprise?: number | string | null;
+};
+
+/**
+ * Preço do módulo no pacote/plano.
+ * Usa valor absoluto cadastrado (Básico/Enterprise) quando > 0;
+ * caso contrário aplica o fator sobre o preço Pro.
+ */
+export function precoModuloPorPacote(
+  m: PrecosModulo,
+  pacote: PacoteObras,
+  periodicidade: 'MENSAL' | 'ANUAL' = 'MENSAL',
+): number {
+  const anual = periodicidade === 'ANUAL';
+  const mensalPro = Number(m.preco || 0);
+  const anualPro = Number(m.precoAnual || 0);
+
+  if (pacote === 'ATE_3') {
+    const absoluto = anual
+      ? Number(m.precoAnualBasico || 0)
+      : Number(m.precoBasico || 0);
+    if (absoluto > 0) return Math.round(absoluto * 100) / 100;
+  }
+  if (pacote === 'ILIMITADO') {
+    const absoluto = anual
+      ? Number(m.precoAnualEnterprise || 0)
+      : Number(m.precoEnterprise || 0);
+    if (absoluto > 0) return Math.round(absoluto * 100) / 100;
+  }
+
+  const basePro = anual
+    ? anualPro > 0
+      ? anualPro
+      : mensalPro * 11
+    : mensalPro;
+  return precoComPacote(basePro, pacote);
+}

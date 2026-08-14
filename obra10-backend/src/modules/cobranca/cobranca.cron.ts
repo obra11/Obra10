@@ -7,7 +7,7 @@ import { EmailService } from '../email/email.service';
 import { CupomService } from '../cupom/cupom.service';
 import { CryptoService } from '../../core/services/crypto.service';
 import {
-  precoComPacote,
+  precoModuloPorPacote,
   resolvePacoteObras,
 } from './pacotes-obras';
 
@@ -80,16 +80,22 @@ export class CobrancaCron {
         let valorBase = 0;
         const anuaisVencidosSlugs: string[] = [];
         for (const tm of modulosCobraveis) {
-          const mensal = Number(tm.modulo.preco);
-          const anual = Number((tm.modulo as any).precoAnual || 0);
-          const period = (tm as any).periodicidade || 'MENSAL';
+          const period =
+            (tm as any).periodicidade === 'ANUAL' ? 'ANUAL' : 'MENSAL';
           if (period === 'ANUAL') {
             if (tm.expiresAt && tm.expiresAt > agora) continue;
-            const base = anual > 0 ? anual : mensal * 11;
-            valorBase += precoComPacote(base, pacoteObras);
+            valorBase += precoModuloPorPacote(
+              tm.modulo as any,
+              pacoteObras,
+              'ANUAL',
+            );
             anuaisVencidosSlugs.push(tm.modulo.slug);
           } else {
-            valorBase += precoComPacote(mensal, pacoteObras);
+            valorBase += precoModuloPorPacote(
+              tm.modulo as any,
+              pacoteObras,
+              'MENSAL',
+            );
           }
         }
         const cobrancaPeriodicidade =

@@ -20,7 +20,7 @@ import {
   limiteObrasDoPacote,
   pacoteDoPlano,
   PLAN_LIMITS,
-  precoComPacote,
+  precoModuloPorPacote,
   resolvePacoteObras,
   resolvePlano,
 } from '../cobranca/pacotes-obras';
@@ -434,10 +434,11 @@ export class TenantService {
       const anual = anualCadastro > 0 ? anualCadastro : mensal * 11;
       const periodicidade =
         (tm as any).periodicidade === 'ANUAL' ? 'ANUAL' : 'MENSAL';
-      const precoBase = periodicidade === 'ANUAL' ? anual : mensal;
       const disponivelNoCatalogo = tm.modulo.ativo !== false;
       const cobravel = tm.ativo && disponivelNoCatalogo;
-      const valor = cobravel ? precoComPacote(precoBase, pacoteObras) : 0;
+      const valor = cobravel
+        ? precoModuloPorPacote(tm.modulo as any, pacoteObras, periodicidade)
+        : 0;
       return {
         nome: tm.modulo.nome,
         slug: tm.modulo.slug,
