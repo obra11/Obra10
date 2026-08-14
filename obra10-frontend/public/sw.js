@@ -1,5 +1,5 @@
-const CACHE_NAME = 'obra10-v2.6.9';
-// Não pré-cachear '/' — HTML antigo no SW redirecionava logados para o app.
+const CACHE_NAME = 'obra10-v2.7.0';
+// Não pré-cachear '/' nem imagens de marca — HTML/JS antigos mostravam watermark Lunardeli.
 const STATIC_ASSETS = [
   '/favicon-16.png',
   '/favicon-32.png',
@@ -13,76 +13,80 @@ const STATIC_ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)),
   );
-  self.skipWaiting(); // Não esperar tabs fecharem
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    ).then(() => {
-      // Notificar todos os clients que uma nova versão foi ativada
-      self.clients.matchAll().then((clients) => {
-        clients.forEach((client) => {
-          client.postMessage({ type: 'SW_UPDATED', version: CACHE_NAME });
-        });
-      });
-      return self.clients.claim(); // Tomar controle de todas as tabs
-    })
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      .then(() => caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)))
+      .then(() =>
+        self.clients.matchAll().then((clients) => {
+          clients.forEach((client) => {
+            client.postMessage({ type: 'SW_UPDATED', version: CACHE_NAME });
+          });
+        }),
+      )
+      .then(() => self.clients.claim()),
   );
 });
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-  
-  // Only handle GET requests
   if (request.method !== 'GET') return;
-  
+
   const url = new URL(request.url);
 
-  // Apenas cacheia assets estáticos conhecidos. Nunca cachear chamadas de API.
-  const isGoogleFont = 
-    url.hostname.includes('fonts.gstatic.com') || 
+  const isGoogleFont =
+    url.hostname.includes('fonts.gstatic.com') ||
     url.hostname.includes('fonts.googleapis.com');
 
-  const isStaticAsset =
+  // JS/CSS/HTML: sempre rede primeiro (evita watermark/layout antigo no cache)
+  const isAppShell =
+    request.mode === 'navigate' ||
+    request.destination === 'document' ||
     url.pathname.startsWith('/assets/') ||
-    url.pathname === '/manifest.json' ||
+    url.pathname === '/sw.js' ||
+    url.pathname === '/manifest.json';
+
+  const isStaticAsset =
     url.pathname.endsWith('.png') ||
-    url.pathname.endsWith('.jpg') ||
-    url.pathname.endsWith('.jpeg') ||
     url.pathname.endsWith('.svg') ||
     url.pathname.endsWith('.ico') ||
     url.pathname.endsWith('.woff') ||
     url.pathname.endsWith('.woff2') ||
     isGoogleFont;
 
-  // Navegação SPA: sempre rede, sem cachear HTML (HTML antigo redirecionava logados ao app)
-  const isNavigation = request.mode === 'navigate' || request.destination === 'document';
-
-  if (!isStaticAsset && !isNavigation) {
-    // API dinâmica — rede direta, sem Service Worker
+  // Nunca cachear /brand (logos Lunardeli) — evita watermark fantasma
+  if (url.pathname.startsWith('/brand/')) {
+    event.respondWith(fetch(request));
     return;
   }
 
+  if (!isAppShell && !isStaticAsset) return;
+
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (isNavigation) {
-        return fetch(request).catch(
-          () => cached || new Response('Offline', { status: 503 }),
-        );
-      }
-      // Cache-first para assets estáticos compilados
-      return cached || fetch(request).then((response) => {
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+    (async () => {
+      if (isAppShell) {
+        try {
+          return await fetch(request);
+        } catch {
+          const cached = await caches.match(request);
+          return cached || new Response('Offline', { status: 503 });
         }
-        return response;
-      });
-    })
+      }
+      const cached = await caches.match(request);
+      if (cached) return cached;
+      const response = await fetch(request);
+      if (response.ok) {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+      }
+      return response;
+    })(),
   );
 });
-
