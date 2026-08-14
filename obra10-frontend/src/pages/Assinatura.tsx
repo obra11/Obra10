@@ -10,6 +10,8 @@ import {
   Building2,
   Loader2,
   Filter,
+  CheckCircle,
+  QrCode,
 } from 'lucide-react';
 import api from '../services/api';
 import { format } from 'date-fns';
@@ -19,12 +21,22 @@ import {
   PACOTES_OBRAS,
   PLANOS,
   PLANO_KEYS,
+  pacoteDoPlano,
+  precoComPacote,
   resolvePlano,
 } from '../utils/pacotesObras';
 import type { PlanoNome } from '../utils/pacotesObras';
 
 const money = (v: number) =>
   Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+interface ModuloCatalogo {
+  slug: string;
+  nome: string;
+  descricao?: string;
+  preco: number;
+  precoAnual?: number;
+}
 
 export const Assinatura: React.FC = () => {
   const navigate = useNavigate();
@@ -34,6 +46,11 @@ export const Assinatura: React.FC = () => {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
   const [planoSelecionado, setPlanoSelecionado] = useState<PlanoNome>('PRO');
+  const [modulosCatalogo, setModulosCatalogo] = useState<ModuloCatalogo[]>([]);
+  const [modulosSelecionados, setModulosSelecionados] = useState<string[]>([]);
+  const [periodicidade, setPeriodicidade] = useState<'MENSAL' | 'ANUAL'>('MENSAL');
+  const [formaPagamento, setFormaPagamento] = useState<'PIX' | 'CARTAO'>('PIX');
+  const [upgradeError, setUpgradeError] = useState('');
 
   const [cobrancas, setCobrancas] = useState<any[]>([]);
   const [loadingCobrancas, setLoadingCobrancas] = useState(false);
@@ -56,6 +73,27 @@ export const Assinatura: React.FC = () => {
       alert('Erro ao carregar dados do plano.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const abrirModalAlterar = async () => {
+    setUpgradeError('');
+    setPlanoSelecionado(resolvePlano(dados?.plano));
+    setPeriodicidade('MENSAL');
+    setFormaPagamento('PIX');
+    const ativos = (dados?.modulos || [])
+      .filter((m: any) => m.ativo)
+      .map((m: any) => m.slug as string);
+    setModulosSelecionados(ativos);
+    setShowUpgradeModal(true);
+    try {
+      const res = await api.get('/modulos');
+      const filtered = (res.data as ModuloCatalogo[]).filter(
+        (m) => m.slug !== 'IA' && m.slug !== 'CONCRETO',
+      );
+      setModulosCatalogo(filtered);
+    } catch {
+      setUpgradeError('Não foi possível carregar os módulos.');
     }
   };
 
@@ -93,16 +131,82 @@ export const Assinatura: React.FC = () => {
     }
   };
 
+  const slugsAtivos = new Set(
+    (dados?.modulos || []).filter((m: any) => m.ativo).map((m: any) => m.slug),
+  );
+  const modulosNovos = modulosSelecionados.filter((s) => !slugsAtivos.has(s));
+  const pacoteSelecionado = pacoteDoPlano(planoSelecionado);
+  const totalNovos = modulosCatalogo
+    .filter((m) => modulosNovos.includes(m.slug))
+    .reduce((sum, m) => {
+      const mensal = Number(m.preco || 0);
+      const anualCad = Number(m.precoAnual || 0);
+      const base =
+        periodicidade === 'ANUAL'
+          ? anualCad > 0
+            ? anualCad
+            : mensal * 11
+          : mensal;
+      return sum + precoComPacote(base, pacoteSelecionado);
+    }, 0);
+
+  const toggleModulo = (slug: string) => {
+    // Módulos já ativos ficam travados (não desativa por aqui)
+    if (slugsAtivos.has(slug)) return;
+    setModulosSelecionados((prev) =>
+      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug],
+    );
+  };
+
   const handleUpgrade = async () => {
-    if (!planoSelecionado || planoSelecionado === dados?.plano) return;
+    const mudouPlano = planoSelecionado !== dados?.plano;
+    if (!mudouPlano && modulosNovos.length === 0) {
+      setUpgradeError('Selecione outro plano ou adicione pelo menos um módulo novo.');
+      return;
+    }
+
     setUpgrading(true);
+    setUpgradeError('');
     try {
-      await api.post('/tenants/meu-plano/upgrade', { plano: planoSelecionado });
+      if (mudouPlano) {
+        await api.post('/tenants/meu-plano/upgrade', { plano: planoSelecionado });
+      }
+
+      if (modulosNovos.length > 0) {
+        const res = await api.post('/cobrancas/contratar', {
+          modulosSelecionados: modulosNovos,
+          formaPagamento,
+          periodicidade,
+          pacoteObras: pacoteSelecionado,
+        });
+
+        if (res.data.status === 'PAGO' || res.data.valor === 0) {
+          alert('Plano/módulos atualizados com sucesso!');
+          setShowUpgradeModal(false);
+          carregarDados();
+          return;
+        }
+
+        setShowUpgradeModal(false);
+        navigate(`/aguardando-pagamento/${res.data.cobrancaId}`, {
+          state: {
+            qrCode: res.data.qrCode,
+            qrCodeBase64: res.data.qrCodeBase64,
+            linkPagamento: res.data.linkPagamento,
+            valor: res.data.valor,
+            method: formaPagamento === 'CARTAO' ? 'paypal' : 'pix',
+          },
+        });
+        return;
+      }
+
       alert('Plano atualizado com sucesso!');
       setShowUpgradeModal(false);
       carregarDados();
     } catch (e: any) {
-      alert('Erro ao atualizar plano: ' + (e?.response?.data?.message || e.message));
+      setUpgradeError(
+        e?.response?.data?.message || 'Erro ao atualizar plano/módulos.',
+      );
     } finally {
       setUpgrading(false);
     }
@@ -166,7 +270,7 @@ export const Assinatura: React.FC = () => {
               )}
             </div>
             <button
-              onClick={() => setShowUpgradeModal(true)}
+              onClick={abrirModalAlterar}
               className="px-4 py-2 bg-lunardeli-red text-white font-bold rounded-lg hover:bg-red-700 transition-colors"
             >
               Alterar Plano
@@ -433,13 +537,18 @@ export const Assinatura: React.FC = () => {
 
       {showUpgradeModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
-            <h3 className="text-2xl font-black mb-2 text-lunardeli-dark">Escolher novo Plano</h3>
-            <p className="text-gray-500 mb-6 text-sm">
-              Selecione o plano conforme o número de obras da sua operação.
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-2xl font-black mb-2 text-lunardeli-dark">
+              Alterar plano e módulos
+            </h3>
+            <p className="text-gray-500 mb-5 text-sm">
+              Escolha o plano (número de obras) e, se quiser, adicione novos módulos.
             </p>
 
-            <div className="space-y-4 mb-8">
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">
+              Plano
+            </p>
+            <div className="space-y-3 mb-6">
               {PLANO_KEYS.map((opt) => {
                 const info = PLANOS[opt];
                 const pacote = PACOTES_OBRAS[info.pacote];
@@ -456,10 +565,7 @@ export const Assinatura: React.FC = () => {
                     <div className="flex justify-between items-center">
                       <div>
                         <h4 className="font-bold text-lg text-gray-800">{info.label}</h4>
-                        <p className="text-sm text-gray-500 mt-1">
-                          {pacote.label}
-                          {pacote.limite == null ? '' : ` · limite ${pacote.limite}`}
-                        </p>
+                        <p className="text-sm text-gray-500 mt-1">{pacote.label}</p>
                         <p className="text-xs text-gray-400 mt-1">
                           Até {info.limiteUsuarios} usuários ·{' '}
                           {opt === 'PRO'
@@ -484,6 +590,144 @@ export const Assinatura: React.FC = () => {
               })}
             </div>
 
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">
+              Módulos
+            </p>
+            <p className="text-xs text-gray-400 mb-3">
+              Módulos já ativos aparecem marcados e não podem ser desativados aqui. Marque
+              novos para contratar.
+            </p>
+            <div className="space-y-2 mb-5 max-h-56 overflow-y-auto border border-gray-100 rounded-xl p-2">
+              {modulosCatalogo.length === 0 ? (
+                <p className="text-sm text-gray-400 p-3 text-center">Carregando módulos...</p>
+              ) : (
+                modulosCatalogo.map((m) => {
+                  const ativo = slugsAtivos.has(m.slug);
+                  const selected = modulosSelecionados.includes(m.slug);
+                  const mensal = Number(m.preco || 0);
+                  const anualCad = Number(m.precoAnual || 0);
+                  const base =
+                    periodicidade === 'ANUAL'
+                      ? anualCad > 0
+                        ? anualCad
+                        : mensal * 11
+                      : mensal;
+                  const preco = precoComPacote(base, pacoteSelecionado);
+                  return (
+                    <button
+                      key={m.slug}
+                      type="button"
+                      onClick={() => toggleModulo(m.slug)}
+                      disabled={ativo}
+                      className={`w-full text-left p-3 rounded-lg border flex items-center justify-between gap-3 transition-colors ${
+                        selected
+                          ? 'border-red-500 bg-red-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      } ${ativo ? 'opacity-80 cursor-default' : ''}`}
+                    >
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div
+                          className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
+                            selected
+                              ? 'border-red-500 bg-red-500'
+                              : 'border-gray-300'
+                          }`}
+                        >
+                          {selected && <CheckCircle size={12} className="text-white" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 text-sm">{m.nome}</p>
+                          {ativo && (
+                            <span className="text-[10px] font-bold uppercase text-green-700">
+                              Já contratado
+                            </span>
+                          )}
+                          {m.descricao && (
+                            <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+                              {m.descricao}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-sm font-bold text-gray-800 shrink-0">
+                        {money(preco)}
+                        <span className="text-[10px] font-normal text-gray-400">
+                          /{periodicidade === 'ANUAL' ? 'ano' : 'mês'}
+                        </span>
+                      </p>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            {modulosNovos.length > 0 && (
+              <>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setPeriodicidade('MENSAL')}
+                    className={`py-2.5 rounded-lg text-sm font-bold ${
+                      periodicidade === 'MENSAL'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    Mensal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPeriodicidade('ANUAL')}
+                    className={`py-2.5 rounded-lg text-sm font-bold ${
+                      periodicidade === 'ANUAL'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    Anual
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setFormaPagamento('PIX')}
+                    className={`py-2.5 rounded-lg border-2 text-sm font-semibold ${
+                      formaPagamento === 'PIX'
+                        ? 'border-red-500 bg-red-50 text-red-700'
+                        : 'border-gray-200 text-gray-500'
+                    }`}
+                  >
+                    PIX
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormaPagamento('CARTAO')}
+                    className={`py-2.5 rounded-lg border-2 text-sm font-semibold ${
+                      formaPagamento === 'CARTAO'
+                        ? 'border-red-500 bg-red-50 text-red-700'
+                        : 'border-gray-200 text-gray-500'
+                    }`}
+                  >
+                    Cartão
+                  </button>
+                </div>
+                <div className="mb-4 flex justify-between items-center bg-gray-50 rounded-lg px-4 py-3">
+                  <span className="text-sm text-gray-600">
+                    Novos módulos ({modulosNovos.length})
+                  </span>
+                  <span className="text-lg font-extrabold text-gray-900">
+                    {money(totalNovos)}
+                  </span>
+                </div>
+              </>
+            )}
+
+            {upgradeError && (
+              <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg border-l-4 border-red-500">
+                {upgradeError}
+              </div>
+            )}
+
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setShowUpgradeModal(false)}
@@ -493,10 +737,24 @@ export const Assinatura: React.FC = () => {
               </button>
               <button
                 onClick={handleUpgrade}
-                disabled={upgrading || planoSelecionado === dados?.plano}
+                disabled={
+                  upgrading ||
+                  (planoSelecionado === dados?.plano && modulosNovos.length === 0)
+                }
                 className="px-6 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                {upgrading ? 'Salvando...' : 'Confirmar'}
+                {upgrading ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> Salvando...
+                  </>
+                ) : modulosNovos.length > 0 ? (
+                  <>
+                    {formaPagamento === 'PIX' ? <QrCode size={16} /> : <CreditCard size={16} />}
+                    Confirmar e cobrar
+                  </>
+                ) : (
+                  'Confirmar plano'
+                )}
               </button>
             </div>
           </div>
