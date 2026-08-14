@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { Obra10Logo } from '../components/Obra10Logo';
+import { useAuth } from '../context/AuthContext';
 
 const NAV = [
   { to: '/produto', label: 'Produto' },
@@ -13,6 +14,9 @@ const NAV = [
 export const MarketingLayout: React.FC = () => {
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const { isAuthenticated, user } = useAuth();
+  const painelTo =
+    user?.perfilGlobal === 'SUPER_ADMIN' ? '/admin/dashboard' : '/dashboard';
 
   React.useEffect(() => {
     setOpen(false);
@@ -53,18 +57,29 @@ export const MarketingLayout: React.FC = () => {
           </nav>
 
           <div className="hidden md:flex items-center gap-2">
-            <Link
-              to="/login"
-              className="px-3 py-2 text-sm font-semibold text-lunardeli-charcoal hover:text-lunardeli-red"
-            >
-              Área do cliente
-            </Link>
-            <Link
-              to="/register"
-              className="px-4 py-2.5 text-sm font-bold text-white bg-lunardeli-red hover:bg-lunardeli-deep rounded-lg transition-colors"
-            >
-              Começar
-            </Link>
+            {isAuthenticated ? (
+              <Link
+                to={painelTo}
+                className="px-4 py-2.5 text-sm font-bold text-white bg-lunardeli-red hover:bg-lunardeli-deep rounded-lg transition-colors"
+              >
+                Ir para o painel
+              </Link>
+            ) : (
+              <>
+                <Link
+                  to="/login"
+                  className="px-3 py-2 text-sm font-semibold text-lunardeli-charcoal hover:text-lunardeli-red"
+                >
+                  Área do cliente
+                </Link>
+                <Link
+                  to="/register"
+                  className="px-4 py-2.5 text-sm font-bold text-white bg-lunardeli-red hover:bg-lunardeli-deep rounded-lg transition-colors"
+                >
+                  Começar
+                </Link>
+              </>
+            )}
           </div>
 
           <button
@@ -88,18 +103,29 @@ export const MarketingLayout: React.FC = () => {
                 {item.label}
               </Link>
             ))}
-            <Link
-              to="/login"
-              className="block px-3 py-3 text-sm font-semibold text-lunardeli-charcoal"
-            >
-              Área do cliente
-            </Link>
-            <Link
-              to="/register"
-              className="block text-center px-3 py-3 text-sm font-bold text-white bg-lunardeli-red rounded-lg"
-            >
-              Começar
-            </Link>
+            {isAuthenticated ? (
+              <Link
+                to={painelTo}
+                className="block text-center px-3 py-3 text-sm font-bold text-white bg-lunardeli-red rounded-lg"
+              >
+                Ir para o painel
+              </Link>
+            ) : (
+              <>
+                <Link
+                  to="/login"
+                  className="block px-3 py-3 text-sm font-semibold text-lunardeli-charcoal"
+                >
+                  Área do cliente
+                </Link>
+                <Link
+                  to="/register"
+                  className="block text-center px-3 py-3 text-sm font-bold text-white bg-lunardeli-red rounded-lg"
+                >
+                  Começar
+                </Link>
+              </>
+            )}
           </div>
         )}
       </header>
@@ -134,12 +160,20 @@ export const MarketingLayout: React.FC = () => {
               Cliente
             </p>
             <div className="space-y-2 text-sm font-medium">
-              <Link to="/login" className="block hover:text-lunardeli-red">
-                Área do cliente
-              </Link>
-              <Link to="/register" className="block hover:text-lunardeli-red">
-                Criar conta
-              </Link>
+              {isAuthenticated ? (
+                <Link to={painelTo} className="block hover:text-lunardeli-red">
+                  Ir para o painel
+                </Link>
+              ) : (
+                <>
+                  <Link to="/login" className="block hover:text-lunardeli-red">
+                    Área do cliente
+                  </Link>
+                  <Link to="/register" className="block hover:text-lunardeli-red">
+                    Criar conta
+                  </Link>
+                </>
+              )}
               <a
                 href="mailto:contato@obra10.com.br"
                 className="block hover:text-lunardeli-red"

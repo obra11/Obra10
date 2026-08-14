@@ -1,6 +1,6 @@
-const CACHE_NAME = 'obra10-v2.6.6';
+const CACHE_NAME = 'obra10-v2.6.7';
+// Não pré-cachear '/' — HTML antigo no SW redirecionava logados para o app.
 const STATIC_ASSETS = [
-  '/',
   '/favicon-16.png',
   '/favicon-32.png',
   '/favicon.svg',
@@ -49,7 +49,6 @@ self.addEventListener('fetch', (event) => {
 
   const isStaticAsset =
     url.pathname.startsWith('/assets/') ||
-    url.pathname === '/' ||
     url.pathname === '/manifest.json' ||
     url.pathname.endsWith('.png') ||
     url.pathname.endsWith('.jpg') ||
@@ -60,20 +59,20 @@ self.addEventListener('fetch', (event) => {
     url.pathname.endsWith('.woff2') ||
     isGoogleFont;
 
-  // SPA navigation documents (like /login, /admin/empresas, /dashboard) request the HTML page
-  const isNavigation = request.destination === 'document';
+  // Navegação SPA: sempre rede, sem cachear HTML (HTML antigo redirecionava logados ao app)
+  const isNavigation = request.mode === 'navigate' || request.destination === 'document';
 
   if (!isStaticAsset && !isNavigation) {
-    // É uma requisição de API dinâmica (ex: /admin/empresas, /obras, /usuarios)
-    // Deixa passar direto para a rede sem encostar no cache do Service Worker
+    // API dinâmica — rede direta, sem Service Worker
     return;
   }
 
   event.respondWith(
     caches.match(request).then((cached) => {
-      // Network-first para páginas/documentos (index.html de navegação)
       if (isNavigation) {
-        return fetch(request).catch(() => cached || new Response('Offline', { status: 503 }));
+        return fetch(request).catch(
+          () => cached || new Response('Offline', { status: 503 }),
+        );
       }
       // Cache-first para assets estáticos compilados
       return cached || fetch(request).then((response) => {
