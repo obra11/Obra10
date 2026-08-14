@@ -8,6 +8,8 @@ import { AdminCuponsController } from './admin-cupons.controller';
 import { AdminMetricasController } from './admin-metricas.controller';
 import { AdminModulosController } from './admin-modulos.controller';
 import { AdminMetricasService } from './admin-metricas.service';
+import { AdminFinanceiroController } from './admin-financeiro.controller';
+import { AdminFinanceiroService } from './admin-financeiro.service';
 import { CobrancaModule } from '../cobranca/cobranca.module';
 
 @Module({
@@ -19,8 +21,8 @@ import { CobrancaModule } from '../cobranca/cobranca.module';
     AdminCuponsController,
     AdminMetricasController,
     AdminModulosController,
+    AdminFinanceiroController,
   ],
-  providers: [AdminMetricasService],
+  providers: [AdminMetricasService, AdminFinanceiroService],
 })
 export class AdminModule {}
-

@@ -203,6 +203,17 @@ export class CobrancaCron {
   }
 
   async handleDelinquency() {
+    // Marca PENDENTE vencidas como VENCIDO (status usado pelo aging e suspensão)
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    await this.prisma.cobranca.updateMany({
+      where: {
+        status: 'PENDENTE',
+        dataVencimento: { lt: hoje },
+      },
+      data: { status: 'VENCIDO' },
+    });
+
     const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
     const vencidas = await this.prisma.cobranca.findMany({
       where: {
@@ -230,6 +241,24 @@ export class CobrancaCron {
         `🔴 Empresa ${c.empresaId} suspensa por inadimplência (${novoDias} dias)`,
       );
     }
+  }
+
+  /** Diário 06:00 — promove PENDENTE vencidas para VENCIDO */
+  @Cron('0 6 * * *')
+  async marcarCobrancasVencidas() {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const result = await this.prisma.cobranca.updateMany({
+      where: {
+        status: 'PENDENTE',
+        dataVencimento: { lt: hoje },
+      },
+      data: { status: 'VENCIDO' },
+    });
+    if (result.count > 0) {
+      this.logger.log(`⏰ ${result.count} cobrança(s) marcada(s) como VENCIDO`);
+    }
+    await this.handleDelinquency();
   }
 
   // Reprocess failed webhooks — runs hourly

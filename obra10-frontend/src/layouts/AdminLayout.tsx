@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Building2, Users, Package, Ticket, LogOut, ToggleLeft, Headphones } from 'lucide-react';
+import { LayoutDashboard, Building2, Users, Package, Ticket, LogOut, ToggleLeft, Headphones, Wallet } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Obra10Logo } from '../components/Obra10Logo';
 
@@ -15,6 +15,7 @@ export const AdminLayout: React.FC = () => {
 
   const navItems = [
     { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/admin/financeiro', icon: Wallet, label: 'Financeiro' },
     { to: '/admin/empresas', icon: Building2, label: 'Empresas' },
     { to: '/admin/usuarios', icon: Users, label: 'Usuários' },
     { to: '/admin/modulos', icon: Package, label: 'Módulos' },

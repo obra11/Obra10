@@ -239,3 +239,54 @@ export class ConfirmarPagamentoManualAdminDto {
   @IsString()
   senha: string;
 }
+
+export class CriarDespesaFinanceiraDto {
+  @IsString()
+  descricao: string;
+
+  @IsNumber()
+  @Min(0.01)
+  valor: number;
+
+  @IsDateString()
+  data: string;
+
+  @IsString()
+  @IsOptional()
+  categoria?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  recorrente?: boolean;
+
+  @IsString()
+  @IsOptional()
+  observacao?: string;
+}
+
+export class AtualizarDespesaFinanceiraDto {
+  @IsString()
+  @IsOptional()
+  descricao?: string;
+
+  @IsNumber()
+  @Min(0.01)
+  @IsOptional()
+  valor?: number;
+
+  @IsDateString()
+  @IsOptional()
+  data?: string;
+
+  @IsString()
+  @IsOptional()
+  categoria?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  recorrente?: boolean;
+
+  @IsString()
+  @IsOptional()
+  observacao?: string;
+}

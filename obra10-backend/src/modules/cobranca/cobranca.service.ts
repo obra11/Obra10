@@ -268,15 +268,19 @@ export class CobrancaService {
     if (cobranca.empresaId !== empresaId) throw new ForbiddenException('Acesso negado.');
     if (cobranca.status === 'PAGO') return { success: true }; // Idempotent
 
-    await this.processarPagamentoLocal(cobranca);
+    await this.processarPagamentoLocal(cobranca, 'PAYPAL');
     return { success: true };
   }
 
-  private async processarPagamentoLocal(cobranca: any) {
+  private async processarPagamentoLocal(cobranca: any, formaPagamento?: string) {
 
     await this.prisma.cobranca.update({
       where: { id: cobranca.id },
-      data: { status: 'PAGO', dataPagamento: new Date() },
+      data: {
+        status: 'PAGO',
+        dataPagamento: new Date(),
+        ...(formaPagamento ? { formaPagamento } : {}),
+      },
     });
 
     // Reactivate if suspended + reset delinquency

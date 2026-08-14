@@ -38,6 +38,7 @@ import { AdminModulos } from '../pages/admin/AdminModulos';
 import { AdminCupons } from '../pages/admin/AdminCupons';
 import { AdminFeatures } from '../pages/admin/AdminFeatures';
 import { AdminSuporte } from '../pages/admin/AdminSuporte';
+import { AdminFinanceiro } from '../pages/admin/AdminFinanceiro';
 import { SuportePage } from '../pages/SuportePage';
 import { MarketingLayout } from '../layouts/MarketingLayout';
 import { MarketingHome } from '../pages/marketing/MarketingHome';
@@ -79,6 +80,7 @@ export const AppRoutes: React.FC = () => {
       {/* === SUPER ADMIN === */}
       <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
         <Route path="dashboard" element={<AdminDashboard />} />
+        <Route path="financeiro" element={<AdminFinanceiro />} />
         <Route path="empresas" element={<AdminEmpresas />} />
         <Route path="empresas/:id" element={<AdminEmpresaDetalhe />} />
         <Route path="usuarios" element={<AdminUsuarios />} />

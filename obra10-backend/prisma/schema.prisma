@@ -661,3 +661,21 @@ model MensagemChamadoSuporte {
   @@index([autorId])
   @@map("mensagens_chamado_suporte")
 }
+
+/// Despesas manuais da plataforma (superadmin — fluxo de caixa / saídas)
+model DespesaFinanceira {
+  id          String   @id @default(uuid())
+  descricao   String
+  valor       Decimal  @db.Decimal(10, 2)
+  data        DateTime
+  categoria   String   @default("outro")
+  recorrente  Boolean  @default(false)
+  observacao  String?
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([data])
+  @@index([categoria])
+  @@map("despesas_financeiras")
+}
