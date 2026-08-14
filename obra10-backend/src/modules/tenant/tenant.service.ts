@@ -20,6 +20,8 @@ import {
   limiteObrasDoPacote,
   pacoteDoPlano,
   PLAN_LIMITS,
+  precoComPacote,
+  resolvePacoteObras,
   resolvePlano,
 } from '../cobranca/pacotes-obras';
 
@@ -415,8 +417,7 @@ export class TenantService {
           include: { modulo: true },
         },
         cobrancas: {
-          orderBy: { createdAt: 'desc' },
-          take: 12,
+          orderBy: { mesReferencia: 'desc' },
         },
         _count: {
           select: { usuarios: { where: { deletedAt: null } } },
@@ -426,23 +427,98 @@ export class TenantService {
 
     if (!empresa) throw new NotFoundException('Empresa não encontrada.');
 
+    const pacoteObras = resolvePacoteObras((empresa as any).pacoteObras);
+    const modulos = empresa.tenantModulos.map((tm) => {
+      const mensal = Number(tm.modulo.preco || 0);
+      const anualCadastro = Number((tm.modulo as any).precoAnual || 0);
+      const anual = anualCadastro > 0 ? anualCadastro : mensal * 11;
+      const periodicidade =
+        (tm as any).periodicidade === 'ANUAL' ? 'ANUAL' : 'MENSAL';
+      const precoBase = periodicidade === 'ANUAL' ? anual : mensal;
+      const valor = precoComPacote(precoBase, pacoteObras);
+      return {
+        nome: tm.modulo.nome,
+        slug: tm.modulo.slug,
+        ativo: tm.ativo,
+        expiresAt: tm.expiresAt,
+        periodicidade,
+        precoTabelaMensal: mensal,
+        precoTabelaAnual: anual,
+        valor,
+      };
+    });
+
+    const ativos = modulos.filter((m) => m.ativo);
+    const valorMensal = ativos
+      .filter((m) => m.periodicidade === 'MENSAL')
+      .reduce((s, m) => s + m.valor, 0);
+    const valorAnual = ativos
+      .filter((m) => m.periodicidade === 'ANUAL')
+      .reduce((s, m) => s + m.valor, 0);
+    const valorPlano = Math.round((valorMensal + valorAnual) * 100) / 100;
+
     return {
       plano: empresa.plano,
       limiteUsuarios: empresa.limiteUsuarios,
       usuariosAtivos: empresa._count.usuarios,
-      pacoteObras: (empresa as any).pacoteObras ?? 'ATE_5',
+      pacoteObras,
       limiteObras: (empresa as any).limiteObras ?? 5,
       ativo: empresa.ativo,
       suspensa: empresa.suspensa,
       diasInadimplente: empresa.diasInadimplente,
       createdAt: empresa.createdAt,
-      modulos: empresa.tenantModulos.map((tm) => ({
-        nome: tm.modulo.nome,
-        slug: tm.modulo.slug,
-        ativo: tm.ativo,
-        expiresAt: tm.expiresAt,
-      })),
+      valorPlano,
+      valorMensal: Math.round(valorMensal * 100) / 100,
+      valorAnual: Math.round(valorAnual * 100) / 100,
+      modulos,
       historicoCobrancas: empresa.cobrancas,
+    };
+  }
+
+  async listarHistoricoCobrancas(
+    empresaId: string,
+    filtros: { inicio?: string; fim?: string; status?: string } = {},
+  ) {
+    const where: any = { empresaId };
+
+    if (filtros.status) {
+      where.status = filtros.status;
+    }
+
+    if (filtros.inicio || filtros.fim) {
+      where.mesReferencia = {};
+      if (filtros.inicio) {
+        const d = new Date(filtros.inicio);
+        if (Number.isNaN(d.getTime())) {
+          throw new BadRequestException('Data início inválida.');
+        }
+        where.mesReferencia.gte = new Date(d.getFullYear(), d.getMonth(), 1);
+      }
+      if (filtros.fim) {
+        const d = new Date(filtros.fim);
+        if (Number.isNaN(d.getTime())) {
+          throw new BadRequestException('Data fim inválida.');
+        }
+        where.mesReferencia.lte = new Date(
+          d.getFullYear(),
+          d.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999,
+        );
+      }
+    }
+
+    const items = await this.prisma.cobranca.findMany({
+      where,
+      orderBy: { mesReferencia: 'desc' },
+    });
+
+    return {
+      total: items.length,
+      items,
     };
   }
 

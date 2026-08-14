@@ -70,6 +70,23 @@ export class TenantController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('tenants/meu-plano/cobrancas')
+  async getMeuHistoricoCobrancas(
+    @Req() req: any,
+    @Query('inicio') inicio?: string,
+    @Query('fim') fim?: string,
+    @Query('status') status?: string,
+  ) {
+    const empresaId = req.user?.empresaId;
+    if (!empresaId) throw new ForbiddenException('Sessão inválida.');
+    return this.tenantService.listarHistoricoCobrancas(empresaId, {
+      inicio,
+      fim,
+      status,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post('tenants/meu-plano/upgrade')
   async upgradeMeuPlano(@Req() req: any, @Body() dto: UpgradePlanoDto) {
     const empresaId = req.user?.empresaId;

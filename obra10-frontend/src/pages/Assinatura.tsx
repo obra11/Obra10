@@ -1,8 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CreditCard, ShieldCheck, Clock, Users, Package, Building2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  CreditCard,
+  ShieldCheck,
+  Clock,
+  Users,
+  Package,
+  Building2,
+  Loader2,
+  Filter,
+} from 'lucide-react';
 import api from '../services/api';
 import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import {
   labelPlano,
   PACOTES_OBRAS,
@@ -12,14 +23,23 @@ import {
 } from '../utils/pacotesObras';
 import type { PlanoNome } from '../utils/pacotesObras';
 
+const money = (v: number) =>
+  Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
 export const Assinatura: React.FC = () => {
   const navigate = useNavigate();
   const [dados, setDados] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  
+
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
   const [planoSelecionado, setPlanoSelecionado] = useState<PlanoNome>('PRO');
+
+  const [cobrancas, setCobrancas] = useState<any[]>([]);
+  const [loadingCobrancas, setLoadingCobrancas] = useState(false);
+  const [filtroInicio, setFiltroInicio] = useState('');
+  const [filtroFim, setFiltroFim] = useState('');
+  const [filtroStatus, setFiltroStatus] = useState('');
 
   useEffect(() => {
     carregarDados();
@@ -30,6 +50,7 @@ export const Assinatura: React.FC = () => {
       const response = await api.get('/tenants/meu-plano');
       setDados(response.data);
       setPlanoSelecionado(resolvePlano(response.data.plano));
+      setCobrancas(response.data.historicoCobrancas || []);
     } catch (err) {
       console.error(err);
       alert('Erro ao carregar dados do plano.');
@@ -38,11 +59,35 @@ export const Assinatura: React.FC = () => {
     }
   };
 
+  const carregarCobrancas = async (override?: {
+    inicio?: string;
+    fim?: string;
+    status?: string;
+  }) => {
+    setLoadingCobrancas(true);
+    try {
+      const params: Record<string, string> = {};
+      const inicio = override?.inicio ?? filtroInicio;
+      const fim = override?.fim ?? filtroFim;
+      const status = override?.status ?? filtroStatus;
+      if (inicio) params.inicio = inicio;
+      if (fim) params.fim = fim;
+      if (status) params.status = status;
+      const res = await api.get('/tenants/meu-plano/cobrancas', { params });
+      setCobrancas(res.data.items || []);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Erro ao carregar histórico de cobranças.');
+    } finally {
+      setLoadingCobrancas(false);
+    }
+  };
+
   const handleAplicarCupomCobranca = async (cobrancaId: string, codigo: string) => {
     try {
       const res = await api.post(`/cobrancas/${cobrancaId}/aplicar-cupom`, { codigo });
       alert(res.data.mensagem);
       carregarDados();
+      carregarCobrancas();
     } catch (err: any) {
       alert('Erro ao aplicar cupom: ' + (err.response?.data?.message || err.message));
     }
@@ -63,21 +108,32 @@ export const Assinatura: React.FC = () => {
     }
   };
 
-  if (loading) return <div className="p-10 flex justify-center"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-600"></div></div>;
+  if (loading) {
+    return (
+      <div className="p-10 flex justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-600" />
+      </div>
+    );
+  }
 
   const planoAtual = resolvePlano(dados?.plano);
   const pacoteAtual = PLANOS[planoAtual].pacote;
   const infoPacote = PACOTES_OBRAS[pacoteAtual];
+  const temMensal = Number(dados?.valorMensal || 0) > 0;
+  const temAnual = Number(dados?.valorAnual || 0) > 0;
 
   return (
     <div className="min-h-screen bg-lunardeli-gray p-6">
       <div className="max-w-4xl mx-auto">
-        <button onClick={() => navigate('/dashboard')} className="flex items-center text-gray-500 hover:text-red-600 mb-6 font-semibold">
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="flex items-center text-gray-500 hover:text-red-600 mb-6 font-semibold"
+        >
           <ArrowLeft size={20} className="mr-2" /> Voltar ao Painel
         </button>
-        
+
         <h1 className="text-3xl font-bold text-lunardeli-dark flex items-center mb-8">
-          <CreditCard className="mr-3 text-red-600" size={32}/> Meu Plano e Contrato
+          <CreditCard className="mr-3 text-red-600" size={32} /> Meu Plano e Contrato
         </h1>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
@@ -85,10 +141,34 @@ export const Assinatura: React.FC = () => {
             <h2 className="text-lg font-semibold text-gray-500 mb-1">Seu Plano Atual</h2>
             <p className="text-4xl font-extrabold text-gray-800">{labelPlano(planoAtual)}</p>
             <p className="text-sm text-gray-500 mt-1">{infoPacote.label}</p>
-            <div className="flex items-center mt-3 text-sm text-gray-600 bg-gray-50 p-2 rounded w-max border mb-4">
-              <ShieldCheck size={16} className="text-green-500 mr-2" /> Status: <span className="font-bold ml-1">{dados?.ativo ? 'Ativo' : 'Inativo'}</span> {dados?.suspensa && <span className="text-red-500 font-bold ml-1">(Suspenso)</span>}
+
+            <div className="mt-4 bg-red-50 border border-red-100 rounded-xl px-4 py-3 w-full">
+              <p className="text-xs font-bold uppercase tracking-wide text-red-700 mb-1">
+                Valor do plano
+              </p>
+              <p className="text-2xl font-extrabold text-lunardeli-dark">
+                {money(dados?.valorPlano || 0)}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {temMensal && temAnual
+                  ? `${money(dados.valorMensal)}/mês + ${money(dados.valorAnual)}/ano (módulos ativos)`
+                  : temAnual
+                    ? 'Total anual dos módulos ativos (com pacote de obras)'
+                    : 'Total mensal dos módulos ativos (com pacote de obras)'}
+              </p>
             </div>
-            <button onClick={() => setShowUpgradeModal(true)} className="px-4 py-2 bg-lunardeli-red text-white font-bold rounded-lg hover:bg-red-700 transition-colors">
+
+            <div className="flex items-center mt-3 text-sm text-gray-600 bg-gray-50 p-2 rounded w-max border mb-4">
+              <ShieldCheck size={16} className="text-green-500 mr-2" /> Status:{' '}
+              <span className="font-bold ml-1">{dados?.ativo ? 'Ativo' : 'Inativo'}</span>{' '}
+              {dados?.suspensa && (
+                <span className="text-red-500 font-bold ml-1">(Suspenso)</span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowUpgradeModal(true)}
+              className="px-4 py-2 bg-lunardeli-red text-white font-bold rounded-lg hover:bg-red-700 transition-colors"
+            >
               Alterar Plano
             </button>
           </div>
@@ -104,16 +184,26 @@ export const Assinatura: React.FC = () => {
             </div>
             <div className="flex items-center text-gray-700">
               <Users className="text-gray-400 mr-3" size={20} />
-              <span>Limite de Usuários: <strong>{dados?.usuariosAtivos} / {dados?.limiteUsuarios}</strong></span>
+              <span>
+                Limite de Usuários:{' '}
+                <strong>
+                  {dados?.usuariosAtivos} / {dados?.limiteUsuarios}
+                </strong>
+              </span>
             </div>
             <div className="flex items-center text-gray-700">
               <Clock className="text-gray-400 mr-3" size={20} />
-              <span>Cliente desde: <strong>{format(new Date(dados?.createdAt), 'dd/MM/yyyy')}</strong></span>
+              <span>
+                Cliente desde:{' '}
+                <strong>{format(new Date(dados?.createdAt), 'dd/MM/yyyy')}</strong>
+              </span>
             </div>
           </div>
         </div>
 
-        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center"><Package className="mr-2" size={24}/> Módulos Contratados</h2>
+        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+          <Package className="mr-2" size={24} /> Módulos Contratados
+        </h2>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-8">
           {dados?.modulos?.length === 0 ? (
             <div className="p-6 text-gray-500 text-center">Nenhum módulo ativo.</div>
@@ -122,6 +212,7 @@ export const Assinatura: React.FC = () => {
               <thead className="bg-gray-50 border-b">
                 <tr>
                   <th className="px-6 py-3 text-sm font-semibold text-gray-600">Módulo</th>
+                  <th className="px-6 py-3 text-sm font-semibold text-gray-600">Valor</th>
                   <th className="px-6 py-3 text-sm font-semibold text-gray-600">Status</th>
                   <th className="px-6 py-3 text-sm font-semibold text-gray-600">Vencimento</th>
                 </tr>
@@ -129,12 +220,39 @@ export const Assinatura: React.FC = () => {
               <tbody className="divide-y divide-gray-100">
                 {dados?.modulos?.map((m: any) => (
                   <tr key={m.slug} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-gray-800">{m.nome} <span className="text-xs text-gray-400 ml-2 border rounded px-1">{m.slug}</span></td>
+                    <td className="px-6 py-4 font-medium text-gray-800">
+                      {m.nome}{' '}
+                      <span className="text-xs text-gray-400 ml-2 border rounded px-1">
+                        {m.slug}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-800">
+                      {m.ativo ? (
+                        <>
+                          {money(m.valor)}
+                          <span className="text-xs font-normal text-gray-400 ml-1">
+                            /{m.periodicidade === 'ANUAL' ? 'ano' : 'mês'}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-gray-400 font-normal">—</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4">
-                      {m.ativo ? <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">Ativo</span> : <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-bold">Inativo</span>}
+                      {m.ativo ? (
+                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">
+                          Ativo
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-bold">
+                          Inativo
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-gray-600 text-sm">
-                      {m.expiresAt ? format(new Date(m.expiresAt), 'dd/MM/yyyy') : 'Renovação Mensal'}
+                      {m.expiresAt
+                        ? format(new Date(m.expiresAt), 'dd/MM/yyyy')
+                        : 'Renovação Mensal'}
                     </td>
                   </tr>
                 ))}
@@ -143,10 +261,90 @@ export const Assinatura: React.FC = () => {
           )}
         </div>
 
-        <h2 className="text-xl font-bold text-gray-800 mb-4">Histórico de Cobranças</h2>
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
+          <h2 className="text-xl font-bold text-gray-800">Histórico de Cobranças</h2>
+          <p className="text-xs text-gray-500">{cobrancas.length} registro(s)</p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                De (referência)
+              </label>
+              <input
+                type="month"
+                value={filtroInicio}
+                onChange={(e) => setFiltroInicio(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                Até (referência)
+              </label>
+              <input
+                type="month"
+                value={filtroFim}
+                onChange={(e) => setFiltroFim(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                Status
+              </label>
+              <select
+                value={filtroStatus}
+                onChange={(e) => setFiltroStatus(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+              >
+                <option value="">Todos</option>
+                <option value="PAGO">Pago</option>
+                <option value="PENDENTE">Pendente</option>
+                <option value="VENCIDO">Vencido</option>
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => carregarCobrancas()}
+                disabled={loadingCobrancas}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white text-sm font-bold rounded-lg hover:bg-gray-800 disabled:opacity-50"
+              >
+                {loadingCobrancas ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Filter size={16} />
+                )}
+                Filtrar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFiltroInicio('');
+                  setFiltroFim('');
+                  setFiltroStatus('');
+                  carregarCobrancas({ inicio: '', fim: '', status: '' });
+                }}
+                disabled={loadingCobrancas}
+                className="px-4 py-2 border border-gray-200 text-sm font-semibold rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Limpar
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          {dados?.historicoCobrancas?.length === 0 ? (
-            <div className="p-6 text-gray-500 text-center">Nenhuma cobrança registrada ainda.</div>
+          {loadingCobrancas ? (
+            <div className="p-8 flex justify-center text-gray-400">
+              <Loader2 className="animate-spin" size={28} />
+            </div>
+          ) : cobrancas.length === 0 ? (
+            <div className="p-6 text-gray-500 text-center">
+              Nenhuma cobrança encontrada para o filtro selecionado.
+            </div>
           ) : (
             <table className="w-full text-left">
               <thead className="bg-gray-50 border-b">
@@ -154,18 +352,49 @@ export const Assinatura: React.FC = () => {
                   <th className="px-6 py-3 text-sm font-semibold text-gray-600">Referência</th>
                   <th className="px-6 py-3 text-sm font-semibold text-gray-600">Valor</th>
                   <th className="px-6 py-3 text-sm font-semibold text-gray-600">Vencimento</th>
+                  <th className="px-6 py-3 text-sm font-semibold text-gray-600">Pagamento</th>
                   <th className="px-6 py-3 text-sm font-semibold text-gray-600">Status</th>
                   <th className="px-6 py-3 text-sm font-semibold text-gray-600">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {dados?.historicoCobrancas?.map((c: any) => (
+                {cobrancas.map((c: any) => (
                   <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 text-gray-700">{format(new Date(c.mesReferencia), 'MM/yyyy')}</td>
-                    <td className="px-6 py-4 font-semibold">R$ {parseFloat(c.valor).toFixed(2).replace('.', ',')}</td>
-                    <td className="px-6 py-4 text-gray-600">{format(new Date(c.dataVencimento), 'dd/MM/yyyy')}</td>
+                    <td className="px-6 py-4 text-gray-700 capitalize">
+                      {format(new Date(c.mesReferencia), 'MMMM / yyyy', { locale: ptBR })}
+                    </td>
+                    <td className="px-6 py-4 font-semibold">{money(c.valor)}</td>
+                    <td className="px-6 py-4 text-gray-600">
+                      {format(new Date(c.dataVencimento), 'dd/MM/yyyy')}
+                    </td>
+                    <td className="px-6 py-4 text-gray-600 text-sm">
+                      {c.dataPagamento
+                        ? format(new Date(c.dataPagamento), 'dd/MM/yyyy')
+                        : '—'}
+                      {c.formaPagamento && (
+                        <span
+                          className={`block text-[10px] font-bold uppercase mt-0.5 ${
+                            c.formaPagamento === 'BONIFICACAO'
+                              ? 'text-purple-600'
+                              : 'text-gray-400'
+                          }`}
+                        >
+                          {c.formaPagamento === 'BONIFICACAO'
+                            ? 'Bonificação'
+                            : c.formaPagamento}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${c.status === 'PAGO' ? 'bg-green-100 text-green-700' : c.status === 'VENCIDO' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-bold ${
+                          c.status === 'PAGO'
+                            ? 'bg-green-100 text-green-700'
+                            : c.status === 'VENCIDO'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-yellow-100 text-yellow-700'
+                        }`}
+                      >
                         {c.status}
                       </span>
                     </td>
@@ -173,18 +402,17 @@ export const Assinatura: React.FC = () => {
                       {c.status !== 'PAGO' ? (
                         <>
                           <button
-                            onClick={() => navigate(`/aguardando-pagamento/${c.id}`, { state: c })}
+                            onClick={() =>
+                              navigate(`/aguardando-pagamento/${c.id}`, { state: c })
+                            }
                             className="px-3 py-1.5 bg-green-600 text-white rounded-lg font-bold text-xs hover:bg-green-700 transition-colors shadow-sm"
                           >
                             Pagar
                           </button>
-                          
                           <button
                             onClick={() => {
                               const cupom = prompt('Digite o código do cupom de desconto:');
-                              if (cupom) {
-                                handleAplicarCupomCobranca(c.id, cupom);
-                              }
+                              if (cupom) handleAplicarCupomCobranca(c.id, cupom);
                             }}
                             className="px-3 py-1.5 bg-gray-900 text-white rounded-lg font-bold text-xs hover:bg-gray-800 transition-colors shadow-sm"
                           >
@@ -203,7 +431,6 @@ export const Assinatura: React.FC = () => {
         </div>
       </div>
 
-      {/* MODAL DE UPGRADE */}
       {showUpgradeModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
@@ -211,16 +438,20 @@ export const Assinatura: React.FC = () => {
             <p className="text-gray-500 mb-6 text-sm">
               Selecione o plano conforme o número de obras da sua operação.
             </p>
-            
+
             <div className="space-y-4 mb-8">
               {PLANO_KEYS.map((opt) => {
                 const info = PLANOS[opt];
                 const pacote = PACOTES_OBRAS[info.pacote];
                 return (
-                  <div 
+                  <div
                     key={opt}
                     onClick={() => setPlanoSelecionado(opt)}
-                    className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${planoSelecionado === opt ? 'border-red-600 bg-red-50' : 'border-gray-200 hover:border-red-300'}`}
+                    className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                      planoSelecionado === opt
+                        ? 'border-red-600 bg-red-50'
+                        : 'border-gray-200 hover:border-red-300'
+                    }`}
                   >
                     <div className="flex justify-between items-center">
                       <div>
@@ -238,8 +469,14 @@ export const Assinatura: React.FC = () => {
                               : '+50% sobre a tabela'}
                         </p>
                       </div>
-                      <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center ${planoSelecionado === opt ? 'border-red-600' : 'border-gray-300'}`}>
-                        {planoSelecionado === opt && <div className="h-3 w-3 rounded-full bg-red-600" />}
+                      <div
+                        className={`h-6 w-6 rounded-full border-2 flex items-center justify-center ${
+                          planoSelecionado === opt ? 'border-red-600' : 'border-gray-300'
+                        }`}
+                      >
+                        {planoSelecionado === opt && (
+                          <div className="h-3 w-3 rounded-full bg-red-600" />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -248,13 +485,13 @@ export const Assinatura: React.FC = () => {
             </div>
 
             <div className="flex gap-3 justify-end">
-              <button 
+              <button
                 onClick={() => setShowUpgradeModal(false)}
                 className="px-4 py-2 font-bold text-gray-600 hover:bg-gray-100 rounded-lg"
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 onClick={handleUpgrade}
                 disabled={upgrading || planoSelecionado === dados?.plano}
                 className="px-6 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
