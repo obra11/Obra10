@@ -58,7 +58,9 @@ export const Financeiro: React.FC = () => {
       const modRes = await api.get('/cobrancas/modulos-ativos');
       const modulos = modRes.data as { slug: string }[];
       if (modulos.length === 0) {
-        alert('Nenhum módulo ativo encontrado. Entre em contato com o suporte.');
+        if (window.confirm('Nenhum módulo ativo encontrado. Deseja abrir a Central de Suporte?')) {
+          navigate('/suporte');
+        }
         return;
       }
       // Re-contract with only the already-active modules via PIX

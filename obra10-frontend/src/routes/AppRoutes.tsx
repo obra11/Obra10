@@ -37,6 +37,8 @@ import { AdminUsuarios } from '../pages/admin/AdminUsuarios';
 import { AdminModulos } from '../pages/admin/AdminModulos';
 import { AdminCupons } from '../pages/admin/AdminCupons';
 import { AdminFeatures } from '../pages/admin/AdminFeatures';
+import { AdminSuporte } from '../pages/admin/AdminSuporte';
+import { SuportePage } from '../pages/SuportePage';
 
 export const AppRoutes: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
@@ -75,6 +77,7 @@ export const AppRoutes: React.FC = () => {
         <Route path="modulos" element={<AdminModulos />} />
         <Route path="cupons" element={<AdminCupons />} />
         <Route path="features" element={<AdminFeatures />} />
+        <Route path="suporte" element={<AdminSuporte />} />
       </Route>
 
       {/* === GESTOR === */}
@@ -86,6 +89,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/aguardando-pagamento/:id" element={<ProtectedRoute><AguardandoPagamento /></ProtectedRoute>} />
       <Route path="/assinatura" element={<ProtectedRoute><Assinatura /></ProtectedRoute>} />
       <Route path="/perfil" element={<ProtectedRoute><Perfil /></ProtectedRoute>} />
+      <Route path="/suporte" element={<ProtectedRoute><SuportePage /></ProtectedRoute>} />
 
       {/* === MAIN DASHBOARD & CATALOGO === */}
       <Route path="/dashboard" element={<ProtectedRoute><CompanyDashboard /></ProtectedRoute>} />

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Building2, Users, Package, Ticket, LogOut, ToggleLeft } from 'lucide-react';
+import { LayoutDashboard, Building2, Users, Package, Ticket, LogOut, ToggleLeft, Headphones } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Obra10Logo } from '../components/Obra10Logo';
 
@@ -20,6 +20,7 @@ export const AdminLayout: React.FC = () => {
     { to: '/admin/modulos', icon: Package, label: 'Módulos' },
     { to: '/admin/cupons', icon: Ticket, label: 'Cupons' },
     { to: '/admin/features', icon: ToggleLeft, label: 'Features' },
+    { to: '/admin/suporte', icon: Headphones, label: 'Suporte' },
   ];
 
   return (

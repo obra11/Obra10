@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ArrowLeft, User, Phone, Lock, Loader2, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, User, Phone, Lock, Loader2, CheckCircle, AlertCircle, Eye, EyeOff, Headphones } from 'lucide-react';
 import api from '../services/api';
 
 export const Perfil: React.FC = () => {
@@ -105,6 +105,20 @@ export const Perfil: React.FC = () => {
         <h1 className="text-3xl font-bold text-lunardeli-dark flex items-center mb-8">
           <User className="mr-3 text-red-600" size={32}/> Meu Perfil
         </h1>
+
+        <button
+          type="button"
+          onClick={() => navigate('/suporte')}
+          className="w-full mb-6 bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:border-lunardeli-red/40 hover:shadow-md transition-all text-left flex items-center gap-4 group"
+        >
+          <div className="w-12 h-12 rounded-xl bg-lunardeli-red/10 text-lunardeli-red flex items-center justify-center group-hover:bg-lunardeli-red group-hover:text-white transition-colors">
+            <Headphones size={24} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-lunardeli-dark">Central de Suporte</p>
+            <p className="text-sm text-gray-500">FAQ, abrir chamado e falar no WhatsApp</p>
+          </div>
+        </button>
 
         {successMsg && (
           <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 text-green-700 text-sm font-medium rounded-r-md flex items-center gap-2">

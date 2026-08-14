@@ -46,6 +46,7 @@ model Empresa {
   usuarios            Usuario[]
   features            EmpresaFeature[]
   catalogoInsumos     CatalogoInsumo[]
+  chamadosSuporte     ChamadoSuporte[]
 
   @@map("empresas")
 }
@@ -105,6 +106,7 @@ model Usuario {
   userObraRole   UserObraRole[]
   usuarioModulos UsuarioModulo[]
   empresa        Empresa         @relation(fields: [empresaId], references: [id])
+  chamadosSuporte ChamadoSuporte[]
 
   @@unique([empresaId, email])
   @@index([empresaId])
@@ -599,4 +601,40 @@ model CatalogoInsumo {
 
   @@index([empresaId, tipo])
   @@map("catalogo_insumos")
+}
+
+enum StatusChamadoSuporte {
+  ABERTO
+  EM_ANDAMENTO
+  AGUARDANDO_USUARIO
+  RESOLVIDO
+  FECHADO
+}
+
+enum CategoriaChamadoSuporte {
+  BILLING
+  TECNICO
+  CONTA
+  OUTRO
+}
+
+model ChamadoSuporte {
+  id                 String                  @id @default(uuid())
+  empresaId          String                  @map("empresa_id")
+  usuarioId          String                  @map("usuario_id")
+  assunto            String
+  categoria          CategoriaChamadoSuporte @default(OUTRO)
+  descricao          String
+  status             StatusChamadoSuporte    @default(ABERTO)
+  whatsappEnviadoEm  DateTime?               @map("whatsapp_enviado_em")
+  createdAt          DateTime                @default(now()) @map("created_at")
+  updatedAt          DateTime                @updatedAt @map("updated_at")
+
+  empresa            Empresa                 @relation(fields: [empresaId], references: [id])
+  usuario            Usuario                 @relation(fields: [usuarioId], references: [id])
+
+  @@index([empresaId])
+  @@index([usuarioId])
+  @@index([status])
+  @@map("chamados_suporte")
 }

@@ -50,6 +50,9 @@ RESEND_API_KEY=
 # Obter em: https://console.anthropic.com → API Keys
 # Deixar VAZIO para usar modo MOCK (sem custo, dados fictícios)
 ANTHROPIC_API_KEY=
+
+# WhatsApp suporte (espelho opcional; o frontend usa VITE_SUPPORT_WHATSAPP)
+SUPPORT_WHATSAPP=5548984047797
 ```
 
 > ⚠️ **Atenção — variável no ambiente do sistema operacional:**

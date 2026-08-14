@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   LogOut, Settings, LayoutDashboard, Users, FileText, ArrowLeft, BarChart2, Loader2,
   Beaker, ClipboardCheck, Home, Package, Calendar, Clock, Layers, Files, ShieldCheck, Heart, BadgeDollarSign,
-  Building2, User, Boxes
+  Building2, User, Boxes, Headphones
 } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
@@ -249,6 +249,14 @@ export const ObraLayout: React.FC = () => {
             >
               <User className="mr-3" size={18} />
               Meu Perfil
+            </button>
+
+            <button 
+              onClick={() => navigate('/suporte')}
+              className="flex w-full items-center px-3 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors font-medium text-sm"
+            >
+              <Headphones className="mr-3" size={18} />
+              Central de Suporte
             </button>
 
             <button 

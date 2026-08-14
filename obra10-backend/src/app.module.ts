@@ -30,6 +30,7 @@ import { CupomModule } from './modules/cupom/cupom.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { FeatureModule } from './modules/feature/feature.module';
 import { CatalogoModule } from './modules/catalogo/catalogo.module';
+import { SuporteModule } from './modules/suporte/suporte.module';
 import { ApiVersionMiddleware } from './core/middlewares/api-version.middleware';
 
 @Module({
@@ -70,6 +71,7 @@ import { ApiVersionMiddleware } from './core/middlewares/api-version.middleware'
     AdminModule,
     FeatureModule,
     CatalogoModule,
+    SuporteModule,
   ],
   controllers: [AppController],
   providers: [

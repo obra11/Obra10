@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useAuth, type Obra } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List } from 'lucide-react';
+import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List, Headphones } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
 
@@ -272,6 +272,9 @@ export const CompanyDashboard: React.FC = () => {
                 </button>
               </>
             )}
+            <button onClick={() => navigate('/suporte')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Central de Suporte">
+              <Headphones size={18} className="sm:mr-2" /> <span className="hidden sm:inline">Suporte</span>
+            </button>
             <button onClick={() => navigate('/perfil')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Meu Perfil">
               <User size={18} className="sm:mr-2" /> <span className="hidden sm:inline">Perfil</span>
             </button>
