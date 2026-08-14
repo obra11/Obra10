@@ -38,11 +38,11 @@ export const PLANO_PARA_PACOTE: Record<PlanoNome, PacoteObras> = {
 
 export const PLANOS: Record<
   PlanoNome,
-  { label: string; pacote: PacoteObras; limiteUsuarios: number }
+  { label: string; pacote: PacoteObras; limiteUsuarios: number | null }
 > = {
   BASICO: { label: 'Básico', pacote: 'ATE_3', limiteUsuarios: 5 },
   PRO: { label: 'Pro', pacote: 'ATE_5', limiteUsuarios: 20 },
-  ENTERPRISE: { label: 'Enterprise', pacote: 'ILIMITADO', limiteUsuarios: 100 },
+  ENTERPRISE: { label: 'Enterprise', pacote: 'ILIMITADO', limiteUsuarios: null },
 };
 
 export const PLANO_KEYS = Object.keys(PLANOS) as PlanoNome[];
@@ -78,4 +78,18 @@ export function labelPacote(pacote?: string | null): string {
 
 export function labelPlano(plano?: string | null): string {
   return PLANOS[resolvePlano(plano)].label;
+}
+
+/** Texto curto de limite de usuários do plano (null = ilimitado). */
+export function labelUsuariosPlano(plano?: string | null): string {
+  const limite = PLANOS[resolvePlano(plano)].limiteUsuarios;
+  return limite == null ? 'Usuários ilimitados' : `Até ${limite} usuários`;
+}
+
+/** Resumo obras + usuários para cards de plano. */
+export function resumoPlano(plano?: string | null): string {
+  const p = resolvePlano(plano);
+  const obras = PACOTES_OBRAS[PLANOS[p].pacote].label;
+  if (p === 'ENTERPRISE') return 'Obras ilimitadas · Usuários ilimitados';
+  return `${obras} · ${labelUsuariosPlano(p)}`;
 }

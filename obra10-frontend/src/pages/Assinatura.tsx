@@ -18,12 +18,12 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   labelPlano,
-  PACOTES_OBRAS,
   PLANOS,
   PLANO_KEYS,
   pacoteDoPlano,
   precoComPacote,
   resolvePlano,
+  resumoPlano,
 } from '../utils/pacotesObras';
 import type { PlanoNome } from '../utils/pacotesObras';
 
@@ -242,10 +242,10 @@ export const Assinatura: React.FC = () => {
   }
 
   const planoAtual = resolvePlano(dados?.plano);
-  const pacoteAtual = PLANOS[planoAtual].pacote;
-  const infoPacote = PACOTES_OBRAS[pacoteAtual];
   const temMensal = Number(dados?.valorMensal || 0) > 0;
   const temAnual = Number(dados?.valorAnual || 0) > 0;
+  const usuariosIlimitados =
+    planoAtual === 'ENTERPRISE' || Number(dados?.limiteUsuarios) >= 999999;
 
   return (
     <div className="min-h-screen bg-lunardeli-gray p-6">
@@ -265,7 +265,7 @@ export const Assinatura: React.FC = () => {
           <div className="flex flex-col items-start">
             <h2 className="text-lg font-semibold text-gray-500 mb-1">Seu Plano Atual</h2>
             <p className="text-4xl font-extrabold text-gray-800">{labelPlano(planoAtual)}</p>
-            <p className="text-sm text-gray-500 mt-1">{infoPacote.label}</p>
+            <p className="text-sm text-gray-500 mt-1">{resumoPlano(planoAtual)}</p>
 
             <div className="mt-4 bg-red-50 border border-red-100 rounded-xl px-4 py-3 w-full">
               <p className="text-xs font-bold uppercase tracking-wide text-red-700 mb-1">
@@ -312,7 +312,9 @@ export const Assinatura: React.FC = () => {
               <span>
                 Limite de Usuários:{' '}
                 <strong>
-                  {dados?.usuariosAtivos} / {dados?.limiteUsuarios}
+                  {usuariosIlimitados
+                    ? `${dados?.usuariosAtivos} / Ilimitado`
+                    : `${dados?.usuariosAtivos} / ${dados?.limiteUsuarios}`}
                 </strong>
               </span>
             </div>
@@ -596,7 +598,6 @@ export const Assinatura: React.FC = () => {
             <div className="space-y-3 mb-6">
               {PLANO_KEYS.map((opt) => {
                 const info = PLANOS[opt];
-                const pacote = PACOTES_OBRAS[info.pacote];
                 return (
                   <div
                     key={opt}
@@ -610,15 +611,7 @@ export const Assinatura: React.FC = () => {
                     <div className="flex justify-between items-center">
                       <div>
                         <h4 className="font-bold text-lg text-gray-800">{info.label}</h4>
-                        <p className="text-sm text-gray-500 mt-1">{pacote.label}</p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          Até {info.limiteUsuarios} usuários ·{' '}
-                          {opt === 'PRO'
-                            ? 'preço de tabela'
-                            : opt === 'BASICO'
-                              ? '−20% sobre a tabela'
-                              : '+50% sobre a tabela'}
-                        </p>
+                        <p className="text-sm text-gray-500 mt-1">{resumoPlano(opt)}</p>
                       </div>
                       <div
                         className={`h-6 w-6 rounded-full border-2 flex items-center justify-center ${

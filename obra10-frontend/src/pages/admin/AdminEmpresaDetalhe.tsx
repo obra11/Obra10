@@ -8,7 +8,7 @@ import {
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getImageUrl } from '../../utils/image';
-import { labelPlano, PACOTES_OBRAS, PLANOS, PLANO_KEYS } from '../../utils/pacotesObras';
+import { labelPlano, PLANOS, PLANO_KEYS, resumoPlano } from '../../utils/pacotesObras';
 import type { PlanoNome } from '../../utils/pacotesObras';
 
 export const AdminEmpresaDetalhe: React.FC = () => {
@@ -128,10 +128,9 @@ export const AdminEmpresaDetalhe: React.FC = () => {
   const handleAlterarPlanoAdmin = async (novoPlano: PlanoNome) => {
     if (novoPlano === empresa?.plano) return;
     const info = PLANOS[novoPlano];
-    const pacote = PACOTES_OBRAS[info.pacote];
     if (
       !window.confirm(
-        `Alterar plano para ${info.label}?\n\n${pacote.label}\nAté ${info.limiteUsuarios} usuários`,
+        `Alterar plano para ${info.label}?\n\n${resumoPlano(novoPlano)}`,
       )
     ) {
       return;
@@ -140,7 +139,11 @@ export const AdminEmpresaDetalhe: React.FC = () => {
     try {
       await api.patch(`/admin/empresas/${id}`, { plano: novoPlano });
       await fetchEmpresa();
-      setFormData((prev) => ({ ...prev, plano: novoPlano, limiteUsuarios: info.limiteUsuarios }));
+      setFormData((prev) => ({
+        ...prev,
+        plano: novoPlano,
+        limiteUsuarios: info.limiteUsuarios ?? 999999,
+      }));
       alert(`Plano atualizado para ${info.label}.`);
     } catch (e: any) {
       alert(e?.response?.data?.message || 'Erro ao alterar plano.');
@@ -342,7 +345,6 @@ export const AdminEmpresaDetalhe: React.FC = () => {
             <div className="grid sm:grid-cols-3 gap-3">
               {PLANO_KEYS.map((opt) => {
                 const info = PLANOS[opt];
-                const pacote = PACOTES_OBRAS[info.pacote];
                 const selected = empresa.plano === opt;
                 return (
                   <button
@@ -357,15 +359,7 @@ export const AdminEmpresaDetalhe: React.FC = () => {
                     }`}
                   >
                     <p className="font-bold text-gray-900">{info.label}</p>
-                    <p className="text-sm text-gray-500 mt-1">{pacote.label}</p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Até {info.limiteUsuarios} usuários ·{' '}
-                      {opt === 'PRO'
-                        ? 'preço de tabela'
-                        : opt === 'BASICO'
-                          ? '−20% sobre a tabela'
-                          : '+50% sobre a tabela'}
-                    </p>
+                    <p className="text-sm text-gray-500 mt-1">{resumoPlano(opt)}</p>
                     {selected && (
                       <p className="text-[10px] font-bold uppercase text-red-600 mt-2">Atual</p>
                     )}
@@ -556,14 +550,14 @@ export const AdminEmpresaDetalhe: React.FC = () => {
                   setFormData({
                     ...formData,
                     plano,
-                    limiteUsuarios: info?.limiteUsuarios || formData.limiteUsuarios,
+                    limiteUsuarios: info?.limiteUsuarios ?? 999999,
                   });
                 }}
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-red-600 outline-none font-bold text-red-700 bg-white"
               >
                 <option value="BASICO">Básico — até 3 obras</option>
                 <option value="PRO">Pro — até 5 obras</option>
-                <option value="ENTERPRISE">Enterprise — obras ilimitadas</option>
+                <option value="ENTERPRISE">Enterprise — obras e usuários ilimitados</option>
               </select>
               <p className="text-xs text-gray-400 mt-1">
                 Ao salvar, sincroniza pacote de obras e limite de usuários.

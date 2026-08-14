@@ -28,7 +28,7 @@ import {
 const PLAN_LIMITS: Record<string, number> = {
   BASICO: 5,
   PRO: 20,
-  ENTERPRISE: 100,
+  ENTERPRISE: 999999,
 };
 
 @Controller()

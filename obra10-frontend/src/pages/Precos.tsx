@@ -3,11 +3,14 @@ import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { Loader2, ArrowRight } from 'lucide-react';
 import {
-  PACOTE_KEYS,
-  PACOTES_OBRAS,
+  PLANOS,
+  PLANO_KEYS,
+  labelPlano,
+  pacoteDoPlano,
   precoComPacote,
+  resumoPlano,
 } from '../utils/pacotesObras';
-import type { PacoteObras } from '../utils/pacotesObras';
+import type { PlanoNome } from '../utils/pacotesObras';
 
 interface Modulo {
   slug: string;
@@ -21,7 +24,7 @@ export const Precos: React.FC = () => {
   const [modulos, setModulos] = useState<Modulo[]>([]);
   const [loading, setLoading] = useState(true);
   const [periodicidade, setPeriodicidade] = useState<'MENSAL' | 'ANUAL'>('MENSAL');
-  const [pacoteObras, setPacoteObras] = useState<PacoteObras>('ATE_5');
+  const [plano, setPlano] = useState<PlanoNome>('PRO');
 
   useEffect(() => {
     api
@@ -33,6 +36,8 @@ export const Precos: React.FC = () => {
       .catch(() => setLoading(false));
   }, []);
 
+  const pacoteObras = pacoteDoPlano(plano);
+
   const precoDe = (m: Modulo) => {
     const mensal = parseFloat(String(m.preco || '0'));
     const anual = parseFloat(String(m.precoAnual || '0'));
@@ -41,7 +46,6 @@ export const Precos: React.FC = () => {
   };
 
   const total = modulos.reduce((s, m) => s + precoDe(m), 0);
-  const pacoteInfo = PACOTES_OBRAS[pacoteObras];
 
   return (
     <div>
@@ -54,29 +58,27 @@ export const Precos: React.FC = () => {
             Preços simples e transparentes.
           </h1>
           <p className="mt-5 text-white/80 text-lg max-w-2xl">
-            Pagamento por módulo. Escolha o pacote de obras, mensal ou anual.
-            Os preços exibidos partem dos valores cadastrados (pacote até 5 obras).
+            Escolha o plano (Básico, Pro ou Enterprise), mensal ou anual, e pague só pelos
+            módulos que a obra precisa. O Pro usa os preços de tabela.
           </p>
           <div className="mt-8 flex flex-col gap-4">
             <div className="grid sm:grid-cols-3 gap-2">
-              {PACOTE_KEYS.map((key) => {
-                const p = PACOTES_OBRAS[key];
-                const selected = pacoteObras === key;
+              {PLANO_KEYS.map((key) => {
+                const selected = plano === key;
                 return (
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setPacoteObras(key)}
+                    onClick={() => setPlano(key)}
                     className={`text-left px-4 py-3 rounded-lg border transition-colors ${
                       selected
                         ? 'bg-white text-lunardeli-dark border-white'
                         : 'bg-white/5 text-white border-white/20 hover:bg-white/10'
                     }`}
                   >
-                    <p className="text-sm font-bold">{p.label}</p>
+                    <p className="text-sm font-bold">Plano {PLANOS[key].label}</p>
                     <p className={`text-xs mt-0.5 ${selected ? 'text-gray-500' : 'text-white/70'}`}>
-                      {p.descricao}
-                      {key === 'ATE_5' ? ' · preço de tabela' : key === 'ATE_3' ? ' · −20%' : ' · +50%'}
+                      {resumoPlano(key)}
                     </p>
                   </button>
                 );
@@ -139,11 +141,10 @@ export const Precos: React.FC = () => {
                     </div>
                     <div className="mt-3 sm:mt-0 sm:text-right shrink-0">
                       <p className="font-display text-2xl font-extrabold text-lunardeli-dark">
-                        R${' '}
-                        {valor.toFixed(2).replace('.', ',')}
+                        R$ {valor.toFixed(2).replace('.', ',')}
                       </p>
                       <p className="text-xs text-gray-500">
-                        /{periodicidade === 'ANUAL' ? 'ano' : 'mês'} · {pacoteInfo.label}
+                        /{periodicidade === 'ANUAL' ? 'ano' : 'mês'} · Plano {labelPlano(plano)}
                       </p>
                       {periodicidade === 'ANUAL' && mensal > 0 && (
                         <p className="text-[11px] text-gray-400 mt-1">
@@ -162,12 +163,12 @@ export const Precos: React.FC = () => {
               </h2>
               <p className="mt-2 text-white/90 text-sm sm:text-base max-w-xl">
                 {modulos.length
-                  ? `${pacoteInfo.label}: R$ ${total.toFixed(2).replace('.', ',')}/${periodicidade === 'ANUAL' ? 'ano' : 'mês'} (todos os módulos) — escolha só o que precisa no cadastro.`
+                  ? `Plano ${labelPlano(plano)}: R$ ${total.toFixed(2).replace('.', ',')}/${periodicidade === 'ANUAL' ? 'ano' : 'mês'} (todos os módulos) — escolha só o que precisa no cadastro.`
                   : 'Crie sua conta e escolha os módulos no onboarding.'}
               </p>
               <div className="mt-6 flex flex-col sm:flex-row gap-3">
                 <Link
-                  to={`/register?pacote=${pacoteObras}`}
+                  to={`/register?pacote=${pacoteObras}&plano=${plano}`}
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white text-lunardeli-red font-bold rounded-lg hover:bg-gray-100"
                 >
                   Criar conta <ArrowRight size={18} />

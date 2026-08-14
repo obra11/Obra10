@@ -39,7 +39,8 @@ export const PLANO_PARA_PACOTE: Record<PlanoNome, PacoteObras> = {
 export const PLAN_LIMITS: Record<PlanoNome, number> = {
   BASICO: 5,
   PRO: 20,
-  ENTERPRISE: 100,
+  /** Praticamente ilimitado (coluna Int no banco) */
+  ENTERPRISE: 999999,
 };
 
 export function resolvePacoteObras(value?: string | null): PacoteObras {

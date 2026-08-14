@@ -5,12 +5,16 @@ import {
   Package, Loader2, CheckCircle, CreditCard, QrCode, ChevronRight, ChevronDown, Tag, X
 } from 'lucide-react';
 import {
-  PACOTE_KEYS,
-  PACOTES_OBRAS,
+  PLANOS,
+  PLANO_KEYS,
+  pacoteDoPlano,
+  planoDoPacote,
   precoComPacote,
   resolvePacoteObras,
+  resumoPlano,
+  labelPlano,
 } from '../utils/pacotesObras';
-import type { PacoteObras } from '../utils/pacotesObras';
+import type { PacoteObras, PlanoNome } from '../utils/pacotesObras';
 
 interface SubModulo { slug: string; nome: string; descricao?: string; }
 
@@ -58,6 +62,8 @@ export const Contratacao: React.FC = () => {
         (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('pacoteObras') : null),
     ),
   );
+  const planoSelecionado = planoDoPacote(pacoteObras);
+  const setPlano = (plano: PlanoNome) => setPacoteObras(pacoteDoPlano(plano));
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -113,7 +119,6 @@ export const Contratacao: React.FC = () => {
 
   const total = calcularTotalComDesconto();
   const temDesconto = cupomValidado && total < totalBase;
-  const pacoteInfo = PACOTES_OBRAS[pacoteObras];
 
   // Group modules by category
   const grupos = GRUPO_ORDER.reduce<Record<string, Modulo[]>>((acc, g) => {
@@ -184,31 +189,27 @@ export const Contratacao: React.FC = () => {
           <Package size={48} className="mx-auto mb-4 text-red-600" />
           <h1 className="text-3xl font-bold text-gray-900">Escolha seus módulos</h1>
           <p className="text-gray-500 mt-2">
-            Preços a partir da tabela cadastrada (pacote até 5 obras). Ajuste o pacote conforme o número de obras.
+            Escolha o plano (Básico, Pro ou Enterprise) e os módulos. O Pro usa os preços de tabela.
           </p>
         </div>
 
-        {/* Pacote de obras */}
+        {/* Plano */}
         <div className="grid sm:grid-cols-3 gap-2 mb-4">
-          {PACOTE_KEYS.map((key) => {
-            const p = PACOTES_OBRAS[key];
-            const selected = pacoteObras === key;
+          {PLANO_KEYS.map((key) => {
+            const selected = planoSelecionado === key;
             return (
               <button
                 key={key}
                 type="button"
-                onClick={() => setPacoteObras(key)}
+                onClick={() => setPlano(key)}
                 className={`text-left p-4 rounded-xl border-2 transition-all ${
                   selected
                     ? 'border-red-500 bg-red-50'
                     : 'border-gray-200 bg-white hover:border-gray-300'
                 }`}
               >
-                <p className="font-bold text-gray-900 text-sm">{p.label}</p>
-                <p className="text-xs text-gray-500 mt-1">{p.descricao}</p>
-                <p className="text-[11px] font-semibold text-gray-400 mt-2">
-                  {key === 'ATE_5' ? 'Preço de tabela' : key === 'ATE_3' ? '−20% sobre a tabela' : '+50% sobre a tabela'}
-                </p>
+                <p className="font-bold text-gray-900 text-sm">Plano {PLANOS[key].label}</p>
+                <p className="text-xs text-gray-500 mt-1">{resumoPlano(key)}</p>
               </button>
             );
           })}
@@ -399,7 +400,10 @@ export const Contratacao: React.FC = () => {
         {/* Total + CTA */}
         <div className="bg-white rounded-xl border-2 border-red-100 p-5">
           <p className="text-xs text-gray-500 mb-2">
-            Pacote: <span className="font-semibold text-gray-700">{pacoteInfo.label}</span>
+            Plano:{' '}
+            <span className="font-semibold text-gray-700">
+              {labelPlano(planoSelecionado)} · {resumoPlano(planoSelecionado)}
+            </span>
           </p>
           <div className="flex justify-between items-center mb-4">
             <span className="text-gray-600 font-medium">
