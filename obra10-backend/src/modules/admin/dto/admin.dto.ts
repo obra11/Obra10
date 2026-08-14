@@ -242,6 +242,13 @@ export class CriarEmpresaAdminDto {
 export class ConfirmarPagamentoManualAdminDto {
   @IsString()
   senha: string;
+
+  /** PAGAMENTO = receita real; BONIFICACAO = cortesia (não entra como recebido) */
+  @IsEnum(['PAGAMENTO', 'BONIFICACAO'], {
+    message: 'tipoConfirmacao deve ser PAGAMENTO ou BONIFICACAO.',
+  })
+  @IsOptional()
+  tipoConfirmacao?: 'PAGAMENTO' | 'BONIFICACAO';
 }
 
 export class CriarDespesaFinanceiraDto {

@@ -9,6 +9,7 @@ import {
   Plus,
   Trash2,
   Wallet,
+  Gift,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -196,7 +197,7 @@ export const AdminFinanceiro: React.FC = () => {
       ) : (
         <>
           {tab === 'resumo' && resumo && (
-            <div className="grid sm:grid-cols-2 xl:grid-cols-5 gap-4">
+            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
               {[
                 {
                   label: 'Recebido no período',
@@ -204,6 +205,13 @@ export const AdminFinanceiro: React.FC = () => {
                   sub: `${resumo.recebidoCount} cobranças`,
                   icon: TrendingUp,
                   color: 'text-green-600 bg-green-50',
+                },
+                {
+                  label: 'Bonificado no período',
+                  value: money(resumo.bonificado || 0),
+                  sub: `${resumo.bonificadoCount || 0} cortesia(s)`,
+                  icon: Gift,
+                  color: 'text-purple-600 bg-purple-50',
                 },
                 {
                   label: 'A receber',
@@ -229,7 +237,7 @@ export const AdminFinanceiro: React.FC = () => {
                 {
                   label: 'Saldo líquido',
                   value: money(resumo.saldoLiquido),
-                  sub: 'recebido − saídas',
+                  sub: 'recebido − saídas (sem bonificações)',
                   icon: Wallet,
                   color:
                     resumo.saldoLiquido >= 0
@@ -335,7 +343,17 @@ export const AdminFinanceiro: React.FC = () => {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-gray-600">
-                            {item.formaPagamento}
+                            <span
+                              className={
+                                item.formaPagamento === 'BONIFICACAO'
+                                  ? 'font-bold text-purple-700'
+                                  : undefined
+                              }
+                            >
+                              {item.formaPagamento === 'BONIFICACAO'
+                                ? 'Bonificação'
+                                : item.formaPagamento}
+                            </span>
                           </td>
                         </tr>
                       ))}

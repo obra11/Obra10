@@ -16,6 +16,12 @@ import {
   PAPEL_NOME_PADRAO,
   PAPEIS_COM_DEFAULT_EDITAVEL,
 } from '../../core/capabilities/role-capabilities';
+import {
+  limiteObrasDoPacote,
+  pacoteDoPlano,
+  PLAN_LIMITS,
+  resolvePlano,
+} from '../cobranca/pacotes-obras';
 
 // ===================== VALIDATORS =====================
 function validarCPF(cpf: string): boolean {
@@ -63,13 +69,6 @@ async function buscarCEP(cep: string): Promise<any> {
     return null;
   }
 }
-
-// Plans → user limits
-const PLAN_LIMITS: Record<string, number> = {
-  BASICO: 5,
-  PRO: 20,
-  ENTERPRISE: 100,
-};
 
 @Injectable()
 export class TenantService {
@@ -384,8 +383,12 @@ export class TenantService {
       where: { id: empresaId },
     });
     if (!empresa) throw new BadRequestException('Empresa não encontrada.');
-    if (updates.plano && PLAN_LIMITS[updates.plano]) {
-      updates.limiteUsuarios = PLAN_LIMITS[updates.plano];
+    if (updates.plano && PLAN_LIMITS[updates.plano as keyof typeof PLAN_LIMITS]) {
+      const plano = resolvePlano(updates.plano);
+      const pacote = pacoteDoPlano(plano);
+      updates.limiteUsuarios = PLAN_LIMITS[plano];
+      updates.pacoteObras = pacote;
+      updates.limiteObras = limiteObrasDoPacote(pacote);
     }
     return this.prisma.empresa.update({
       where: { id: empresaId },
@@ -395,6 +398,8 @@ export class TenantService {
         razaoSocial: true,
         plano: true,
         limiteUsuarios: true,
+        pacoteObras: true,
+        limiteObras: true,
         ativo: true,
         suspensa: true,
       },
@@ -443,20 +448,25 @@ export class TenantService {
 
   // ===================== UPGRADE MEU PLANO =====================
   async upgradeMeuPlano(empresaId: string, novoPlano: string) {
-    if (!PLAN_LIMITS[novoPlano]) {
+    if (!['BASICO', 'PRO', 'ENTERPRISE'].includes(novoPlano)) {
       throw new BadRequestException('Plano inválido.');
     }
+    const plano = resolvePlano(novoPlano);
 
     const empresa = await this.prisma.empresa.findUnique({
       where: { id: empresaId },
     });
     if (!empresa) throw new NotFoundException('Empresa não encontrada.');
 
+    const pacote = pacoteDoPlano(plano);
+
     return this.prisma.empresa.update({
       where: { id: empresaId },
       data: {
-        plano: novoPlano as any,
-        limiteUsuarios: PLAN_LIMITS[novoPlano],
+        plano: plano as any,
+        limiteUsuarios: PLAN_LIMITS[plano],
+        pacoteObras: pacote,
+        limiteObras: limiteObrasDoPacote(pacote),
       },
     });
   }

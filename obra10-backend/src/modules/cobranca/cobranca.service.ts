@@ -12,6 +12,8 @@ import { CupomService } from '../cupom/cupom.service';
 import { CryptoService } from '../../core/services/crypto.service';
 import {
   limiteObrasDoPacote,
+  PLAN_LIMITS,
+  planoDoPacote,
   precoComPacote,
   resolvePacoteObras,
   type PacoteObras,
@@ -104,12 +106,15 @@ export class CobrancaService {
     const idempotencyKey = `${dto.empresaId}-${pacoteObras}-${periodicidade}-${mesRef.toISOString().slice(0, 7)}`;
     const modulosSlugs = dto.modulosSelecionados;
 
-    // Persist package on empresa at contract time (limit applies after payment / activation)
+    // Persist package + plano (Básico/Pro/Enterprise) on empresa at contract time
+    const plano = planoDoPacote(pacoteObras);
     await this.prisma.empresa.update({
       where: { id: dto.empresaId },
       data: {
         pacoteObras,
         limiteObras: limiteObrasDoPacote(pacoteObras),
+        plano: plano as any,
+        limiteUsuarios: PLAN_LIMITS[plano],
       },
     });
 
@@ -544,7 +549,11 @@ export class CobrancaService {
     }
   }
 
-  async confirmarPagamentoManualAdmin(cobrancaId: string, adminUsuarioId: string) {
+  async confirmarPagamentoManualAdmin(
+    cobrancaId: string,
+    adminUsuarioId: string,
+    tipoConfirmacao: 'PAGAMENTO' | 'BONIFICACAO' = 'PAGAMENTO',
+  ) {
     const cobranca = await this.prisma.cobranca.findUnique({
       where: { id: cobrancaId },
       include: {
@@ -554,13 +563,18 @@ export class CobrancaService {
     if (!cobranca) throw new NotFoundException('Cobrança não encontrada.');
     if (cobranca.status === 'PAGO') return { success: true };
 
-    // Set status to PAGO, dataPagamento to new Date() and formaPagamento to MANUAL
+    const isBonificacao = tipoConfirmacao === 'BONIFICACAO';
+    const formaPagamento = isBonificacao ? 'BONIFICACAO' : 'MANUAL';
+    const acaoAudit = isBonificacao
+      ? 'PAGAMENTO_CONFIRMADO_BONIFICACAO'
+      : 'PAGAMENTO_CONFIRMADO_MANUAL';
+
     await this.prisma.cobranca.update({
       where: { id: cobrancaId },
       data: {
         status: 'PAGO',
         dataPagamento: new Date(),
-        formaPagamento: 'MANUAL',
+        formaPagamento,
       },
     });
 
@@ -590,20 +604,21 @@ export class CobrancaService {
         usuarioId: adminUsuarioId,
         tabelaAfetada: 'cobrancas',
         registroId: cobranca.id,
-        acao: 'PAGAMENTO_CONFIRMADO_MANUAL',
+        acao: acaoAudit,
         cargaAntiga: JSON.stringify({ status: cobranca.status }),
         cargaNova: JSON.stringify({
           status: 'PAGO',
-          formaPagamento: 'MANUAL',
+          formaPagamento,
+          tipoConfirmacao,
           suspensa: false,
           diasInadimplente: 0,
         }),
       },
     });
 
-    // Email
+    // E-mail só para pagamento real (bonificação não é receita)
     const empresa = cobranca.empresa;
-    if (empresa.email) {
+    if (!isBonificacao && empresa.email) {
       try {
         await this.email.enviarConfirmacaoPagamento(
           empresa.email,
@@ -615,9 +630,9 @@ export class CobrancaService {
       }
     }
     this.logger.log(
-      `✅ Pagamento manual confirmado por admin (${adminUsuarioId}) para empresa ${cobranca.empresaId}`,
+      `✅ ${isBonificacao ? 'Bonificação' : 'Pagamento manual'} confirmado por admin (${adminUsuarioId}) para empresa ${cobranca.empresaId}`,
     );
 
-    return { success: true };
+    return { success: true, formaPagamento, tipoConfirmacao };
   }
 }

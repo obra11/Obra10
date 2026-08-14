@@ -52,13 +52,24 @@ export class AdminFinanceiroService {
     )!;
     const fim = parseDateParam(fimStr, endOfDay(agora))!;
 
-    const [recebidoAgg, aReceberAgg, vencidoAgg, saidasAgg] = await Promise.all([
+    const [recebidoAgg, bonificadoAgg, aReceberAgg, vencidoAgg, saidasAgg] =
+      await Promise.all([
       this.prisma.cobranca.aggregate({
         _sum: { valor: true },
         _count: true,
         where: {
           status: 'PAGO',
           dataPagamento: { gte: inicio, lte: fim },
+          NOT: { formaPagamento: 'BONIFICACAO' },
+        },
+      }),
+      this.prisma.cobranca.aggregate({
+        _sum: { valor: true },
+        _count: true,
+        where: {
+          status: 'PAGO',
+          dataPagamento: { gte: inicio, lte: fim },
+          formaPagamento: 'BONIFICACAO',
         },
       }),
       this.prisma.cobranca.aggregate({
@@ -79,6 +90,7 @@ export class AdminFinanceiroService {
     ]);
 
     const recebido = toNum(recebidoAgg._sum.valor);
+    const bonificado = toNum(bonificadoAgg._sum.valor);
     const aReceber = toNum(aReceberAgg._sum.valor);
     const vencido = toNum(vencidoAgg._sum.valor);
     const saidas = toNum(saidasAgg._sum.valor);
@@ -87,6 +99,8 @@ export class AdminFinanceiroService {
       periodo: { inicio: inicio.toISOString(), fim: fim.toISOString() },
       recebido,
       recebidoCount: recebidoAgg._count,
+      bonificado,
+      bonificadoCount: bonificadoAgg._count,
       aReceber,
       aReceberCount: aReceberAgg._count,
       vencido,
@@ -202,6 +216,7 @@ export class AdminFinanceiroService {
         where: {
           status: 'PAGO',
           dataPagamento: { gte: inicio, lte: fim },
+          NOT: { formaPagamento: 'BONIFICACAO' },
         },
         select: { valor: true, dataPagamento: true },
       }),

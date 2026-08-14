@@ -422,6 +422,10 @@ export class AdminEmpresasController {
       throw new BadRequestException('A cobrança não pertence à empresa informada.');
     }
 
-    return this.cobrancaService.confirmarPagamentoManualAdmin(cobrancaId, adminUser.sub);
+    return this.cobrancaService.confirmarPagamentoManualAdmin(
+      cobrancaId,
+      adminUser.sub,
+      dto.tipoConfirmacao === 'BONIFICACAO' ? 'BONIFICACAO' : 'PAGAMENTO',
+    );
   }
 }

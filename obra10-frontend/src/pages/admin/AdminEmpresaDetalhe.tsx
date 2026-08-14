@@ -25,6 +25,7 @@ export const AdminEmpresaDetalhe: React.FC = () => {
   const [cobrancaSelecionada, setCobrancaSelecionada] = useState<any>(null);
   const [showConfirmManualModal, setShowConfirmManualModal] = useState(false);
   const [senhaConfirmacao, setSenhaConfirmacao] = useState('');
+  const [tipoConfirmacao, setTipoConfirmacao] = useState<'PAGAMENTO' | 'BONIFICACAO'>('PAGAMENTO');
   const [loadingConfirmarManual, setLoadingConfirmarManual] = useState(false);
   
   // States for Modulos and Cupons
@@ -133,11 +134,17 @@ export const AdminEmpresaDetalhe: React.FC = () => {
     setLoadingConfirmarManual(true);
     try {
       await api.post(`/admin/empresas/${id}/cobrancas/${cobrancaSelecionada.id}/confirmar-manual`, {
-        senha: senhaConfirmacao
+        senha: senhaConfirmacao,
+        tipoConfirmacao,
       });
-      alert('Pagamento manual confirmado com sucesso!');
+      alert(
+        tipoConfirmacao === 'BONIFICACAO'
+          ? 'Bonificação registrada com sucesso!'
+          : 'Pagamento manual confirmado com sucesso!',
+      );
       setShowConfirmManualModal(false);
       setSenhaConfirmacao('');
+      setTipoConfirmacao('PAGAMENTO');
       setCobrancaSelecionada(null);
       fetchCobrancas();
       fetchEmpresa();
@@ -564,6 +571,13 @@ export const AdminEmpresaDetalhe: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {cob.dataPagamento ? format(new Date(cob.dataPagamento), "dd/MM/yyyy") : '-'}
+                      {cob.formaPagamento && (
+                        <span className={`block text-[10px] font-bold uppercase mt-0.5 ${
+                          cob.formaPagamento === 'BONIFICACAO' ? 'text-purple-600' : 'text-gray-400'
+                        }`}>
+                          {cob.formaPagamento === 'BONIFICACAO' ? 'Bonificação' : cob.formaPagamento}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-bold rounded-full ${
@@ -665,7 +679,7 @@ export const AdminEmpresaDetalhe: React.FC = () => {
             </h3>
             
             <p className="text-gray-600 text-sm mb-4 leading-relaxed">
-              Você está registrando manualmente o pagamento da cobrança referente ao mês de{' '}
+              Você está registrando a baixa da cobrança referente ao mês de{' '}
               <strong className="text-gray-900">
                 {format(new Date(cobrancaSelecionada.mesReferencia), "MMMM / yyyy", { locale: ptBR })}
               </strong>{' '}
@@ -682,6 +696,38 @@ export const AdminEmpresaDetalhe: React.FC = () => {
             <form onSubmit={handleConfirmarPagamentoManual} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+                  Tipo de baixa
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTipoConfirmacao('PAGAMENTO')}
+                    className={`px-3 py-3 rounded-lg border-2 text-left transition-colors ${
+                      tipoConfirmacao === 'PAGAMENTO'
+                        ? 'border-green-500 bg-green-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <p className="text-sm font-bold text-gray-900">Pagamento</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5">Entra como receita na contabilidade</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTipoConfirmacao('BONIFICACAO')}
+                    className={`px-3 py-3 rounded-lg border-2 text-left transition-colors ${
+                      tipoConfirmacao === 'BONIFICACAO'
+                        ? 'border-purple-500 bg-purple-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <p className="text-sm font-bold text-gray-900">Bonificação</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5">Cortesia — não conta como recebido</p>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
                   Senha do Super Admin
                 </label>
                 <input
@@ -689,10 +735,13 @@ export const AdminEmpresaDetalhe: React.FC = () => {
                   required
                   value={senhaConfirmacao}
                   onChange={(e) => setSenhaConfirmacao(e.target.value)}
-                  placeholder="Digite sua senha para autorizar"
+                  placeholder="Digite a senha da sua conta admin"
                   className="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-red-600 outline-none text-sm"
                   autoFocus
                 />
+                <p className="text-[11px] text-gray-400 mt-1.5">
+                  Use a mesma senha com que você entrou neste painel.
+                </p>
               </div>
 
               <div className="flex gap-3 justify-end pt-2">
@@ -701,6 +750,7 @@ export const AdminEmpresaDetalhe: React.FC = () => {
                   onClick={() => {
                     setShowConfirmManualModal(false);
                     setSenhaConfirmacao('');
+                    setTipoConfirmacao('PAGAMENTO');
                     setCobrancaSelecionada(null);
                   }}
                   disabled={loadingConfirmarManual}
@@ -711,12 +761,18 @@ export const AdminEmpresaDetalhe: React.FC = () => {
                 <button
                   type="submit"
                   disabled={loadingConfirmarManual || !senhaConfirmacao}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                  className={`px-4 py-2 text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-50 flex items-center gap-2 ${
+                    tipoConfirmacao === 'BONIFICACAO'
+                      ? 'bg-purple-600 hover:bg-purple-700'
+                      : 'bg-red-600 hover:bg-red-700'
+                  }`}
                 >
                   {loadingConfirmarManual ? (
                     <>
                       <Loader2 size={16} className="animate-spin" /> Processando...
                     </>
+                  ) : tipoConfirmacao === 'BONIFICACAO' ? (
+                    'Registrar Bonificação'
                   ) : (
                     'Confirmar Pagamento'
                   )}

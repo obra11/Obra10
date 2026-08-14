@@ -3,7 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, CreditCard, ShieldCheck, Clock, Users, Package, Building2 } from 'lucide-react';
 import api from '../services/api';
 import { format } from 'date-fns';
-import { labelPacote } from '../utils/pacotesObras';
+import {
+  labelPlano,
+  PACOTES_OBRAS,
+  PLANOS,
+  PLANO_KEYS,
+  resolvePlano,
+} from '../utils/pacotesObras';
+import type { PlanoNome } from '../utils/pacotesObras';
 
 export const Assinatura: React.FC = () => {
   const navigate = useNavigate();
@@ -12,7 +19,7 @@ export const Assinatura: React.FC = () => {
   
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
-  const [planoSelecionado, setPlanoSelecionado] = useState<string>('');
+  const [planoSelecionado, setPlanoSelecionado] = useState<PlanoNome>('PRO');
 
   useEffect(() => {
     carregarDados();
@@ -22,7 +29,7 @@ export const Assinatura: React.FC = () => {
     try {
       const response = await api.get('/tenants/meu-plano');
       setDados(response.data);
-      setPlanoSelecionado(response.data.plano);
+      setPlanoSelecionado(resolvePlano(response.data.plano));
     } catch (err) {
       console.error(err);
       alert('Erro ao carregar dados do plano.');
@@ -58,6 +65,10 @@ export const Assinatura: React.FC = () => {
 
   if (loading) return <div className="p-10 flex justify-center"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-600"></div></div>;
 
+  const planoAtual = resolvePlano(dados?.plano);
+  const pacoteAtual = PLANOS[planoAtual].pacote;
+  const infoPacote = PACOTES_OBRAS[pacoteAtual];
+
   return (
     <div className="min-h-screen bg-lunardeli-gray p-6">
       <div className="max-w-4xl mx-auto">
@@ -72,7 +83,8 @@ export const Assinatura: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
           <div className="flex flex-col items-start">
             <h2 className="text-lg font-semibold text-gray-500 mb-1">Seu Plano Atual</h2>
-            <p className="text-4xl font-extrabold text-gray-800">{dados?.plano}</p>
+            <p className="text-4xl font-extrabold text-gray-800">{labelPlano(planoAtual)}</p>
+            <p className="text-sm text-gray-500 mt-1">{infoPacote.label}</p>
             <div className="flex items-center mt-3 text-sm text-gray-600 bg-gray-50 p-2 rounded w-max border mb-4">
               <ShieldCheck size={16} className="text-green-500 mr-2" /> Status: <span className="font-bold ml-1">{dados?.ativo ? 'Ativo' : 'Inativo'}</span> {dados?.suspensa && <span className="text-red-500 font-bold ml-1">(Suspenso)</span>}
             </div>
@@ -84,9 +96,10 @@ export const Assinatura: React.FC = () => {
             <div className="flex items-center text-gray-700">
               <Building2 className="text-gray-400 mr-3" size={20} />
               <span>
-                Pacote de obras: <strong>{labelPacote(dados?.pacoteObras)}</strong>
-                {' '}
-                ({dados?.limiteObras == null ? 'ilimitado' : `até ${dados.limiteObras}`})
+                Limite de obras:{' '}
+                <strong>
+                  {dados?.limiteObras == null ? 'Ilimitado' : `até ${dados.limiteObras}`}
+                </strong>
               </span>
             </div>
             <div className="flex items-center text-gray-700">
@@ -195,28 +208,43 @@ export const Assinatura: React.FC = () => {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
             <h3 className="text-2xl font-black mb-2 text-lunardeli-dark">Escolher novo Plano</h3>
-            <p className="text-gray-500 mb-6 text-sm">Selecione a opção que melhor atende o tamanho da sua equipe.</p>
+            <p className="text-gray-500 mb-6 text-sm">
+              Selecione o plano conforme o número de obras da sua operação.
+            </p>
             
             <div className="space-y-4 mb-8">
-              {['BASICO', 'PRO', 'ENTERPRISE'].map(opt => (
-                <div 
-                  key={opt}
-                  onClick={() => setPlanoSelecionado(opt)}
-                  className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${planoSelecionado === opt ? 'border-red-600 bg-red-50' : 'border-gray-200 hover:border-red-300'}`}
-                >
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h4 className="font-bold text-lg text-gray-800">{opt}</h4>
-                      <p className="text-sm text-gray-500 leading-none mt-1">
-                        Até {opt === 'BASICO' ? '5' : opt === 'PRO' ? '20' : '100'} usuários cadastrados
-                      </p>
-                    </div>
-                    <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center ${planoSelecionado === opt ? 'border-red-600' : 'border-gray-300'}`}>
-                      {planoSelecionado === opt && <div className="h-3 w-3 rounded-full bg-red-600" />}
+              {PLANO_KEYS.map((opt) => {
+                const info = PLANOS[opt];
+                const pacote = PACOTES_OBRAS[info.pacote];
+                return (
+                  <div 
+                    key={opt}
+                    onClick={() => setPlanoSelecionado(opt)}
+                    className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${planoSelecionado === opt ? 'border-red-600 bg-red-50' : 'border-gray-200 hover:border-red-300'}`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h4 className="font-bold text-lg text-gray-800">{info.label}</h4>
+                        <p className="text-sm text-gray-500 mt-1">
+                          {pacote.label}
+                          {pacote.limite == null ? '' : ` · limite ${pacote.limite}`}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Até {info.limiteUsuarios} usuários ·{' '}
+                          {opt === 'PRO'
+                            ? 'preço de tabela'
+                            : opt === 'BASICO'
+                              ? '−20% sobre a tabela'
+                              : '+50% sobre a tabela'}
+                        </p>
+                      </div>
+                      <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center ${planoSelecionado === opt ? 'border-red-600' : 'border-gray-300'}`}>
+                        {planoSelecionado === opt && <div className="h-3 w-3 rounded-full bg-red-600" />}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="flex gap-3 justify-end">
