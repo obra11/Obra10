@@ -60,16 +60,23 @@ api.interceptors.response.use(
     }
 
     if (error.response && error.response.status === 401) {
+      // Rotas públicas (site comercial + auth). Sem isso, 401 em /auth/session
+      // na home redirecionava visitante para /login e “sumia” o site.
       const publicPaths = [
+        '/',
+        '/produto',
+        '/precos',
+        '/sobre',
+        '/contato',
         '/login',
         '/register',
-        '/precos',
         '/verificar-email',
         '/esqueci-senha',
         '/redefinir-senha',
-        '/diario-de-obra'
+        '/diario-de-obra',
       ];
-      if (!publicPaths.includes(window.location.pathname)) {
+      const path = window.location.pathname;
+      if (!publicPaths.includes(path)) {
          window.dispatchEvent(new Event('auth:unauthorized'));
          window.location.href = '/login';
       }
