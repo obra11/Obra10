@@ -46,6 +46,7 @@ export class ObraController {
     const empresaId = req.user?.empresaId;
     if (!userId || !empresaId)
       throw new UnauthorizedException('Sessão inválida.');
+    await this.assertCapability(req, 'criarObra', 'criar obras');
     return this.obraService.criarObra(empresaId, userId, dto);
   }
 
@@ -55,8 +56,10 @@ export class ObraController {
       const empresaId = req.user?.empresaId;
       const userId = req.user?.sub;
       if (!empresaId || !userId) throw new UnauthorizedException('Sessão inválida.');
+      await this.assertCapability(req, 'excluirObra', 'excluir obras');
       return await this.obraService.excluirObra(id, empresaId, userId);
     } catch (err: any) {
+      if (err instanceof ForbiddenException || err instanceof UnauthorizedException) throw err;
       throw new BadRequestException('Erro ao excluir: ' + err.message);
     }
   }
@@ -70,8 +73,10 @@ export class ObraController {
     try {
       const empresaId = req.user?.empresaId;
       if (!empresaId) throw new UnauthorizedException('Sessão inválida.');
+      await this.assertCapability(req, 'editarObra', 'editar obras');
       return await this.obraService.editarObra(id, empresaId, dto);
     } catch (err: any) {
+      if (err instanceof ForbiddenException || err instanceof UnauthorizedException) throw err;
       throw new BadRequestException('Erro ao editar: ' + err.message);
     }
   }
@@ -133,15 +138,22 @@ export class ObraController {
   }
 
   private async assertGerenciarUsuarios(req: any) {
-    if (req.user?.perfilGlobal === 'SUPER_ADMIN') return;
-    const pode = await this.capabilities.hasCapability(
-      req.user?.sub,
+    await this.assertCapability(
+      req,
       'gerenciarUsuarios',
+      'gerenciar colaboradores da obra',
     );
+  }
+
+  private async assertCapability(
+    req: any,
+    key: 'criarObra' | 'editarObra' | 'excluirObra' | 'gerenciarUsuarios',
+    acao: string,
+  ) {
+    if (req.user?.perfilGlobal === 'SUPER_ADMIN') return;
+    const pode = await this.capabilities.hasCapability(req.user?.sub, key);
     if (!pode) {
-      throw new ForbiddenException(
-        'Você não tem permissão para gerenciar colaboradores da obra.',
-      );
+      throw new ForbiddenException(`Você não tem permissão para ${acao}.`);
     }
   }
 }

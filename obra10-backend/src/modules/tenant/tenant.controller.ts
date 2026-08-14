@@ -74,7 +74,7 @@ export class TenantController {
   async upgradeMeuPlano(@Req() req: any, @Body() dto: UpgradePlanoDto) {
     const empresaId = req.user?.empresaId;
     if (!empresaId) throw new ForbiddenException('Sessão inválida.');
-    await this.assertGerenciarEmpresa(req);
+    await this.assertGerenciarFinanceiro(req);
     return this.tenantService.upgradeMeuPlano(empresaId, dto.plano);
   }
 
@@ -148,14 +148,26 @@ export class TenantController {
 
   private async assertGerenciarEmpresa(req: any) {
     if (req.user?.perfilGlobal === 'SUPER_ADMIN') return;
-    // Gestores com gerenciarUsuarios (default do papel GESTOR) podem editar empresa/plano
     const pode = await this.capabilities.hasCapability(
       req.user?.sub,
-      'gerenciarUsuarios',
+      'gerenciarEmpresa',
     );
     if (!pode) {
       throw new ForbiddenException(
         'Você não tem permissão para alterar dados da empresa.',
+      );
+    }
+  }
+
+  private async assertGerenciarFinanceiro(req: any) {
+    if (req.user?.perfilGlobal === 'SUPER_ADMIN') return;
+    const pode = await this.capabilities.hasCapability(
+      req.user?.sub,
+      'gerenciarFinanceiro',
+    );
+    if (!pode) {
+      throw new ForbiddenException(
+        'Você não tem permissão para alterar o plano/financeiro.',
       );
     }
   }

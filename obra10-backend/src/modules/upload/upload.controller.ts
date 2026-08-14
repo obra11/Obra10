@@ -121,6 +121,17 @@ export class UploadController {
         'Sem permissão para alterar o logo desta empresa.',
       );
     }
+    if (req.user.perfilGlobal !== 'SUPER_ADMIN') {
+      const pode = await this.capabilities.hasCapability(
+        req.user.sub,
+        'gerenciarEmpresa',
+      );
+      if (!pode) {
+        throw new ForbiddenException(
+          'Sem permissão para alterar o logo desta empresa.',
+        );
+      }
+    }
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
     const url = await this.processUpload(file, 'logos');
     const empresa = await this.prisma.empresa.update({

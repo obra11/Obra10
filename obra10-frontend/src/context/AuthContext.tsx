@@ -10,6 +10,12 @@ export interface Usuario {
   fotoUrl?: string;
   capabilities?: {
     gerenciarUsuarios?: boolean;
+    gerenciarEmpresa?: boolean;
+    gerenciarFinanceiro?: boolean;
+    gerenciarCatalogo?: boolean;
+    criarObra?: boolean;
+    editarObra?: boolean;
+    excluirObra?: boolean;
     acessoTodasObras?: boolean;
     aprovarRdo?: boolean;
     criarEditarRdo?: boolean;

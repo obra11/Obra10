@@ -20,6 +20,30 @@ export class CapabilitiesDto {
 
   @IsBoolean()
   @IsOptional()
+  gerenciarEmpresa?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  gerenciarFinanceiro?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  gerenciarCatalogo?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  criarObra?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  editarObra?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  excluirObra?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
   acessoTodasObras?: boolean;
 
   @IsBoolean()

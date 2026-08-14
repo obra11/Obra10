@@ -3,6 +3,12 @@ import { PerfilGlobal, TipoPapelEmpresa } from '@prisma/client';
 /** Flags de capacidade resolvidas por papel / usuário. */
 export interface RoleCapabilities {
   gerenciarUsuarios: boolean;
+  gerenciarEmpresa: boolean;
+  gerenciarFinanceiro: boolean;
+  gerenciarCatalogo: boolean;
+  criarObra: boolean;
+  editarObra: boolean;
+  excluirObra: boolean;
   acessoTodasObras: boolean;
   aprovarRdo: boolean;
   criarEditarRdo: boolean;
@@ -15,6 +21,12 @@ export interface RoleCapabilities {
 
 export const EMPTY_CAPABILITIES: RoleCapabilities = {
   gerenciarUsuarios: false,
+  gerenciarEmpresa: false,
+  gerenciarFinanceiro: false,
+  gerenciarCatalogo: false,
+  criarObra: false,
+  editarObra: false,
+  excluirObra: false,
   acessoTodasObras: false,
   aprovarRdo: false,
   criarEditarRdo: false,
@@ -25,7 +37,14 @@ export const EMPTY_CAPABILITIES: RoleCapabilities = {
 };
 
 export const SUPER_ADMIN_CAPABILITIES: RoleCapabilities = {
+  ...EMPTY_CAPABILITIES,
   gerenciarUsuarios: true,
+  gerenciarEmpresa: true,
+  gerenciarFinanceiro: true,
+  gerenciarCatalogo: true,
+  criarObra: true,
+  editarObra: true,
+  excluirObra: true,
   acessoTodasObras: true,
   aprovarRdo: true,
   criarEditarRdo: true,
@@ -41,6 +60,12 @@ export const DEFAULT_CAPABILITIES_BY_TIPO: Record<
 > = {
   GESTOR: {
     gerenciarUsuarios: true,
+    gerenciarEmpresa: true,
+    gerenciarFinanceiro: true,
+    gerenciarCatalogo: true,
+    criarObra: true,
+    editarObra: true,
+    excluirObra: true,
     acessoTodasObras: true,
     aprovarRdo: true,
     criarEditarRdo: true,
@@ -51,6 +76,12 @@ export const DEFAULT_CAPABILITIES_BY_TIPO: Record<
   },
   COLABORADOR: {
     gerenciarUsuarios: false,
+    gerenciarEmpresa: false,
+    gerenciarFinanceiro: false,
+    gerenciarCatalogo: false,
+    criarObra: false,
+    editarObra: false,
+    excluirObra: false,
     acessoTodasObras: false,
     aprovarRdo: false,
     criarEditarRdo: true,
@@ -61,6 +92,12 @@ export const DEFAULT_CAPABILITIES_BY_TIPO: Record<
   },
   EXTERNO: {
     gerenciarUsuarios: false,
+    gerenciarEmpresa: false,
+    gerenciarFinanceiro: false,
+    gerenciarCatalogo: false,
+    criarObra: false,
+    editarObra: false,
+    excluirObra: false,
     acessoTodasObras: false,
     aprovarRdo: false,
     criarEditarRdo: false,
@@ -149,10 +186,21 @@ export function normalizeCapabilities(
   raw: unknown,
   fallback: RoleCapabilities = EMPTY_CAPABILITIES,
 ): RoleCapabilities {
-  if (!raw || typeof raw !== 'object') return { ...fallback, modulosPadrao: { ...fallback.modulosPadrao } };
+  if (!raw || typeof raw !== 'object') {
+    return { ...fallback, modulosPadrao: { ...fallback.modulosPadrao } };
+  }
   const obj = raw as Record<string, unknown>;
   return mergeCapabilities(fallback, {
     gerenciarUsuarios: boolOr(obj.gerenciarUsuarios, fallback.gerenciarUsuarios),
+    gerenciarEmpresa: boolOr(obj.gerenciarEmpresa, fallback.gerenciarEmpresa),
+    gerenciarFinanceiro: boolOr(
+      obj.gerenciarFinanceiro,
+      fallback.gerenciarFinanceiro,
+    ),
+    gerenciarCatalogo: boolOr(obj.gerenciarCatalogo, fallback.gerenciarCatalogo),
+    criarObra: boolOr(obj.criarObra, fallback.criarObra),
+    editarObra: boolOr(obj.editarObra, fallback.editarObra),
+    excluirObra: boolOr(obj.excluirObra, fallback.excluirObra),
     acessoTodasObras: boolOr(obj.acessoTodasObras, fallback.acessoTodasObras),
     aprovarRdo: boolOr(obj.aprovarRdo, fallback.aprovarRdo),
     criarEditarRdo: boolOr(obj.criarEditarRdo, fallback.criarEditarRdo),

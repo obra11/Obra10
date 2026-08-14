@@ -16,6 +16,12 @@ interface ObraVinculada {
 }
 interface RoleCapabilities {
   gerenciarUsuarios: boolean;
+  gerenciarEmpresa: boolean;
+  gerenciarFinanceiro: boolean;
+  gerenciarCatalogo: boolean;
+  criarObra: boolean;
+  editarObra: boolean;
+  excluirObra: boolean;
   acessoTodasObras: boolean;
   aprovarRdo: boolean;
   criarEditarRdo: boolean;
@@ -58,6 +64,12 @@ const FUNCOES = [
 
 const EMPTY_CAPS: RoleCapabilities = {
   gerenciarUsuarios: false,
+  gerenciarEmpresa: false,
+  gerenciarFinanceiro: false,
+  gerenciarCatalogo: false,
+  criarObra: false,
+  editarObra: false,
+  excluirObra: false,
   acessoTodasObras: false,
   aprovarRdo: false,
   criarEditarRdo: false,
@@ -67,14 +79,20 @@ const EMPTY_CAPS: RoleCapabilities = {
   modulosPadrao: {},
 };
 
-const CAP_LABELS: { key: keyof Omit<RoleCapabilities, 'modulosPadrao'>; label: string; hint: string }[] = [
-  { key: 'gerenciarUsuarios', label: 'Gerenciar usuários', hint: 'Criar, editar e remover usuários da empresa' },
-  { key: 'acessoTodasObras', label: 'Acesso a todas as obras', hint: 'Vê todas as obras sem vínculo explícito' },
-  { key: 'aprovarRdo', label: 'Aprovar RDO', hint: 'Pode aprovar e reabrir diários de obra' },
-  { key: 'criarEditarRdo', label: 'Criar e editar RDO', hint: 'Pode criar e preencher diários' },
-  { key: 'verTodosRdos', label: 'Ver todos os RDOs', hint: 'Visualiza diários em qualquer status' },
-  { key: 'verSoAprovados', label: 'Ver só aprovados', hint: 'Restringe a diários aprovados' },
-  { key: 'verParcialAprovados', label: 'Visualização parcial', hint: 'Só clima e atividades de RDOs aprovados' },
+const CAP_LABELS: { key: keyof Omit<RoleCapabilities, 'modulosPadrao'>; label: string; hint: string; group: string }[] = [
+  { key: 'gerenciarUsuarios', label: 'Gerenciar usuários', hint: 'Criar, editar e remover usuários da empresa', group: 'Empresa' },
+  { key: 'gerenciarEmpresa', label: 'Editar dados da empresa', hint: 'Alterar razão social, contato, endereço e logo', group: 'Empresa' },
+  { key: 'gerenciarFinanceiro', label: 'Financeiro e plano', hint: 'Acessar assinatura, cobranças e upgrade de plano', group: 'Empresa' },
+  { key: 'gerenciarCatalogo', label: 'Cadastro Base', hint: 'Criar, editar e importar insumos do catálogo', group: 'Empresa' },
+  { key: 'criarObra', label: 'Criar nova obra', hint: 'Cadastrar novos canteiros na conta', group: 'Obras' },
+  { key: 'editarObra', label: 'Editar obras', hint: 'Alterar nome, endereço e dados das obras', group: 'Obras' },
+  { key: 'excluirObra', label: 'Excluir obras', hint: 'Remover obras da empresa', group: 'Obras' },
+  { key: 'acessoTodasObras', label: 'Acesso a todas as obras', hint: 'Vê todas as obras sem vínculo explícito', group: 'Obras' },
+  { key: 'aprovarRdo', label: 'Aprovar RDO', hint: 'Pode aprovar e reabrir diários de obra', group: 'RDO' },
+  { key: 'criarEditarRdo', label: 'Criar e editar RDO', hint: 'Pode criar e preencher diários', group: 'RDO' },
+  { key: 'verTodosRdos', label: 'Ver todos os RDOs', hint: 'Visualiza diários em qualquer status', group: 'RDO' },
+  { key: 'verSoAprovados', label: 'Ver só aprovados', hint: 'Restringe a diários aprovados', group: 'RDO' },
+  { key: 'verParcialAprovados', label: 'Visualização parcial', hint: 'Só clima e atividades de RDOs aprovados', group: 'RDO' },
 ];
 
 function roleBadgeClass(perfil: string) {
@@ -319,22 +337,27 @@ export const UserManagement: React.FC = () => {
     showModulos = true,
   ) => (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {CAP_LABELS.map(item => (
-          <label key={item.key} className="flex items-start gap-2 p-3 border border-gray-200 rounded-lg bg-white cursor-pointer hover:border-red-200">
-            <input
-              type="checkbox"
-              className="mt-0.5 rounded border-gray-300 text-red-600 focus:ring-red-500"
-              checked={!!caps[item.key]}
-              onChange={e => onChange({ ...caps, [item.key]: e.target.checked })}
-            />
-            <span>
-              <span className="block text-sm font-semibold text-gray-800">{item.label}</span>
-              <span className="block text-[11px] text-gray-500">{item.hint}</span>
-            </span>
-          </label>
-        ))}
-      </div>
+      {(['Empresa', 'Obras', 'RDO'] as const).map(group => (
+        <div key={group}>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{group}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {CAP_LABELS.filter(item => item.group === group).map(item => (
+              <label key={item.key} className="flex items-start gap-2 p-3 border border-gray-200 rounded-lg bg-white cursor-pointer hover:border-red-200">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                  checked={!!caps[item.key]}
+                  onChange={e => onChange({ ...caps, [item.key]: e.target.checked })}
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-gray-800">{item.label}</span>
+                  <span className="block text-[11px] text-gray-500">{item.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
       {showModulos && (
         <div>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Módulos padrão</p>
