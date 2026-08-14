@@ -7,6 +7,7 @@ export const AdminModulos: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editando, setEditando] = useState<string | null>(null);
   const [precoEdit, setPrecoEdit] = useState('');
+  const [precoAnualEdit, setPrecoAnualEdit] = useState('');
   const [descEdit, setDescEdit] = useState('');
 
   const fetchModulos = async () => {
@@ -26,7 +27,8 @@ export const AdminModulos: React.FC = () => {
 
   const iniciarEdicao = (mod: any) => {
     setEditando(mod.id);
-    setPrecoEdit(mod.preco);
+    setPrecoEdit(String(mod.preco ?? ''));
+    setPrecoAnualEdit(String(mod.precoAnual ?? ''));
     setDescEdit(mod.descricao || '');
   };
 
@@ -34,6 +36,7 @@ export const AdminModulos: React.FC = () => {
     try {
       await api.patch(`/admin/modulos/${id}`, {
         preco: Number(precoEdit),
+        precoAnual: Number(precoAnualEdit),
         descricao: descEdit,
       });
       setEditando(null);
@@ -85,10 +88,17 @@ export const AdminModulos: React.FC = () => {
               {editando === mod.id ? (
                 <div className="space-y-3 mt-4">
                   <input type="text" value={descEdit} onChange={e => setDescEdit(e.target.value)} className="w-full text-sm border p-2 rounded focus:border-red-500 focus:ring-1 focus:ring-red-500" placeholder="Descrição do módulo..."/>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-gray-500">R$</span>
-                    <input type="number" value={precoEdit} onChange={e => setPrecoEdit(e.target.value)} className="w-32 text-sm border p-2 rounded focus:border-red-500 focus:ring-1 focus:ring-red-500"/>
-                    <span className="text-sm text-gray-500">/mês</span>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-gray-500">R$</span>
+                      <input type="number" value={precoEdit} onChange={e => setPrecoEdit(e.target.value)} className="w-28 text-sm border p-2 rounded focus:border-red-500 focus:ring-1 focus:ring-red-500"/>
+                      <span className="text-sm text-gray-500">/mês</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-gray-500">R$</span>
+                      <input type="number" value={precoAnualEdit} onChange={e => setPrecoAnualEdit(e.target.value)} className="w-28 text-sm border p-2 rounded focus:border-red-500 focus:ring-1 focus:ring-red-500"/>
+                      <span className="text-sm text-gray-500">/ano</span>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -101,7 +111,9 @@ export const AdminModulos: React.FC = () => {
               {!editando || editando !== mod.id ? (
                 <div className="w-full text-right">
                   <p className="text-2xl font-extrabold text-gray-900">R$ {Number(mod.preco).toFixed(2)}</p>
-                  <p className="text-xs text-gray-400 font-medium">Billed monthly</p>
+                  <p className="text-xs text-gray-400 font-medium">/mês</p>
+                  <p className="text-sm font-bold text-gray-700 mt-2">R$ {Number(mod.precoAnual || 0).toFixed(2)}</p>
+                  <p className="text-xs text-gray-400 font-medium">/ano</p>
                 </div>
               ) : null}
 

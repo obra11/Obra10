@@ -10,6 +10,12 @@ export class ContratarModulosDto {
   })
   formaPagamento: 'PIX' | 'CARTAO';
 
+  @IsEnum(['MENSAL', 'ANUAL'], {
+    message: 'periodicidade deve ser MENSAL ou ANUAL.',
+  })
+  @IsOptional()
+  periodicidade?: 'MENSAL' | 'ANUAL';
+
   @IsString()
   @IsOptional()
   tokenCartao?: string;

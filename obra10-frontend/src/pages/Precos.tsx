@@ -7,12 +7,14 @@ interface Modulo {
   slug: string;
   nome: string;
   descricao: string;
-  preco: string;
+  preco: string | number;
+  precoAnual?: string | number;
 }
 
 export const Precos: React.FC = () => {
   const [modulos, setModulos] = useState<Modulo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [periodicidade, setPeriodicidade] = useState<'MENSAL' | 'ANUAL'>('MENSAL');
 
   useEffect(() => {
     api
@@ -24,7 +26,14 @@ export const Precos: React.FC = () => {
       .catch(() => setLoading(false));
   }, []);
 
-  const total = modulos.reduce((s, m) => s + parseFloat(m.preco || '0'), 0);
+  const precoDe = (m: Modulo) => {
+    const mensal = parseFloat(String(m.preco || '0'));
+    const anual = parseFloat(String(m.precoAnual || '0'));
+    if (periodicidade === 'ANUAL') return anual > 0 ? anual : mensal * 11;
+    return mensal;
+  };
+
+  const total = modulos.reduce((s, m) => s + precoDe(m), 0);
 
   return (
     <div>
@@ -37,9 +46,29 @@ export const Precos: React.FC = () => {
             Preços simples e transparentes.
           </h1>
           <p className="mt-5 text-white/80 text-lg max-w-2xl">
-            Pagamento por módulo. Sem fidelidade. Ative ou desative quando
-            quiser. RDO com 1º mês grátis para novos clientes.
+            Pagamento por módulo. Escolha mensal ou anual. Ative só o que a obra
+            precisa.
           </p>
+          <div className="mt-8 inline-flex bg-white/10 rounded-lg p-1 gap-1">
+            <button
+              type="button"
+              onClick={() => setPeriodicidade('MENSAL')}
+              className={`px-5 py-2.5 rounded-md text-sm font-bold transition-colors ${
+                periodicidade === 'MENSAL' ? 'bg-white text-lunardeli-dark' : 'text-white/80'
+              }`}
+            >
+              Mensal
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriodicidade('ANUAL')}
+              className={`px-5 py-2.5 rounded-md text-sm font-bold transition-colors ${
+                periodicidade === 'ANUAL' ? 'bg-white text-lunardeli-dark' : 'text-white/80'
+              }`}
+            >
+              Anual
+            </button>
+          </div>
         </div>
       </section>
 
@@ -52,7 +81,8 @@ export const Precos: React.FC = () => {
           <>
             <div className="divide-y divide-lunardeli-lightGray border-y border-lunardeli-lightGray">
               {modulos.map((m) => {
-                const isFree = m.slug === 'RDO';
+                const valor = precoDe(m);
+                const mensal = parseFloat(String(m.preco || '0'));
                 return (
                   <div
                     key={m.slug}
@@ -63,7 +93,7 @@ export const Precos: React.FC = () => {
                         <h2 className="font-display text-xl font-bold text-lunardeli-dark">
                           {m.nome}
                         </h2>
-                        {isFree && (
+                        {m.slug === 'RDO' && (
                           <span className="text-[10px] font-bold uppercase tracking-wider bg-green-100 text-green-800 px-2 py-0.5 rounded">
                             1º mês grátis
                           </span>
@@ -76,11 +106,16 @@ export const Precos: React.FC = () => {
                     <div className="mt-3 sm:mt-0 sm:text-right shrink-0">
                       <p className="font-display text-2xl font-extrabold text-lunardeli-dark">
                         R${' '}
-                        {parseFloat(m.preco || '0')
-                          .toFixed(2)
-                          .replace('.', ',')}
+                        {valor.toFixed(2).replace('.', ',')}
                       </p>
-                      <p className="text-xs text-gray-500">/mês</p>
+                      <p className="text-xs text-gray-500">
+                        /{periodicidade === 'ANUAL' ? 'ano' : 'mês'}
+                      </p>
+                      {periodicidade === 'ANUAL' && mensal > 0 && (
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          mensal: R$ {mensal.toFixed(2).replace('.', ',')}
+                        </p>
+                      )}
                     </div>
                   </div>
                 );
@@ -93,7 +128,7 @@ export const Precos: React.FC = () => {
               </h2>
               <p className="mt-2 text-white/90 text-sm sm:text-base max-w-xl">
                 {modulos.length
-                  ? `Pacote completo estimado: R$ ${total.toFixed(2).replace('.', ',')}/mês — escolha só os módulos que precisa no cadastro.`
+                  ? `Pacote completo estimado: R$ ${total.toFixed(2).replace('.', ',')}/${periodicidade === 'ANUAL' ? 'ano' : 'mês'} — escolha só os módulos que precisa no cadastro.`
                   : 'Crie sua conta e escolha os módulos no onboarding.'}
               </p>
               <div className="mt-6 flex flex-col sm:flex-row gap-3">

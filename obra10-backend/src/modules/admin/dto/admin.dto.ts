@@ -189,6 +189,10 @@ export class AtualizarModuloAdminDto {
   @IsOptional()
   preco?: number;
 
+  @IsNumber()
+  @IsOptional()
+  precoAnual?: number;
+
   @IsBoolean()
   @IsOptional()
   ativo?: boolean;

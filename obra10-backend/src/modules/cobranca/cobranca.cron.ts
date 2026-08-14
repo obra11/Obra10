@@ -64,10 +64,30 @@ export class CobrancaCron {
           continue;
         }
 
-        // Calculate base total from active modules
-        const valorBase = empresa.tenantModulos.reduce((sum, tm) => {
-          return sum + Number(tm.modulo.preco);
-        }, 0);
+        // Cobrar módulos mensais + anuais vencidos (renovação)
+        const agora = new Date();
+        let valorBase = 0;
+        const anuaisVencidosSlugs: string[] = [];
+        for (const tm of empresa.tenantModulos) {
+          const mensal = Number(tm.modulo.preco);
+          const anual = Number((tm.modulo as any).precoAnual || 0);
+          const period = (tm as any).periodicidade || 'MENSAL';
+          if (period === 'ANUAL') {
+            if (tm.expiresAt && tm.expiresAt > agora) continue;
+            valorBase += anual > 0 ? anual : mensal * 11;
+            anuaisVencidosSlugs.push(tm.modulo.slug);
+          } else {
+            valorBase += mensal;
+          }
+        }
+        const cobrancaPeriodicidade =
+          anuaisVencidosSlugs.length > 0 &&
+          empresa.tenantModulos.every(
+            (tm) => (tm as any).periodicidade === 'ANUAL',
+          )
+            ? 'ANUAL'
+            : 'MENSAL';
+        const cobrancaModulosSlugs = anuaisVencidosSlugs;
 
         // Apply coupon discount if active
         const desconto = await this.cupomService.calcularDesconto(
@@ -87,12 +107,21 @@ export class CobrancaCron {
               valor: 0,
               status: 'PAGO',
               formaPagamento: 'CUPOM',
+              periodicidade: cobrancaPeriodicidade,
+              modulosSlugs: cobrancaModulosSlugs,
               mesReferencia: mesRef,
               dataVencimento: vencimento,
               dataPagamento: new Date(),
               idempotencyKey,
             },
           });
+          if (cobrancaModulosSlugs.length > 0) {
+            await this.cobrancaService.ativarModulos(
+              empresa.id,
+              cobrancaModulosSlugs,
+              'ANUAL',
+            );
+          }
           // Increment month usage and auto-expire if needed
           await this.cupomService.incrementarMesEExpirar(empresa.id);
           this.logger.log(
@@ -137,6 +166,8 @@ export class CobrancaCron {
               valor,
               status: result.status === 'CONFIRMED' ? 'PAGO' : 'PENDENTE',
               formaPagamento: 'CARTAO',
+              periodicidade: cobrancaPeriodicidade,
+              modulosSlugs: cobrancaModulosSlugs,
               mesReferencia: mesRef,
               dataVencimento: vencimento,
               dataPagamento: result.status === 'CONFIRMED' ? new Date() : null,
@@ -144,6 +175,13 @@ export class CobrancaCron {
               idempotencyKey,
             },
           });
+          if (result.status === 'CONFIRMED' && cobrancaModulosSlugs.length > 0) {
+            await this.cobrancaService.ativarModulos(
+              empresa.id,
+              cobrancaModulosSlugs,
+              'ANUAL',
+            );
+          }
           if (result.status === 'CONFIRMED' && empresa.email) {
             await this.email.enviarConfirmacaoPagamento(
               empresa.email,
@@ -164,6 +202,8 @@ export class CobrancaCron {
               valor,
               status: 'PENDENTE',
               formaPagamento: 'PIX',
+              periodicidade: cobrancaPeriodicidade,
+              modulosSlugs: cobrancaModulosSlugs,
               mesReferencia: mesRef,
               dataVencimento: vencimento,
               linkPagamento: pix.linkPagamento,

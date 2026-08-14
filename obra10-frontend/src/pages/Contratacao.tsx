@@ -14,6 +14,7 @@ interface Modulo {
   grupo: string;
   descricao?: string;
   preco: number;
+  precoAnual?: number;
   submodulos: SubModulo[];
 }
 
@@ -42,6 +43,7 @@ export const Contratacao: React.FC = () => {
   const [selecionados, setSelecionados] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [formaPagamento, setFormaPagamento] = useState<'PIX' | 'CARTAO'>('PIX');
+  const [periodicidade, setPeriodicidade] = useState<'MENSAL' | 'ANUAL'>('MENSAL');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -66,10 +68,18 @@ export const Contratacao: React.FC = () => {
 
   const toggleExpand = (slug: string) => setExpanded(p => ({ ...p, [slug]: !p[slug] }));
 
+  const precoModulo = (m: Modulo) => {
+    if (periodicidade === 'ANUAL') {
+      const anual = Number(m.precoAnual || 0);
+      return anual > 0 ? anual : Number(m.preco) * 11;
+    }
+    return Number(m.preco);
+  };
+
   // Base total (before coupon)
   const totalBase = modulos
     .filter(m => selecionados.includes(m.slug))
-    .reduce((s, m) => s + Number(m.preco), 0);
+    .reduce((s, m) => s + precoModulo(m), 0);
 
   // Total after coupon
   const calcularTotalComDesconto = () => {
@@ -124,6 +134,7 @@ export const Contratacao: React.FC = () => {
       const res = await api.post('/cobrancas/contratar', {
         modulosSelecionados: selecionados,
         formaPagamento,
+        periodicidade,
         cupom: cupomValidado ? codigoCupom.trim() : undefined,
       });
 
@@ -155,7 +166,36 @@ export const Contratacao: React.FC = () => {
         <div className="text-center mb-8">
           <Package size={48} className="mx-auto mb-4 text-red-600" />
           <h1 className="text-3xl font-bold text-gray-900">Escolha seus módulos</h1>
-          <p className="text-gray-500 mt-2">Pague apenas pelo que usar.</p>
+          <p className="text-gray-500 mt-2">Pague apenas pelo que usar — mensal ou anual.</p>
+        </div>
+
+        {/* Periodicidade */}
+        <div className="bg-white rounded-xl border border-gray-200 p-2 mb-6 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setPeriodicidade('MENSAL')}
+            className={`flex-1 py-3 rounded-lg text-sm font-bold transition-colors ${
+              periodicidade === 'MENSAL'
+                ? 'bg-red-600 text-white'
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Mensal
+          </button>
+          <button
+            type="button"
+            onClick={() => setPeriodicidade('ANUAL')}
+            className={`flex-1 py-3 rounded-lg text-sm font-bold transition-colors ${
+              periodicidade === 'ANUAL'
+                ? 'bg-red-600 text-white'
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Anual
+            <span className="block text-[10px] font-semibold opacity-80 mt-0.5">
+              Economize ~1 mês
+            </span>
+          </button>
         </div>
 
         {error && <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-xl border-l-4 border-red-500">{error}</div>}
@@ -196,9 +236,16 @@ export const Contratacao: React.FC = () => {
                         <div className="flex items-center gap-3 shrink-0 ml-4">
                           <div className="text-right">
                             <p className="font-bold text-gray-900">
-                              R$ {Number(m.preco).toFixed(2)}
-                              <span className="text-xs text-gray-400 font-normal">/mês</span>
+                              R$ {precoModulo(m).toFixed(2)}
+                              <span className="text-xs text-gray-400 font-normal">
+                                /{periodicidade === 'ANUAL' ? 'ano' : 'mês'}
+                              </span>
                             </p>
+                            {periodicidade === 'ANUAL' && Number(m.preco) > 0 && (
+                              <p className="text-[10px] text-gray-400">
+                                equiv. R$ {(precoModulo(m) / 12).toFixed(2)}/mês
+                              </p>
+                            )}
                           </div>
                           {hasSubmodulos && (
                             <button
@@ -307,7 +354,9 @@ export const Contratacao: React.FC = () => {
         {/* Total + CTA */}
         <div className="bg-white rounded-xl border-2 border-red-100 p-5">
           <div className="flex justify-between items-center mb-4">
-            <span className="text-gray-600 font-medium">Total mensal</span>
+            <span className="text-gray-600 font-medium">
+              Total {periodicidade === 'ANUAL' ? 'anual' : 'mensal'}
+            </span>
             <div className="text-right">
               {temDesconto && (
                 <span className="text-sm text-gray-400 line-through mr-2">

@@ -29,6 +29,7 @@ export class ModulosService {
       grupo: m.grupo,
       descricao: m.descricao,
       preco: Number(m.preco),
+      precoAnual: Number(m.precoAnual || 0),
       versao: m.versao,
       dependencias: m.dependencias,
       ordemExibicao: m.ordemExibicao,

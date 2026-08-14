@@ -17,6 +17,7 @@ export interface ContratarDto {
   empresaId: string;
   modulosSelecionados: string[];
   formaPagamento: 'PIX' | 'CARTAO';
+  periodicidade?: 'MENSAL' | 'ANUAL';
   tokenCartao?: string;
   cupom?: string;
 }
@@ -52,8 +53,17 @@ export class CobrancaService {
     if (modulos.length === 0)
       throw new BadRequestException('Nenhum módulo válido selecionado.');
 
-    // Calculate base price from modules
-    const valorBase = modulos.reduce((sum, m) => sum + Number(m.preco), 0);
+    const periodicidade = dto.periodicidade === 'ANUAL' ? 'ANUAL' : 'MENSAL';
+
+    // Calculate base price from modules (mensal ou anual)
+    const valorBase = modulos.reduce((sum, m) => {
+      const mensal = Number(m.preco);
+      const anual = Number((m as any).precoAnual || 0);
+      if (periodicidade === 'ANUAL') {
+        return sum + (anual > 0 ? anual : mensal * 11);
+      }
+      return sum + mensal;
+    }, 0);
 
     // Apply coupon if provided
     let cupomAplicado: string | null = null;
@@ -80,14 +90,19 @@ export class CobrancaService {
     const now = new Date();
     const mesRef = new Date(now.getFullYear(), now.getMonth(), 1);
     const vencimento = new Date(now.getFullYear(), now.getMonth() + 1, 5);
-    const idempotencyKey = `${dto.empresaId}-${mesRef.toISOString().slice(0, 7)}`;
+    const idempotencyKey = `${dto.empresaId}-${periodicidade}-${mesRef.toISOString().slice(0, 7)}`;
+    const modulosSlugs = dto.modulosSelecionados;
 
     // Idempotency check
     const existente = await this.prisma.cobranca.findUnique({
       where: { idempotencyKey },
     });
     if (existente)
-      throw new BadRequestException('Cobrança para este mês já gerada.');
+      throw new BadRequestException(
+        periodicidade === 'ANUAL'
+          ? 'Cobrança anual para este período já gerada.'
+          : 'Cobrança para este mês já gerada.',
+      );
 
     // Ensure client exists in Asaas (decrypting document first to send plaintext to Asaas API)
     let idAsaasCliente: string = empresa.idAsaas || '';
@@ -117,13 +132,15 @@ export class CobrancaService {
           valor: 0,
           status: 'PAGO',
           formaPagamento: dto.formaPagamento,
+          periodicidade,
+          modulosSlugs,
           mesReferencia: mesRef,
           dataVencimento: vencimento,
           dataPagamento: new Date(),
           idempotencyKey,
         },
       });
-      await this.ativarModulos(dto.empresaId, dto.modulosSelecionados);
+      await this.ativarModulos(dto.empresaId, modulosSlugs, periodicidade);
       this.logger.log(
         `🎟️ Contratação grátis via cupom ${cupomAplicado} para empresa ${dto.empresaId}`,
       );
@@ -133,6 +150,7 @@ export class CobrancaService {
         valor: 0,
         cupomAplicado,
         status: 'PAGO',
+        periodicidade,
         mensagem: 'Módulos ativados com sucesso! Cupom de desconto aplicado.',
       };
     }
@@ -142,7 +160,7 @@ export class CobrancaService {
         idAsaasCliente,
         valor: Math.max(valor, 0.01),
         vencimento: vencimento.toISOString().split('T')[0],
-        descricao: `OBRA 10 — ${modulos.map((m) => m.slug).join(', ')}`,
+        descricao: `OBRA 10 ${periodicidade} — ${modulos.map((m) => m.slug).join(', ')}`,
       });
 
       cobranca = await this.prisma.cobranca.create({
@@ -151,6 +169,8 @@ export class CobrancaService {
           valor,
           status: 'PENDENTE',
           formaPagamento: 'PIX',
+          periodicidade,
+          modulosSlugs,
           mesReferencia: mesRef,
           dataVencimento: vencimento,
           linkPagamento: pix.linkPagamento,
@@ -176,6 +196,7 @@ export class CobrancaService {
         cobrancaId: cobranca.id,
         formaPagamento: 'PIX',
         valor,
+        periodicidade,
         qrCode: pix.qrCode,
         qrCodeBase64: pix.qrCodeBase64,
         linkPagamento: pix.linkPagamento,
@@ -196,6 +217,8 @@ export class CobrancaService {
         valor,
         status: card.status === 'CONFIRMED' ? 'PAGO' : 'PENDENTE',
         formaPagamento: 'CARTAO',
+        periodicidade,
+        modulosSlugs,
         mesReferencia: mesRef,
         dataVencimento: vencimento,
         dataPagamento: card.status === 'CONFIRMED' ? new Date() : null,
@@ -223,7 +246,7 @@ export class CobrancaService {
     }
 
     if (card.status === 'CONFIRMED') {
-      await this.ativarModulos(dto.empresaId, dto.modulosSelecionados);
+      await this.ativarModulos(dto.empresaId, modulosSlugs, periodicidade);
       if (empresa.email) {
         await this.email.enviarConfirmacaoPagamento(
           empresa.email,
@@ -237,6 +260,7 @@ export class CobrancaService {
       cobrancaId: cobranca.id,
       formaPagamento: 'CARTAO',
       valor,
+      periodicidade,
       status: card.status,
     };
   }
@@ -289,12 +313,14 @@ export class CobrancaService {
       data: { suspensa: false, diasInadimplente: 0 },
     });
 
-    // Activate all tenant modules
-    const slugsAtivos = cobranca.empresa.tenantModulos
-      .filter((tm) => tm.ativo)
-      .map((tm) => tm.modulo.slug);
-    if (slugsAtivos.length > 0)
-      await this.ativarModulos(cobranca.empresaId, slugsAtivos);
+    // Ativa módulos desta contratação (primeira compra / renovação anual).
+    // Cobrança mensal recorrente (sem modulosSlugs) só reativa a empresa.
+    const slugs = cobranca.modulosSlugs || [];
+    const periodicidade =
+      cobranca.periodicidade === 'ANUAL' ? 'ANUAL' : 'MENSAL';
+    if (slugs.length > 0) {
+      await this.ativarModulos(cobranca.empresaId, slugs, periodicidade);
+    }
 
     // AuditLog
     await this.prisma.auditLog.create({
@@ -328,15 +354,35 @@ export class CobrancaService {
   }
 
   // ===================== ATIVAR MÓDULOS =====================
-  async ativarModulos(empresaId: string, slugs: string[]) {
+  async ativarModulos(
+    empresaId: string,
+    slugs: string[],
+    periodicidade: 'MENSAL' | 'ANUAL' = 'MENSAL',
+  ) {
     const modulos = await this.prisma.modulo.findMany({
       where: { slug: { in: slugs } },
     });
+    const expiresAt =
+      periodicidade === 'ANUAL'
+        ? new Date(new Date().setFullYear(new Date().getFullYear() + 1))
+        : null;
+
     for (const m of modulos) {
       await this.prisma.tenantModulo.upsert({
         where: { empresaId_moduloId: { empresaId, moduloId: m.id } },
-        update: { ativo: true },
-        create: { empresaId, moduloId: m.id, ativo: true },
+        update: {
+          ativo: true,
+          periodicidade,
+          ...(expiresAt ? { expiresAt } : { expiresAt: null }),
+          dataContratacao: new Date(),
+        },
+        create: {
+          empresaId,
+          moduloId: m.id,
+          ativo: true,
+          periodicidade,
+          expiresAt,
+        },
       });
     }
   }
