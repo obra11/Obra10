@@ -2409,7 +2409,14 @@ export const DiarioDeObra: React.FC = () => {
                >
                   <div className="flex justify-between items-center mb-4">
                      <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><FileText size={16}/> Outros anexos</h3>
-                     <input type="file" multiple ref={anexoInputRef} className="hidden" onChange={handleAnexoUpload} />
+                     <input
+                       type="file"
+                       multiple
+                       accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,application/pdf,application/msword,application/vnd.ms-excel,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                       ref={anexoInputRef}
+                       className="hidden"
+                       onChange={handleAnexoUpload}
+                     />
                      <button onClick={() => anexoInputRef.current?.click()} className="text-xs font-semibold text-lunardeli-red hover:underline disabled:opacity-50" disabled={isReadOnly}>+ Upload</button>
                   </div>
                   <div className="space-y-2">

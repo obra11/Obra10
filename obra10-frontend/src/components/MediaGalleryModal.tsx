@@ -1,5 +1,22 @@
-import React, { useEffect, useState } from 'react';
-import { X, Image as ImageIcon, Film, User, Calendar, Loader2, Maximize2, Play, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  X,
+  Image as ImageIcon,
+  Film,
+  User,
+  Calendar,
+  Loader2,
+  Maximize2,
+  Play,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  FileSpreadsheet,
+  Presentation,
+  File,
+  Download,
+  ExternalLink,
+} from 'lucide-react';
 import api from '../services/api';
 import { format } from 'date-fns';
 
@@ -17,10 +34,83 @@ interface MediaItem {
   viewUrl: string;
 }
 
+type GalleryTab = 'todas' | 'fotos' | 'videos' | 'anexos';
+type DocKind = 'pdf' | 'word' | 'excel' | 'powerpoint' | 'other';
+type MediaKind = 'image' | 'video' | DocKind;
+
 interface MediaGalleryModalProps {
   isOpen: boolean;
   onClose: () => void;
   obraId: string;
+}
+
+function getMediaKind(item: MediaItem): MediaKind {
+  const mime = (item.mimeType || '').toLowerCase();
+  const name = (item.nomeOriginal || item.urlS3 || '').toLowerCase();
+
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
+  if (
+    mime.includes('wordprocessingml') ||
+    mime.includes('msword') ||
+    /\.docx?$/.test(name)
+  ) {
+    return 'word';
+  }
+  if (
+    mime.includes('spreadsheetml') ||
+    mime.includes('ms-excel') ||
+    /\.xlsx?$/.test(name)
+  ) {
+    return 'excel';
+  }
+  if (
+    mime.includes('presentationml') ||
+    mime.includes('ms-powerpoint') ||
+    /\.pptx?$/.test(name)
+  ) {
+    return 'powerpoint';
+  }
+  return 'other';
+}
+
+function isDocumentKind(kind: MediaKind): kind is DocKind {
+  return kind !== 'image' && kind !== 'video';
+}
+
+function formatBytes(bytes?: number): string {
+  if (!bytes || bytes <= 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function docMeta(kind: DocKind): {
+  label: string;
+  color: string;
+  Icon: typeof FileText;
+} {
+  switch (kind) {
+    case 'pdf':
+      return { label: 'PDF', color: 'bg-red-100 text-red-700', Icon: FileText };
+    case 'word':
+      return { label: 'Word', color: 'bg-blue-100 text-blue-700', Icon: FileText };
+    case 'excel':
+      return {
+        label: 'Excel',
+        color: 'bg-emerald-100 text-emerald-700',
+        Icon: FileSpreadsheet,
+      };
+    case 'powerpoint':
+      return {
+        label: 'PowerPoint',
+        color: 'bg-orange-100 text-orange-700',
+        Icon: Presentation,
+      };
+    default:
+      return { label: 'Arquivo', color: 'bg-gray-100 text-gray-700', Icon: File };
+  }
 }
 
 export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
@@ -31,17 +121,21 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'todas' | 'fotos' | 'videos'>('todas');
+  const [activeTab, setActiveTab] = useState<GalleryTab>('todas');
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [months, setMonths] = useState<{ value: string; label: string }[]>([]);
 
-  // Lightbox & Video State
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [playingVideoUrl, setPlayingVideoUrl] = useState<string | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<MediaItem | null>(null);
 
   useEffect(() => {
     if (isOpen && obraId) {
       setSelectedMonth('');
+      setActiveTab('todas');
+      setPreviewDoc(null);
+      setLightboxIndex(null);
+      setPlayingVideoUrl(null);
       carregarMidias();
     }
   }, [isOpen, obraId]);
@@ -66,7 +160,7 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
         const capitalizedLabel = label.charAt(0).toUpperCase() + label.slice(1);
         monthsMap.set(val, capitalizedLabel);
       });
-      
+
       const sortedMonths = Array.from(monthsMap.entries())
         .sort((a, b) => b[0].localeCompare(a[0]))
         .map(([value, label]) => ({ value, label }));
@@ -80,16 +174,46 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
     }
   };
 
+  const getFileUrl = (urlS3: string, viewUrl?: string) => {
+    if (viewUrl) return viewUrl;
+    if (!urlS3) return '';
+    if (urlS3.startsWith('http://') || urlS3.startsWith('https://')) {
+      return urlS3;
+    }
+    const apiBase = import.meta.env.VITE_API_URL ?? '';
+    const cleanBase = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
+    const cleanPath = urlS3.startsWith('/') ? urlS3 : `/${urlS3}`;
+    if (cleanBase) return `${cleanBase}${cleanPath}`;
+    return `${window.location.origin}${cleanPath}`;
+  };
+
+  const absoluteFileUrl = (item: MediaItem) => {
+    const url = getFileUrl(item.urlS3, item.viewUrl);
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    return `${window.location.origin}${url.startsWith('/') ? url : `/${url}`}`;
+  };
+
+  const totals = useMemo(() => {
+    let fotos = 0;
+    let videos = 0;
+    let anexos = 0;
+    for (const item of items) {
+      const kind = getMediaKind(item);
+      if (kind === 'image') fotos += 1;
+      else if (kind === 'video') videos += 1;
+      else anexos += 1;
+    }
+    return { fotos, videos, anexos };
+  }, [items]);
+
   if (!isOpen) return null;
 
-  const totalFotos = items.filter((item) => item.mimeType?.startsWith('image/')).length;
-  const totalVideos = items.filter((item) => item.mimeType?.startsWith('video/')).length;
-
   const filteredItems = items.filter((item) => {
-    const isFoto = item.mimeType?.startsWith('image/');
-    const isVideo = item.mimeType?.startsWith('video/');
-    if (activeTab === 'fotos' && !isFoto) return false;
-    if (activeTab === 'videos' && !isVideo) return false;
+    const kind = getMediaKind(item);
+    if (activeTab === 'fotos' && kind !== 'image') return false;
+    if (activeTab === 'videos' && kind !== 'video') return false;
+    if (activeTab === 'anexos' && !isDocumentKind(kind)) return false;
 
     if (selectedMonth) {
       const date = new Date(item.createdAt);
@@ -101,10 +225,8 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
     return true;
   });
 
-  const filteredFotos = filteredItems.filter((item) => item.mimeType?.startsWith('image/'));
-  const fotos = filteredFotos;
+  const fotos = filteredItems.filter((item) => getMediaKind(item) === 'image');
 
-  // Group filtered items by date (YYYY-MM-DD)
   const groupsMap: Record<string, { formattedDate: string; items: MediaItem[] }> = {};
   filteredItems.forEach((item) => {
     if (!item.createdAt) return;
@@ -112,7 +234,7 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
     if (isNaN(dateObj.getTime())) return;
     const yyyymmdd = dateObj.toISOString().split('T')[0];
     const formattedDate = format(dateObj, 'dd/MM/yyyy');
-    
+
     if (!groupsMap[yyyymmdd]) {
       groupsMap[yyyymmdd] = {
         formattedDate,
@@ -123,18 +245,6 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
   });
 
   const sortedDates = Object.keys(groupsMap).sort((a, b) => b.localeCompare(a));
-
-  const getFileUrl = (urlS3: string, viewUrl?: string) => {
-    if (viewUrl) return viewUrl;
-    if (!urlS3) return '';
-    if (urlS3.startsWith('http://') || urlS3.startsWith('https://')) {
-      return urlS3;
-    }
-    const apiBase = import.meta.env.VITE_API_URL ?? '';
-    const cleanBase = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
-    const cleanPath = urlS3.startsWith('/') ? urlS3 : `/${urlS3}`;
-    return `${cleanBase}${cleanPath}`;
-  };
 
   const handleNextPhoto = (e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -148,19 +258,34 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
     setLightboxIndex((prev) => (prev! - 1 + fotos.length) % fotos.length);
   };
 
+  const previewKind = previewDoc ? getMediaKind(previewDoc) : null;
+  const previewUrl = previewDoc ? absoluteFileUrl(previewDoc) : '';
+  const officeEmbedUrl =
+    previewDoc &&
+    previewUrl.startsWith('https://') &&
+    (previewKind === 'word' ||
+      previewKind === 'excel' ||
+      previewKind === 'powerpoint')
+      ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(previewUrl)}`
+      : null;
+
+  const tabClass = (tab: GalleryTab) =>
+    `flex items-center gap-2 py-2 px-3 border-b-2 font-semibold text-sm transition-colors ${
+      activeTab === tab
+        ? 'border-lunardeli-red text-lunardeli-red'
+        : 'border-transparent text-gray-500 hover:text-gray-800'
+    }`;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-      {/* Modal Card */}
       <div className="bg-white rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden h-[85vh] flex flex-col border border-gray-100">
-        
-        {/* Header */}
         <div className="p-5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
           <div>
             <h3 className="font-bold text-gray-900 text-lg md:text-xl flex items-center gap-2">
               <ImageIcon size={22} className="text-lunardeli-red" /> Galeria de Mídias
             </h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              Fotos e vídeos anexados em todos os diários de obra deste projeto.
+              Fotos, vídeos e documentos (PDF, Word, Excel, PowerPoint) dos diários desta obra.
             </p>
           </div>
           <button
@@ -171,42 +296,22 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
           </button>
         </div>
 
-        {/* Tab Selector & Month Filter */}
         <div className="px-5 py-2 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white shrink-0">
-          <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar whitespace-nowrap">
-            <button
-              onClick={() => setActiveTab('todas')}
-              className={`flex items-center gap-2 py-2 px-3 border-b-2 font-semibold text-sm transition-colors ${
-                activeTab === 'todas'
-                  ? 'border-lunardeli-red text-lunardeli-red'
-                  : 'border-transparent text-gray-500 hover:text-gray-800'
-              }`}
-            >
+          <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar whitespace-nowrap">
+            <button onClick={() => setActiveTab('todas')} className={tabClass('todas')}>
               Todas ({items.length})
             </button>
-            <button
-              onClick={() => setActiveTab('fotos')}
-              className={`flex items-center gap-2 py-2 px-3 border-b-2 font-semibold text-sm transition-colors ${
-                activeTab === 'fotos'
-                  ? 'border-lunardeli-red text-lunardeli-red'
-                  : 'border-transparent text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              <ImageIcon size={16} /> Fotos ({totalFotos})
+            <button onClick={() => setActiveTab('fotos')} className={tabClass('fotos')}>
+              <ImageIcon size={16} /> Fotos ({totals.fotos})
             </button>
-            <button
-              onClick={() => setActiveTab('videos')}
-              className={`flex items-center gap-2 py-2 px-3 border-b-2 font-semibold text-sm transition-colors ${
-                activeTab === 'videos'
-                  ? 'border-lunardeli-red text-lunardeli-red'
-                  : 'border-transparent text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              <Film size={16} /> Vídeos ({totalVideos})
+            <button onClick={() => setActiveTab('videos')} className={tabClass('videos')}>
+              <Film size={16} /> Vídeos ({totals.videos})
+            </button>
+            <button onClick={() => setActiveTab('anexos')} className={tabClass('anexos')}>
+              <FileText size={16} /> Anexos ({totals.anexos})
             </button>
           </div>
 
-          {/* Filtro de Mês */}
           <div className="flex items-center gap-2 self-end sm:self-auto">
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">
               Mês:
@@ -226,7 +331,6 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
           </div>
         </div>
 
-        {/* Gallery Content */}
         <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30 custom-scrollbar">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-64 text-gray-400">
@@ -240,8 +344,10 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
             </div>
           ) : filteredItems.length === 0 ? (
             <div className="text-center py-20 text-gray-400">
-              <ImageIcon size={48} className="mx-auto mb-3 opacity-20" />
-              <p className="font-medium text-sm">Nenhuma mídia encontrada com os filtros selecionados.</p>
+              <FileText size={48} className="mx-auto mb-3 opacity-20" />
+              <p className="font-medium text-sm">
+                Nenhum arquivo encontrado com os filtros selecionados.
+              </p>
             </div>
           ) : (
             <div className="space-y-8">
@@ -249,7 +355,6 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
                 const group = groupsMap[yyyymmdd];
                 return (
                   <div key={yyyymmdd} className="space-y-4">
-                    {/* Header de Data com divisor */}
                     <div className="flex items-center gap-3">
                       <span className="text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap bg-gray-100 border border-gray-200 px-3 py-1 rounded-lg flex items-center gap-1.5 shadow-sm">
                         <Calendar size={12} className="text-lunardeli-red" />
@@ -258,15 +363,16 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
                       <div className="flex-1 border-t border-gray-200"></div>
                     </div>
 
-                    {/* Grid de mídias deste dia */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-5">
                       {group.items.map((item) => {
-                        const isVideo = item.mimeType?.startsWith('video/');
-                        if (isVideo) {
+                        const kind = getMediaKind(item);
+                        const fileUrl = getFileUrl(item.urlS3, item.viewUrl);
+
+                        if (kind === 'video') {
                           return (
                             <div
                               key={item.id}
-                              onClick={() => setPlayingVideoUrl(getFileUrl(item.urlS3, item.viewUrl))}
+                              onClick={() => setPlayingVideoUrl(fileUrl)}
                               className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm cursor-pointer hover:shadow-md transition-shadow group flex flex-col"
                             >
                               <div className="relative aspect-video w-full bg-gray-900 flex items-center justify-center">
@@ -281,17 +387,17 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
                                 <p className="text-xs font-bold text-gray-800 truncate" title={item.nomeOriginal}>
                                   {item.nomeOriginal}
                                 </p>
-                                <div className="mt-2 space-y-1">
-                                  <div className="flex items-center gap-1 text-[10px] text-gray-400 truncate">
-                                    <User size={10} className="shrink-0" />
-                                    <span>{item.criador?.nome || 'Desconhecido'}</span>
-                                  </div>
+                                <div className="mt-2 flex items-center gap-1 text-[10px] text-gray-400 truncate">
+                                  <User size={10} className="shrink-0" />
+                                  <span>{item.criador?.nome || 'Desconhecido'}</span>
                                 </div>
                               </div>
                             </div>
                           );
-                        } else {
-                          const clickIdx = filteredFotos.findIndex((f) => f.id === item.id);
+                        }
+
+                        if (kind === 'image') {
+                          const clickIdx = fotos.findIndex((f) => f.id === item.id);
                           return (
                             <div
                               key={item.id}
@@ -300,7 +406,7 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
                             >
                               <div className="relative aspect-video w-full overflow-hidden bg-gray-100">
                                 <img
-                                  src={getFileUrl(item.urlS3, item.viewUrl)}
+                                  src={fileUrl}
                                   alt={item.nomeOriginal}
                                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                   loading="lazy"
@@ -313,16 +419,43 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
                                 <p className="text-xs font-bold text-gray-800 truncate" title={item.nomeOriginal}>
                                   {item.nomeOriginal}
                                 </p>
-                                <div className="mt-2 space-y-1">
-                                  <div className="flex items-center gap-1 text-[10px] text-gray-400 truncate">
-                                    <User size={10} className="shrink-0" />
-                                    <span>{item.criador?.nome || 'Desconhecido'}</span>
-                                  </div>
+                                <div className="mt-2 flex items-center gap-1 text-[10px] text-gray-400 truncate">
+                                  <User size={10} className="shrink-0" />
+                                  <span>{item.criador?.nome || 'Desconhecido'}</span>
                                 </div>
                               </div>
                             </div>
                           );
                         }
+
+                        const meta = docMeta(kind);
+                        const Icon = meta.Icon;
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => setPreviewDoc(item)}
+                            className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm cursor-pointer hover:shadow-md transition-shadow group flex flex-col"
+                          >
+                            <div className="relative aspect-video w-full bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col items-center justify-center gap-2">
+                              <div className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wide ${meta.color}`}>
+                                {meta.label}
+                              </div>
+                              <Icon size={28} className="text-gray-500 group-hover:text-lunardeli-red transition-colors" />
+                              <span className="text-[10px] text-gray-400 font-medium">
+                                {formatBytes(item.tamanhoBytes) || 'Abrir documento'}
+                              </span>
+                            </div>
+                            <div className="p-3 flex-1 flex flex-col justify-between">
+                              <p className="text-xs font-bold text-gray-800 truncate" title={item.nomeOriginal}>
+                                {item.nomeOriginal}
+                              </p>
+                              <div className="mt-2 flex items-center gap-1 text-[10px] text-gray-400 truncate">
+                                <User size={10} className="shrink-0" />
+                                <span>{item.criador?.nome || 'Desconhecido'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
                       })}
                     </div>
                   </div>
@@ -333,13 +466,11 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
         </div>
       </div>
 
-      {/* Lightbox for Photos */}
-      {lightboxIndex !== null && (
+      {lightboxIndex !== null && fotos[lightboxIndex] && (
         <div
           onClick={() => setLightboxIndex(null)}
           className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 p-4 animate-fadeIn"
         >
-          {/* Close button */}
           <button
             onClick={() => setLightboxIndex(null)}
             className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
@@ -347,7 +478,6 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
             <X size={24} />
           </button>
 
-          {/* Navigation Controls */}
           {fotos.length > 1 && (
             <>
               <button
@@ -365,7 +495,6 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
             </>
           )}
 
-          {/* Large Image Container */}
           <div
             onClick={(e) => e.stopPropagation()}
             className="max-w-4xl max-h-[80vh] flex flex-col items-center justify-center relative"
@@ -375,7 +504,6 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
               alt={fotos[lightboxIndex].nomeOriginal}
               className="max-w-full max-h-[75vh] object-contain rounded-lg select-none"
             />
-            {/* Info overlay */}
             <div className="mt-4 text-center text-white space-y-1">
               <p className="text-sm font-bold">{fotos[lightboxIndex].nomeOriginal}</p>
               <p className="text-xs opacity-75">
@@ -387,7 +515,6 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
         </div>
       )}
 
-      {/* Video Player Popup */}
       {playingVideoUrl && (
         <div
           onClick={() => setPlayingVideoUrl(null)}
@@ -404,12 +531,85 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-3xl aspect-video bg-black rounded-xl overflow-hidden shadow-2xl"
           >
-            <video
-              src={playingVideoUrl}
-              controls
-              autoPlay
-              className="w-full h-full"
-            />
+            <video src={playingVideoUrl} controls autoPlay className="w-full h-full" />
+          </div>
+        </div>
+      )}
+
+      {previewDoc && previewKind && isDocumentKind(previewKind) && (
+        <div
+          onClick={() => setPreviewDoc(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-3 sm:p-6 animate-fadeIn"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl w-full max-w-5xl h-[88vh] flex flex-col overflow-hidden shadow-2xl"
+          >
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 shrink-0">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-gray-900 truncate">{previewDoc.nomeOriginal}</p>
+                <p className="text-[11px] text-gray-500">
+                  {docMeta(previewKind).label}
+                  {formatBytes(previewDoc.tamanhoBytes)
+                    ? ` · ${formatBytes(previewDoc.tamanhoBytes)}`
+                    : ''}
+                  {' · '}
+                  {previewDoc.criador?.nome || 'Desconhecido'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href={previewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700"
+                >
+                  <ExternalLink size={14} /> Abrir
+                </a>
+                <a
+                  href={previewUrl}
+                  download={previewDoc.nomeOriginal}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-lunardeli-red hover:bg-red-700 text-white"
+                >
+                  <Download size={14} /> Baixar
+                </a>
+                <button
+                  onClick={() => setPreviewDoc(null)}
+                  className="p-2 hover:bg-gray-100 rounded-xl text-gray-500"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 bg-gray-100 min-h-0">
+              {previewKind === 'pdf' ? (
+                <iframe
+                  title={previewDoc.nomeOriginal}
+                  src={previewUrl}
+                  className="w-full h-full border-0 bg-white"
+                />
+              ) : officeEmbedUrl ? (
+                <iframe
+                  title={previewDoc.nomeOriginal}
+                  src={officeEmbedUrl}
+                  className="w-full h-full border-0 bg-white"
+                />
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-3">
+                  {(() => {
+                    const Icon = docMeta(previewKind).Icon;
+                    return <Icon size={42} className="text-gray-400" />;
+                  })()}
+                  <p className="text-sm font-semibold text-gray-700">
+                    Pré-visualização embutida indisponível neste arquivo.
+                  </p>
+                  <p className="text-xs text-gray-500 max-w-md">
+                    Use Abrir ou Baixar para visualizar o {docMeta(previewKind).label} no aplicativo do aparelho.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

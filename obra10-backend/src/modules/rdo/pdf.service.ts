@@ -53,7 +53,19 @@ export class PdfService {
     const rdo = await this.prisma.rdo.findUnique({
       where: { id: rdoId },
       include: {
-        obra: { select: { nome: true, empresa: { select: { id: true, razaoSocial: true, nomeFantasia: true } } } },
+        obra: {
+          select: {
+            nome: true,
+            empresa: {
+              select: {
+                id: true,
+                razaoSocial: true,
+                nomeFantasia: true,
+                logoUrl: true,
+              },
+            },
+          },
+        },
         criador: { select: { nome: true } },
         aprovador: { select: { nome: true } },
         atividades: { where: { deletedAt: null } },
@@ -167,35 +179,81 @@ export class PdfService {
       }
     };
 
-    // ── CABEÇALHO (OBRA 10) ──────────────────────────────────────────────────────
+    // ── CABEÇALHO (logo da empresa + OBRA 10) ────────────────────────────────────
     const empresa = rdo.obra.empresa;
     const nomeEmpresa = empresa.nomeFantasia || empresa.razaoSocial || 'Empresa';
     const dataStr = new Date(rdo.dataReferencia).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
-    // Desenha o bloco geométrico de destaque vermelho à esquerda
-    ctx.page.drawRectangle({
-      x: m.l,
-      y: ctx.y - 12,
-      width: 6,
-      height: 20,
-      color: LUNARDELI_RED,
-    });
-    
-    // Marca "OBRA 10" em negrito escuro
-    drawText('OBRA 10', m.l + 12, ctx.y - 2, 16, bold, LUNARDELI_DARK);
-    
+    const LOGO_MAX_W = 110;
+    const LOGO_MAX_H = 42;
+    let logoDrawW = 0;
+    let logoDrawH = 0;
+    let embeddedLogo: Awaited<ReturnType<PDFDocument['embedPng']>> | null = null;
+
+    if (empresa.logoUrl) {
+      try {
+        const logoBytes = await this.loadImageBytes(empresa.logoUrl);
+        if (logoBytes) {
+          embeddedLogo = await this.embedRasterImage(pdfDoc, logoBytes);
+          if (embeddedLogo) {
+            const scale = Math.min(
+              LOGO_MAX_W / embeddedLogo.width,
+              LOGO_MAX_H / embeddedLogo.height,
+              1,
+            );
+            logoDrawW = embeddedLogo.width * scale;
+            logoDrawH = embeddedLogo.height * scale;
+          }
+        }
+      } catch (err) {
+        console.warn('[PdfService] Não foi possível embutir o logo da empresa:', err);
+        embeddedLogo = null;
+      }
+    }
+
+    const headerTop = ctx.y;
+    let titleX = m.l;
+
+    if (embeddedLogo && logoDrawW > 0 && logoDrawH > 0) {
+      const logoY = headerTop - logoDrawH + 6;
+      ctx.page.drawImage(embeddedLogo, {
+        x: m.l,
+        y: logoY,
+        width: logoDrawW,
+        height: logoDrawH,
+      });
+      titleX = m.l + logoDrawW + 12;
+    } else {
+      // Fallback: barra vermelha quando a empresa ainda não tem logo
+      ctx.page.drawRectangle({
+        x: m.l,
+        y: headerTop - 12,
+        width: 6,
+        height: 20,
+        color: LUNARDELI_RED,
+      });
+      titleX = m.l + 12;
+    }
+
+    // Marca "OBRA 10" ao lado do logo
+    drawText('OBRA 10', titleX, headerTop - 2, 16, bold, LUNARDELI_DARK);
+    const empresaHeader = safeStr(nomeEmpresa);
+    if (empresaHeader !== '-') {
+      drawText(empresaHeader, titleX, headerTop - 16, 8, reg, GRAY);
+    }
+
     // Subtítulo descritivo à direita
     const subtitle = 'RELATORIO DIARIO DE OBRA';
     const subtitleW = reg.widthOfTextAtSize(subtitle, 9);
     ctx.page.drawText(subtitle, {
       x: ctx.w - m.r - subtitleW,
-      y: ctx.y + 1,
+      y: headerTop + 1,
       size: 9,
       font: reg,
       color: GRAY,
     });
-    
-    ctx.y -= 22;
+
+    ctx.y = headerTop - Math.max(logoDrawH || 0, 22) - 6;
     drawLine(ctx.y, LUNARDELI_LIGHT_GRAY, 0.5);
     ctx.y -= 15;
 
@@ -977,5 +1035,48 @@ export class PdfService {
       // Ignorar erros de parse EXIF
     }
     return 1;
+  }
+
+  private async loadImageBytes(url: string): Promise<Uint8Array | null> {
+    if (!url) return null;
+    try {
+      if (url.startsWith('/uploads/') || url.startsWith('uploads/')) {
+        const cleanPath = url.startsWith('/') ? url : `/${url}`;
+        const filePath = path.join(process.cwd(), cleanPath);
+        if (!fs.existsSync(filePath)) return null;
+        return new Uint8Array(fs.readFileSync(filePath));
+      }
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        return new Uint8Array(await response.arrayBuffer());
+      }
+      const local = path.join(process.cwd(), url.startsWith('/') ? url.slice(1) : url);
+      if (fs.existsSync(local)) {
+        return new Uint8Array(fs.readFileSync(local));
+      }
+      return null;
+    } catch (err) {
+      console.warn('[PdfService] Falha ao carregar imagem:', err);
+      return null;
+    }
+  }
+
+  private async embedRasterImage(pdfDoc: PDFDocument, bytes: Uint8Array) {
+    const isPng =
+      bytes.length > 8 &&
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47;
+    const isJpg = bytes.length > 2 && bytes[0] === 0xff && bytes[1] === 0xd8;
+    if (isPng) return pdfDoc.embedPng(bytes);
+    if (isJpg) return pdfDoc.embedJpg(bytes);
+    // Tenta PNG e depois JPG como fallback
+    try {
+      return await pdfDoc.embedPng(bytes);
+    } catch {
+      return await pdfDoc.embedJpg(bytes);
+    }
   }
 }

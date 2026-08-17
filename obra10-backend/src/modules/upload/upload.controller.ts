@@ -34,10 +34,10 @@ function safeFilename(originalname: string): string {
 const ALLOWED_IMAGE_TYPES = /^image\/(jpeg|jpg|png|gif|webp|svg\+xml|heic|heif)$/i;
 /** Allowed document/media MIME types (for RDO attachments) — inclui formatos de celular */
 const ALLOWED_DOC_TYPES =
-  /^(image\/(jpeg|jpg|png|gif|webp|heic|heif)|application\/(pdf|vnd\.openxmlformats-officedocument\.(spreadsheetml\.sheet|wordprocessingml\.document))|video\/(mp4|quicktime|webm|3gpp|3gpp2|x-msvideo|avi|mpeg|ogg|x-m4v|x-matroska))$/i;
+  /^(image\/(jpeg|jpg|png|gif|webp|heic|heif)|application\/(pdf|msword|vnd\.ms-excel|vnd\.ms-powerpoint|vnd\.openxmlformats-officedocument\.(spreadsheetml\.sheet|wordprocessingml\.document|presentationml\.presentation))|video\/(mp4|quicktime|webm|3gpp|3gpp2|x-msvideo|avi|mpeg|ogg|x-m4v|x-matroska))$/i;
 /** Extensões aceitas quando o browser manda MIME vazio/octet-stream (comum no iOS/Android) */
 const ALLOWED_UPLOAD_EXTS =
-  /\.(jpe?g|png|gif|webp|heic|heif|pdf|xlsx|docx|mp4|mov|webm|avi|mkv|3gp|m4v|ogv)$/i;
+  /\.(jpe?g|png|gif|webp|heic|heif|pdf|xlsx?|docx?|pptx?|mp4|mov|webm|avi|mkv|3gp|m4v|ogv)$/i;
 
 function isAllowedRdoUpload(file: {
   mimetype?: string;
@@ -69,6 +69,18 @@ function resolveMimeType(file: Express.Multer.File): string {
   if (name.endsWith('.avi')) return 'video/x-msvideo';
   if (name.endsWith('.mp4')) return 'video/mp4';
   if (name.endsWith('.pdf')) return 'application/pdf';
+  if (name.endsWith('.docx')) {
+    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  }
+  if (name.endsWith('.doc')) return 'application/msword';
+  if (name.endsWith('.xlsx')) {
+    return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  }
+  if (name.endsWith('.xls')) return 'application/vnd.ms-excel';
+  if (name.endsWith('.pptx')) {
+    return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  }
+  if (name.endsWith('.ppt')) return 'application/vnd.ms-powerpoint';
   if (/\.jpe?g$/.test(name)) return 'image/jpeg';
   if (name.endsWith('.png')) return 'image/png';
   if (name.endsWith('.heic') || name.endsWith('.heif')) return 'image/heic';
@@ -284,7 +296,7 @@ export class UploadController {
         if (!isAllowedRdoUpload(file)) {
           return cb(
             new BadRequestException(
-              'Tipo de arquivo não permitido. Aceitos: jpg, png, heic, pdf, xlsx, docx, mp4, mov, webm, 3gp.',
+              'Tipo de arquivo não permitido. Aceitos: jpg, png, heic, pdf, doc, docx, xls, xlsx, ppt, pptx, mp4, mov, webm, 3gp.',
             ),
             false,
           );
