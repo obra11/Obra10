@@ -35,7 +35,7 @@ export class AppController {
   getVersion() {
     return {
       ...readClientVersion(),
-      api: '1.5.6',
+      api: '1.5.7',
       checkedAt: new Date().toISOString(),
     };
   }
@@ -49,10 +49,11 @@ export class AppController {
       return {
         status: 'ok',
         database: 'connected',
-        message: 'Obra 10 - MVP API Operacional (v1.5.6)',
+        message: 'Obra 10 - MVP API Operacional (v1.5.7)',
         app,
         env: {
           nodeEnv: process.env.NODE_ENV,
+          buildId: process.env.OBRA10_BUILD_ID || null,
           hasEncryptionKey: process.env.ENCRYPTION_KEY
             ? `defined_len_${process.env.ENCRYPTION_KEY.length}`
             : 'undefined',
@@ -65,6 +66,7 @@ export class AppController {
         app,
         env: {
           nodeEnv: process.env.NODE_ENV,
+          buildId: process.env.OBRA10_BUILD_ID || null,
           hasEncryptionKey: process.env.ENCRYPTION_KEY
             ? `defined_len_${process.env.ENCRYPTION_KEY.length}`
             : 'undefined',
