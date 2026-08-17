@@ -44,9 +44,58 @@ type ImportRow = {
   observacao?: string;
 };
 
-const UNIDADES_SUGERIDAS = [
-  'un', 'kg', 'm', 'm²', 'm³', 'l', 'h', 'cx', 'pct', 'saco', 'rolo', 'barras', 'par', 'ton',
+/** Unidades comuns em obra — valor gravado + rótulo na UI */
+const UNIDADES_OPCOES: { value: string; label: string; grupo: string }[] = [
+  // Contagem
+  { value: 'un', label: 'un — unidade', grupo: 'Contagem' },
+  { value: 'par', label: 'par', grupo: 'Contagem' },
+  { value: 'jogo', label: 'jogo', grupo: 'Contagem' },
+  { value: 'kit', label: 'kit', grupo: 'Contagem' },
+  { value: 'cx', label: 'cx — caixa', grupo: 'Contagem' },
+  { value: 'pct', label: 'pct — pacote', grupo: 'Contagem' },
+  { value: 'dz', label: 'dz — dúzia', grupo: 'Contagem' },
+  { value: 'cento', label: 'cento (100 un)', grupo: 'Contagem' },
+  { value: 'milheiro', label: 'milheiro', grupo: 'Contagem' },
+  // Massa
+  { value: 'kg', label: 'kg — quilograma', grupo: 'Massa' },
+  { value: 'g', label: 'g — grama', grupo: 'Massa' },
+  { value: 'ton', label: 'ton — tonelada', grupo: 'Massa' },
+  { value: 'saco', label: 'saco', grupo: 'Massa' },
+  // Comprimento / área / volume
+  { value: 'mm', label: 'mm — milímetro', grupo: 'Dimensão' },
+  { value: 'cm', label: 'cm — centímetro', grupo: 'Dimensão' },
+  { value: 'm', label: 'm — metro linear', grupo: 'Dimensão' },
+  { value: 'm²', label: 'm² — metro quadrado', grupo: 'Dimensão' },
+  { value: 'm³', label: 'm³ — metro cúbico', grupo: 'Dimensão' },
+  { value: 'barra', label: 'barra', grupo: 'Dimensão' },
+  { value: 'barras', label: 'barras', grupo: 'Dimensão' },
+  { value: 'rolo', label: 'rolo', grupo: 'Dimensão' },
+  { value: 'folha', label: 'folha / chapa', grupo: 'Dimensão' },
+  { value: 'placa', label: 'placa', grupo: 'Dimensão' },
+  // Volume líquido
+  { value: 'ml', label: 'ml — mililitro', grupo: 'Volume' },
+  { value: 'l', label: 'l — litro', grupo: 'Volume' },
+  { value: 'lata', label: 'lata', grupo: 'Volume' },
+  { value: 'galão', label: 'galão', grupo: 'Volume' },
+  { value: 'balde', label: 'balde', grupo: 'Volume' },
+  // Tempo / mão de obra
+  { value: 'min', label: 'min — minuto', grupo: 'Tempo' },
+  { value: 'h', label: 'h — hora', grupo: 'Tempo' },
+  { value: 'vh', label: 'vh — homem-hora', grupo: 'Tempo' },
+  { value: 'dia', label: 'dia', grupo: 'Tempo' },
+  { value: 'diária', label: 'diária', grupo: 'Tempo' },
+  { value: 'semana', label: 'semana', grupo: 'Tempo' },
+  { value: 'mês', label: 'mês', grupo: 'Tempo' },
+  // Equipamento / locação
+  { value: 'serviço', label: 'serviço', grupo: 'Serviço' },
+  { value: 'vb', label: 'vb — verba', grupo: 'Serviço' },
 ];
+
+const UNIDADES_SUGERIDAS = UNIDADES_OPCOES.map((u) => u.value);
+
+const UNIDADE_GRUPOS = Array.from(
+  new Set(UNIDADES_OPCOES.map((u) => u.grupo)),
+);
 
 const TIPOS_VALIDOS: TipoInsumo[] = ['MATERIAL', 'EQUIPAMENTO', 'MAO_DE_OBRA'];
 
@@ -125,6 +174,7 @@ export const CatalogoPage: React.FC = () => {
     codigo: '',
     observacao: '',
   });
+  const [unidadeCustom, setUnidadeCustom] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -157,25 +207,30 @@ export const CatalogoPage: React.FC = () => {
 
   const openCreateModal = (tipo: TipoInsumo = activeTab) => {
     setEditingItem(null);
+    const unidadePadrao =
+      tipo === 'MAO_DE_OBRA' ? 'h' : tipo === 'EQUIPAMENTO' ? 'un' : 'un';
     setFormData({
       tipo,
       nome: '',
-      unidade: 'un',
+      unidade: unidadePadrao,
       codigo: '',
       observacao: '',
     });
+    setUnidadeCustom(false);
     setIsModalOpen(true);
   };
 
   const openEditModal = (item: CatalogoInsumo) => {
     setEditingItem(item);
+    const unidade = item.unidade || 'un';
     setFormData({
       tipo: item.tipo,
       nome: item.nome || '',
-      unidade: item.unidade || 'un',
+      unidade,
       codigo: item.codigo || '',
       observacao: item.observacao || '',
     });
+    setUnidadeCustom(!UNIDADES_SUGERIDAS.includes(unidade));
     setIsModalOpen(true);
   };
 
@@ -791,19 +846,48 @@ export const CatalogoPage: React.FC = () => {
                   <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                     Unidade Padrão
                   </label>
-                  <input
-                    type="text"
-                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red"
-                    placeholder="Ex: kg, m³, un, h"
-                    value={formData.unidade}
-                    onChange={(e) => setFormData({ ...formData, unidade: e.target.value })}
-                    list="unidades-sugeridas"
-                  />
-                  <datalist id="unidades-sugeridas">
-                    {UNIDADES_SUGERIDAS.map((u) => (
-                      <option key={u} value={u} />
+                  <select
+                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-white outline-none focus:ring-2 focus:ring-lunardeli-red"
+                    value={
+                      unidadeCustom || !UNIDADES_SUGERIDAS.includes(formData.unidade)
+                        ? '__outra__'
+                        : formData.unidade
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '__outra__') {
+                        setUnidadeCustom(true);
+                        setFormData({ ...formData, unidade: '' });
+                      } else {
+                        setUnidadeCustom(false);
+                        setFormData({ ...formData, unidade: v });
+                      }
+                    }}
+                  >
+                    {UNIDADE_GRUPOS.map((grupo) => (
+                      <optgroup key={grupo} label={grupo}>
+                        {UNIDADES_OPCOES.filter((u) => u.grupo === grupo).map((u) => (
+                          <option key={u.value} value={u.value}>
+                            {u.label}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
-                  </datalist>
+                    <option value="__outra__">Outra (digitar)…</option>
+                  </select>
+                  {(unidadeCustom || !UNIDADES_SUGERIDAS.includes(formData.unidade)) && (
+                    <input
+                      type="text"
+                      className="mt-2 w-full border border-gray-300 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red"
+                      placeholder="Digite a unidade (ex: sc, pç, kWh)"
+                      value={formData.unidade}
+                      onChange={(e) => setFormData({ ...formData, unidade: e.target.value })}
+                      autoFocus
+                    />
+                  )}
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Ex.: kg, m³, saco, h, diária — ou escolha “Outra” para personalizar.
+                  </p>
                 </div>
 
                 <div>
