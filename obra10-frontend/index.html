@@ -2,10 +2,10 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=2.9.1">
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png?v=2.9.1">
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2.9.1">
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2.9.1">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=2.9.3">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png?v=2.9.3">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2.9.3">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2.9.3">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Obra 10 — Gestão de Obras</title>
     <meta name="description" content="Sistema de gestão de obras com RDO, FVS, concretagem e análise com IA. Um produto Lunardeli Engenharia." />
@@ -16,7 +16,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Obra 10" />
-    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png?v=2.9.1">
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png?v=2.9.3">
     
     <!-- Preconnect fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -55,33 +55,66 @@
       }
     </script>
     <script>
-      // Limpa cache/PWA antigo uma vez (watermark Lunardeli no hero)
+      // PWA: limpa cache quando BUILD muda OU quando HTML está atrás do servidor
       (function () {
-        var BUILD = '2.9.1-20260817';
-        if (localStorage.getItem('obra10_build') === BUILD) return;
-        localStorage.setItem('obra10_build', BUILD);
-        var done = function () { window.location.reload(); };
-        var clear = window.caches
-          ? caches.keys().then(function (keys) {
-              return Promise.all(keys.map(function (k) { return caches.delete(k); }));
-            })
-          : Promise.resolve();
-        clear.then(function () {
-          if (!('serviceWorker' in navigator)) { done(); return; }
-          navigator.serviceWorker.getRegistrations().then(function (regs) {
-            return Promise.all(regs.map(function (r) { return r.unregister(); }));
-          }).then(done).catch(done);
-        }).catch(done);
-      })();
+        var BUILD = '2.9.3-20260817';
 
-      if ('serviceWorker' in navigator && window.location.hostname !== 'localhost') {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js?v=2.9.1').then(reg => {
-            reg.update();
-          }).catch(() => {});
-        });
-      }
+        function clearPwa() {
+          var clear = window.caches
+            ? caches.keys().then(function (keys) {
+                return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+              })
+            : Promise.resolve();
+          return clear.then(function () {
+            if (!('serviceWorker' in navigator)) return;
+            return navigator.serviceWorker.getRegistrations().then(function (regs) {
+              return Promise.all(regs.map(function (r) { return r.unregister(); }));
+            });
+          });
+        }
+
+        function hardReload(buildMark) {
+          try {
+            if (buildMark) localStorage.setItem('obra10_build', buildMark);
+          } catch (e) {}
+          var url = new URL(window.location.href);
+          url.searchParams.set('_v', String(Date.now()));
+          window.location.replace(url.toString());
+        }
+
+        // 1) Migração one-shot quando este HTML traz BUILD novo
+        var stored = null;
+        try { stored = localStorage.getItem('obra10_build'); } catch (e) {}
+        if (stored !== BUILD) {
+          try { localStorage.setItem('obra10_build', BUILD); } catch (e) {}
+          clearPwa().then(function () { hardReload(BUILD); }).catch(function () { hardReload(BUILD); });
+          return;
+        }
+
+        // 2) HTML/SW antigo vs servidor novo (version.json sem cache)
+        fetch('/version.json?_=' + Date.now(), { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (data) {
+            if (!data || !data.buildId) return;
+            if (data.buildId === BUILD) return;
+            // Evita loop se o HTML cacheado não atualizar
+            var key = 'obra10_html_bust';
+            try {
+              if (sessionStorage.getItem(key) === data.buildId) return;
+              sessionStorage.setItem(key, data.buildId);
+            } catch (e) {}
+            return clearPwa().then(function () { hardReload(data.buildId); });
+          })
+          .catch(function () {});
+
+        if ('serviceWorker' in navigator && window.location.hostname !== 'localhost') {
+          window.addEventListener('load', function () {
+            navigator.serviceWorker.register('/sw.js?v=2.9.3').then(function (reg) {
+              reg.update();
+            }).catch(function () {});
+          });
+        }
+      })();
     </script>
   </body>
 </html>
-

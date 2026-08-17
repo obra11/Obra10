@@ -1,4 +1,4 @@
-const CACHE_NAME = 'obra10-v2.9.1';
+const CACHE_NAME = 'obra10-v2.9.3';
 // Não pré-cachear '/' nem imagens de marca — HTML/JS antigos mostravam watermark Lunardeli.
 const STATIC_ASSETS = [
   '/favicon-16.png',
@@ -62,7 +62,10 @@ self.addEventListener('fetch', (event) => {
     request.destination === 'document' ||
     url.pathname.startsWith('/assets/') ||
     url.pathname === '/sw.js' ||
-    url.pathname === '/manifest.json';
+    url.pathname === '/manifest.json' ||
+    url.pathname === '/version.json' ||
+    url.pathname === '/version' ||
+    url.pathname === '/index.html';
 
   const isStaticAsset =
     url.pathname.endsWith('.png') ||
