@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
+import { AutoResizeTextarea } from './AutoResizeTextarea';
 
 export type MotivoNaoExecucao =
   | 'FALTA_MATERIAL'
@@ -86,12 +87,12 @@ export const MotivoNaoExecucaoModal: React.FC<Props> = ({ tarefaDescricao, statu
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Detalhes adicionais <span className="text-gray-400 font-normal">(opcional)</span>
             </label>
-            <textarea
-              rows={2}
+            <AutoResizeTextarea
+              minRows={2}
               value={textoLivre}
               onChange={e => setTextoLivre(e.target.value)}
               placeholder="Descreva o obstáculo com mais detalhes..."
-              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
+              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
             />
           </div>
         </div>

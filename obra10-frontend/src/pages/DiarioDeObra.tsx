@@ -10,6 +10,7 @@ import {
 import { format } from 'date-fns';
 import { parseUTCDate } from '../utils/date';
 import { RdoShareBar } from '../components/RdoShareBar';
+import { AutoResizeTextarea } from '../components/AutoResizeTextarea';
 import { useAuth } from '../context/AuthContext';
 import { persistCapturedMediaList } from '../utils/persistCapturedMedia';
 import {
@@ -1940,15 +1941,15 @@ export const DiarioDeObra: React.FC = () => {
              <div className="space-y-3">
                {atividadesExecutadas.map((atv, i) => (
                   <div key={i} className="flex flex-col sm:flex-row gap-2 items-start p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                    <textarea 
-                      rows={2}
-                      className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white resize-y" 
-                      placeholder="Descrição detalhada da atividade executada..." 
-                      value={atv.descricao} 
+                    <AutoResizeTextarea
+                      minRows={2}
+                      className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white"
+                      placeholder="Descrição detalhada da atividade executada..."
+                      value={atv.descricao}
                       onChange={e => {
                         const newVal = e.target.value;
                         setAtividadesExecutadas(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: newVal } : item));
-                      }} 
+                      }}
                       disabled={isReadOnly}
                     />
                     <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 pt-0.5">
@@ -2003,9 +2004,9 @@ export const DiarioDeObra: React.FC = () => {
                <div className="space-y-3">
                  {observacoes.map((obs, i) => (
                    <div key={i} className="flex flex-col sm:flex-row gap-2 items-start p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                     <textarea
-                       rows={2}
-                       className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white resize-y"
+                     <AutoResizeTextarea
+                       minRows={2}
+                       className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white"
                        placeholder="Detalhes adicionais, comentários, paralisações..."
                        value={obs.descricao}
                        onChange={e => {
@@ -2053,9 +2054,9 @@ export const DiarioDeObra: React.FC = () => {
                  {atividadesPendentes.map((atv, i) => (
                    <div key={i} className="flex flex-col gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                      <div className="flex flex-col sm:flex-row gap-2 items-start">
-                       <textarea
-                         rows={2}
-                         className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white resize-y"
+                       <AutoResizeTextarea
+                         minRows={2}
+                         className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white"
                          placeholder="Descrição da atividade pendente..."
                          value={atv.descricao}
                          onChange={e => {
@@ -2591,9 +2592,9 @@ export const DiarioDeObra: React.FC = () => {
                                ❌ Reprovar
                              </button>
                            </div>
-                           <textarea
+                           <AutoResizeTextarea
                              className="w-full border border-gray-300 p-2 text-sm rounded bg-white"
-                             rows={2}
+                             minRows={2}
                              placeholder="Motivo da reprovação (obrigatório para reprovar)"
                              value={motivoRejeicao}
                              onChange={e => setMotivoRejeicao(e.target.value)}
