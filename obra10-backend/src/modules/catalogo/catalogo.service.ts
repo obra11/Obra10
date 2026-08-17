@@ -81,16 +81,32 @@ export class CatalogoService {
   }
 
   async create(empresaId: string, dto: CreateInsumoDto) {
-    return this.prisma.catalogoInsumo.create({
-      data: {
-        empresaId,
-        tipo: dto.tipo,
-        nome: dto.nome.trim(),
-        unidade: dto.unidade?.trim() || null,
-        codigo: dto.codigo?.trim() || null,
-        observacao: dto.observacao?.trim() || null,
-      },
-    });
+    if (!empresaId) {
+      throw new BadRequestException('Empresa não identificada na sessão.');
+    }
+    if (!dto.nome?.trim()) {
+      throw new BadRequestException('Nome do item é obrigatório.');
+    }
+    try {
+      return await this.prisma.catalogoInsumo.create({
+        data: {
+          empresaId,
+          tipo: dto.tipo,
+          nome: dto.nome.trim(),
+          unidade: dto.unidade?.trim() || null,
+          codigo: dto.codigo?.trim() || null,
+          observacao: dto.observacao?.trim() || null,
+        },
+      });
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (msg.includes('catalogo_insumos') || msg.includes('does not exist')) {
+        throw new BadRequestException(
+          'Tabela do Cadastro Base ainda não está disponível. Aguarde o próximo deploy ou contate o suporte.',
+        );
+      }
+      throw err;
+    }
   }
 
   async update(id: string, empresaId: string, dto: UpdateInsumoDto) {

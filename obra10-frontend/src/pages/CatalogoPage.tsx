@@ -128,7 +128,14 @@ export const CatalogoPage: React.FC = () => {
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
+    setTimeout(() => setToast(null), type === 'error' ? 6000 : 3500);
+  };
+
+  const apiErrorMessage = (err: any, fallback: string) => {
+    const msg = err?.response?.data?.message;
+    if (Array.isArray(msg)) return msg.join(' · ');
+    if (typeof msg === 'string' && msg.trim()) return msg;
+    return fallback;
   };
 
   const fetchItems = async () => {
@@ -138,7 +145,7 @@ export const CatalogoPage: React.FC = () => {
       setItems(res.data || []);
     } catch (err: any) {
       console.error('Erro ao carregar Cadastro Base:', err);
-      showToast('Erro ao carregar o Cadastro Base', 'error');
+      showToast(apiErrorMessage(err, 'Erro ao carregar o Cadastro Base'), 'error');
     } finally {
       setLoading(false);
     }
@@ -192,7 +199,7 @@ export const CatalogoPage: React.FC = () => {
       fetchItems();
     } catch (err: any) {
       console.error('Erro ao salvar item:', err);
-      showToast('Erro ao salvar item no catálogo', 'error');
+      showToast(apiErrorMessage(err, 'Erro ao salvar item no catálogo'), 'error');
     } finally {
       setSaving(false);
     }
@@ -207,7 +214,7 @@ export const CatalogoPage: React.FC = () => {
       setItems((prev) => prev.filter((item) => item.id !== id));
     } catch (err: any) {
       console.error('Erro ao excluir item:', err);
-      showToast('Erro ao excluir item', 'error');
+      showToast(apiErrorMessage(err, 'Erro ao excluir item'), 'error');
     }
   };
 

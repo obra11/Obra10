@@ -72,9 +72,15 @@ export class CatalogoController {
   }
 
   private async assertGerenciarCatalogo(req: any) {
-    if (req.user?.perfilGlobal === 'SUPER_ADMIN') return;
+    if (
+      req.user?.perfilGlobal === 'SUPER_ADMIN' ||
+      req.user?.perfilGlobal === 'GESTOR'
+    ) {
+      return;
+    }
+    const userId = req.user?.sub || req.user?.id;
     const pode = await this.capabilities.hasCapability(
-      req.user?.sub,
+      userId,
       'gerenciarCatalogo',
     );
     if (!pode) {
