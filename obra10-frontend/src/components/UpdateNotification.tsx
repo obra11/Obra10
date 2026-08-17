@@ -4,19 +4,47 @@ import type { AppVersionInfo } from '../appVersion';
 
 type ServerVersion = AppVersionInfo & { api?: string };
 
+const PENDING_KEY = 'obra10_update_pending';
+
 /**
- * Detecta versão nova (Service Worker + /version) e oferece CTA visível no mobile.
- * Compara buildId embutido com o do servidor — funciona mesmo se o SW estiver travado.
+ * Detecta versão nova (Service Worker + /version) e mantém o CTA até o usuário tocar.
+ * Não recarrega sozinho — isso fazia o botão sumir antes de dar para clicar.
  */
 export const UpdateNotification: React.FC = () => {
-  const [showUpdate, setShowUpdate] = useState(false);
+  const [showUpdate, setShowUpdate] = useState(() => {
+    try {
+      return sessionStorage.getItem(PENDING_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
   const [serverBuild, setServerBuild] = useState<string | null>(null);
   const refreshingRef = useRef(false);
+  const showRef = useRef(showUpdate);
+
+  const markPending = useCallback((buildId?: string | null) => {
+    showRef.current = true;
+    setShowUpdate(true);
+    try {
+      sessionStorage.setItem(PENDING_KEY, '1');
+      if (buildId) sessionStorage.setItem('obra10_pending_build', buildId);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const applyUpdate = useCallback(async () => {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
     try {
+      let pendingBuild: string | null = null;
+      try {
+        pendingBuild = sessionStorage.getItem('obra10_pending_build');
+        sessionStorage.removeItem(PENDING_KEY);
+        sessionStorage.removeItem('obra10_pending_build');
+      } catch {
+        /* ignore */
+      }
       const reg = await navigator.serviceWorker?.getRegistration();
       if (reg?.waiting) {
         reg.waiting.postMessage({ type: 'SKIP_WAITING' });
@@ -32,15 +60,14 @@ export const UpdateNotification: React.FC = () => {
         const regs = await navigator.serviceWorker.getRegistrations();
         await Promise.all(regs.map((r) => r.unregister()));
       }
-      // Marca build do servidor para o bootstrap do index não ficar em loop
-      if (serverBuild) {
-        localStorage.setItem('obra10_build', serverBuild);
+      const mark = serverBuild || pendingBuild;
+      if (mark) {
+        localStorage.setItem('obra10_build', mark);
       }
       localStorage.setItem('obra10_force_reload', String(Date.now()));
     } catch {
       /* ignore */
     }
-    // Cache-bust na navegação
     const url = new URL(window.location.href);
     url.searchParams.set('_v', String(Date.now()));
     window.location.replace(url.toString());
@@ -57,12 +84,19 @@ export const UpdateNotification: React.FC = () => {
       if (!data?.buildId) return;
       setServerBuild(data.buildId);
       if (data.buildId !== APP_BUILD_ID) {
-        setShowUpdate(true);
+        markPending(data.buildId);
+      } else if (!showRef.current) {
+        // Já está na versão vigente e não há update pendente de SW
+        try {
+          sessionStorage.removeItem(PENDING_KEY);
+        } catch {
+          /* ignore */
+        }
       }
     } catch {
       /* offline / API antiga */
     }
-  }, []);
+  }, [markPending]);
 
   useEffect(() => {
     checkServerVersion();
@@ -71,41 +105,38 @@ export const UpdateNotification: React.FC = () => {
 
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'SW_UPDATED') {
-        setShowUpdate(true);
+        // Só mostra; NÃO recarrega — o usuário decide pelo botão
+        markPending();
       }
     };
 
-    const onControllerChange = () => {
-      if (refreshingRef.current) return;
-      refreshingRef.current = true;
-      window.location.reload();
-    };
-
-    navigator.serviceWorker.addEventListener('message', handleMessage);
-    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+    // Importante: não dar reload automático em controllerchange.
+    // Isso fazia o banner piscar e sumir antes do toque.
 
     const checkSw = () => {
       navigator.serviceWorker.getRegistration().then((reg) => {
         if (!reg) return;
         reg.update().catch(() => {});
-        if (reg.waiting) setShowUpdate(true);
+        if (reg.waiting) markPending();
         const installing = reg.installing;
         if (installing) {
           installing.addEventListener('statechange', () => {
-            if (installing.state === 'installed') setShowUpdate(true);
+            if (installing.state === 'installed' && reg.waiting) markPending();
           });
         }
         reg.addEventListener('updatefound', () => {
           const newSW = reg.installing;
           if (!newSW) return;
           newSW.addEventListener('statechange', () => {
-            if (newSW.state === 'installed') setShowUpdate(true);
+            if (newSW.state === 'installed') markPending();
           });
         });
       });
     };
 
+    navigator.serviceWorker.addEventListener('message', handleMessage);
     checkSw();
+
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         checkSw();
@@ -121,12 +152,11 @@ export const UpdateNotification: React.FC = () => {
 
     return () => {
       navigator.serviceWorker.removeEventListener('message', handleMessage);
-      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
       window.clearInterval(interval);
     };
-  }, [checkServerVersion]);
+  }, [checkServerVersion, markPending]);
 
   if (!showUpdate) return null;
 
@@ -134,22 +164,27 @@ export const UpdateNotification: React.FC = () => {
     <div
       className="fixed inset-x-0 z-[10000] px-3 pointer-events-none"
       style={{
-        bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))',
+        // Acima da bottom nav, bem visível e estável
+        bottom: 'calc(5rem + env(safe-area-inset-bottom, 0px))',
       }}
     >
-      <div className="pointer-events-auto mx-auto max-w-lg bg-gray-900 text-white px-4 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 border border-gray-700">
+      <div className="pointer-events-auto mx-auto max-w-lg bg-gray-900 text-white px-4 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border-2 border-green-400/80">
         <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold leading-tight">Nova versão disponível</p>
           <p className="text-[11px] text-gray-300 mt-0.5">
-            Neste aparelho: {APP_VERSION}
+            Toque em Atualizar para aplicar. Neste aparelho: {APP_VERSION}
             {serverBuild ? ` · Vigente: ${serverBuild}` : ''}
           </p>
         </div>
         <button
           type="button"
-          onClick={applyUpdate}
-          className="shrink-0 px-4 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-sm font-bold rounded-xl transition-colors"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            applyUpdate();
+          }}
+          className="shrink-0 min-h-[44px] min-w-[96px] px-4 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-sm font-bold rounded-xl transition-colors"
         >
           Atualizar
         </button>

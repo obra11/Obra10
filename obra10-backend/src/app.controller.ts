@@ -35,7 +35,7 @@ export class AppController {
   getVersion() {
     return {
       ...readClientVersion(),
-      api: '1.5.9',
+      api: '1.5.10',
       checkedAt: new Date().toISOString(),
     };
   }
@@ -49,7 +49,7 @@ export class AppController {
       return {
         status: 'ok',
         database: 'connected',
-        message: 'Obra 10 - MVP API Operacional (v1.5.9)',
+        message: 'Obra 10 - MVP API Operacional (v1.5.10)',
         app,
         env: {
           nodeEnv: process.env.NODE_ENV,

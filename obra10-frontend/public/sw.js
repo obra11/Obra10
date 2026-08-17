@@ -1,4 +1,4 @@
-const CACHE_NAME = 'obra10-v2.9.4';
+const CACHE_NAME = 'obra10-v2.9.5';
 // Não pré-cachear '/' nem imagens de marca — HTML/JS antigos mostravam watermark Lunardeli.
 const STATIC_ASSETS = [
   '/favicon-16.png',
@@ -15,23 +15,25 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)),
   );
-  self.skipWaiting();
+  // NÃO chama skipWaiting aqui — espera o usuário tocar em "Atualizar"
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))),
+      )
       .then(() => caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)))
+      .then(() => self.clients.claim())
       .then(() =>
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
           clients.forEach((client) => {
             client.postMessage({ type: 'SW_UPDATED', version: CACHE_NAME });
           });
         }),
-      )
-      .then(() => self.clients.claim()),
+      ),
   );
 });
 
