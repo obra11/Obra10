@@ -14,7 +14,7 @@ export class AppController {
       return {
         status: 'ok',
         database: 'connected',
-        message: 'Obra 10 - MVP API Operacional (v1.5.5)',
+        message: 'Obra 10 - MVP API Operacional (v1.5.6)',
 
         env: {
           nodeEnv: process.env.NODE_ENV,

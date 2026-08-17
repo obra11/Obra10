@@ -49,6 +49,27 @@ import { ApiVersionMiddleware } from './core/middlewares/api-version.middleware'
     ServeStaticModule.forRoot(
       {
         rootPath: join(process.cwd(), 'client'),
+        serveStaticOptions: {
+          setHeaders: (res, filePath) => {
+            const p = String(filePath).replace(/\\/g, '/');
+            if (
+              p.endsWith('/index.html') ||
+              p.endsWith('/sw.js') ||
+              p.endsWith('/manifest.json') ||
+              p.endsWith('.html')
+            ) {
+              res.setHeader(
+                'Cache-Control',
+                'no-store, no-cache, must-revalidate, proxy-revalidate',
+              );
+              res.setHeader('Pragma', 'no-cache');
+              res.setHeader('Expires', '0');
+            } else if (p.includes('/assets/')) {
+              // hashed assets can be cached long
+              res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            }
+          },
+        },
       },
       {
         rootPath: join(process.cwd(), 'uploads'),
