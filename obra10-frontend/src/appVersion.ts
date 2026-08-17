@@ -13,7 +13,26 @@ export type AppVersionInfo = {
   releasedAt: string;
   channel?: string;
   name?: string;
+  /** Se true, clientes desatualizados entram em atualização forçada. */
+  forceUpdate?: boolean;
+  /** Clientes abaixo desta versão (semver) são forçados a atualizar. */
+  minClientVersion?: string;
 };
+
+/** Compara semver simples a.b.c — retorna negativo se a < b. */
+export function compareSemver(a: string, b: string): number {
+  const pa = String(a || '0')
+    .split('.')
+    .map((n) => parseInt(n, 10) || 0);
+  const pb = String(b || '0')
+    .split('.')
+    .map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
 
 export function formatAppVersion(
   info: AppVersionInfo = {
