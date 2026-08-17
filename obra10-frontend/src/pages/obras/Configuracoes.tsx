@@ -124,8 +124,9 @@ export const Configuracoes: React.FC = () => {
                     <span>Sem Imagem de Capa</span>
                   </div>
                 )}
+                {/* Desktop: overlay no hover. Mobile: sempre visível (não existe hover). */}
                 {isGestor && (
-                  <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white cursor-pointer transition-opacity text-center p-2">
+                  <label className="absolute inset-0 bg-black/55 md:bg-black/60 opacity-100 md:opacity-0 md:group-hover:opacity-100 flex flex-col items-center justify-center text-white cursor-pointer transition-opacity text-center p-2">
                     {uploadingImage ? (
                       <Loader2 className="animate-spin text-white mb-1" size={20} />
                     ) : (
@@ -138,6 +139,13 @@ export const Configuracoes: React.FC = () => {
                   </label>
                 )}
               </div>
+              {isGestor && (
+                <label className="mt-3 w-full md:hidden inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-sm font-semibold text-gray-800 active:bg-gray-50 cursor-pointer">
+                  {uploadingImage ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                  {uploadingImage ? 'Enviando...' : 'Escolher foto da obra'}
+                  <input type="file" className="hidden" accept="image/*" disabled={uploadingImage} onChange={handleImageUpload} />
+                </label>
+              )}
               <p className="text-[10px] text-gray-400 mt-2 text-center">
                 Use imagens retangulares (relação de aspecto 4:3 ou 16:9).
               </p>

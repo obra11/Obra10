@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   LogOut, Settings, LayoutDashboard, Users, FileText, ArrowLeft, BarChart2, Loader2,
   Beaker, ClipboardCheck, Home, Package, Calendar, Clock, Layers, Files, ShieldCheck, Heart, BadgeDollarSign,
-  Building2, User, Boxes, Headphones
+  Building2, User, Boxes, Headphones, MoreHorizontal, X
 } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
@@ -31,6 +31,7 @@ export const ObraLayout: React.FC = () => {
   const location = useLocation();
   const [uploadingUserPhoto, setUploadingUserPhoto] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
 
   const canEditLogo =
     user?.capabilities?.gerenciarUsuarios === true ||
@@ -39,6 +40,10 @@ export const ObraLayout: React.FC = () => {
 
   // Hide bottom nav when the user is inside DiarioDeObra (it has its own floating action bar)
   const isInsideDiario = /\/rdos\/(novo|[a-f0-9-]+)$/i.test(location.pathname);
+
+  useEffect(() => {
+    setMobileMoreOpen(false);
+  }, [location.pathname]);
 
   const handleLogout = () => {
     logout();
@@ -120,14 +125,29 @@ export const ObraLayout: React.FC = () => {
     extraItems.push({ name: 'Dashboard RDO', icon: BarChart2, path: `/obras/${obraAtiva?.id}/rdos/dashboard`, visible: true });
   }
 
+  const canOpenConfiguracoes =
+    hasPerm('SUPER') ||
+    hasPerm('CONFIGURACOES') ||
+    user?.perfilGlobal === 'GESTOR';
+
   // Final permanent items
   const footerItems = [
     { name: 'Efetivo', icon: Users, path: `/obras/${obraAtiva?.id}/efetivo`, visible: true },
     { name: 'Cadastro Base', icon: Boxes, path: '/catalogo', visible: true },
-    { name: 'Configurações', icon: Settings, path: `/obras/${obraAtiva?.id}/configuracoes`, visible: hasPerm('SUPER') },
+    {
+      name: 'Configurações',
+      icon: Settings,
+      path: `/obras/${obraAtiva?.id}/configuracoes`,
+      visible: canOpenConfiguracoes,
+    },
   ];
 
   const menuItems = [...baseItems, ...moduleItems, ...extraItems, ...footerItems].filter(item => item.visible);
+
+  // Bottom nav: até 4 atalhos + "Mais" (Configurações e o resto ficavam inacessíveis no mobile)
+  const mobilePrimaryItems = menuItems.slice(0, 4);
+  const mobileMoreItems = menuItems.slice(4);
+  const showMobileMore = mobileMoreItems.length > 0 || canOpenConfiguracoes;
 
   // const baseURL = import.meta.env.VITE_API_URL ?? '';
 
@@ -316,7 +336,20 @@ export const ObraLayout: React.FC = () => {
              </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            {canOpenConfiguracoes && (
+              <button
+                onClick={() => navigate(`/obras/${obraAtiva?.id}/configuracoes`)}
+                title="Configurações da obra"
+                className={`p-2.5 rounded-lg shrink-0 active:bg-gray-100 ${
+                  location.pathname.includes('/configuracoes')
+                    ? 'text-lunardeli-red bg-red-50'
+                    : 'text-gray-500 hover:text-lunardeli-red'
+                }`}
+              >
+                <Settings size={20} />
+              </button>
+            )}
             <button onClick={() => navigate('/perfil')} title="Ver Perfil" className="relative flex items-center justify-center w-9 h-9 rounded-full overflow-hidden bg-gray-100 border border-gray-300 shrink-0">
                {user?.fotoUrl ? (
                  <img src={getImageUrl(user.fotoUrl)} alt="Meu Perfil" className="w-full h-full object-cover" />
@@ -343,7 +376,7 @@ export const ObraLayout: React.FC = () => {
       {!isInsideDiario && (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           <div className="flex items-center justify-around h-16 px-1">
-            {menuItems.slice(0, 5).map(item => {
+            {mobilePrimaryItems.map(item => {
               const isActive = location.pathname.startsWith(item.path);
               return (
                 <button
@@ -353,7 +386,6 @@ export const ObraLayout: React.FC = () => {
                     isActive ? 'text-lunardeli-red' : 'text-gray-400'
                   }`}
                 >
-                  {/* Active indicator bar */}
                   {isActive && (
                     <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-lunardeli-red rounded-b-full" />
                   )}
@@ -364,8 +396,85 @@ export const ObraLayout: React.FC = () => {
                 </button>
               );
             })}
+            {showMobileMore && (
+              <button
+                onClick={() => setMobileMoreOpen(true)}
+                className={`flex flex-col items-center justify-center flex-1 h-full min-w-0 relative transition-colors ${
+                  mobileMoreOpen || mobileMoreItems.some(i => location.pathname.startsWith(i.path))
+                    ? 'text-lunardeli-red'
+                    : 'text-gray-400'
+                }`}
+              >
+                <MoreHorizontal size={22} strokeWidth={1.8} className="shrink-0" />
+                <span className="text-[10px] mt-0.5 leading-tight font-medium">Mais</span>
+              </button>
+            )}
           </div>
         </nav>
+      )}
+
+      {/* Sheet "Mais" — acesso a Configurações e demais itens no mobile */}
+      {mobileMoreOpen && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <button
+            type="button"
+            aria-label="Fechar menu"
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setMobileMoreOpen(false)}
+          />
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl max-h-[70vh] overflow-y-auto"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <h2 className="text-sm font-bold text-gray-900">Mais opções</h2>
+              <button
+                type="button"
+                onClick={() => setMobileMoreOpen(false)}
+                className="p-2 text-gray-500 active:bg-gray-100 rounded-lg"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-2 pb-4">
+              {(mobileMoreItems.length > 0
+                ? mobileMoreItems
+                : menuItems.filter(i => i.name === 'Configurações')
+              ).map(item => {
+                const isActive = location.pathname.startsWith(item.path);
+                return (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => {
+                      setMobileMoreOpen(false);
+                      navigate(item.path);
+                    }}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-colors ${
+                      isActive
+                        ? 'bg-red-50 text-lunardeli-red'
+                        : 'text-gray-800 active:bg-gray-50'
+                    }`}
+                  >
+                    <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} className="shrink-0" />
+                    <span className={`text-sm ${isActive ? 'font-bold' : 'font-medium'}`}>{item.name}</span>
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMoreOpen(false);
+                  navigate('/suporte');
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left text-gray-800 active:bg-gray-50"
+              >
+                <Headphones size={20} className="shrink-0" />
+                <span className="text-sm font-medium">Central de Suporte</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       <LunaWidget />
     </div>
