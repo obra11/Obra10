@@ -1,4 +1,4 @@
-const CACHE_NAME = 'obra10-v2.8.0';
+const CACHE_NAME = 'obra10-v2.9.0';
 // Não pré-cachear '/' nem imagens de marca — HTML/JS antigos mostravam watermark Lunardeli.
 const STATIC_ASSETS = [
   '/favicon-16.png',
@@ -25,7 +25,7 @@ self.addEventListener('activate', (event) => {
       .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
       .then(() => caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)))
       .then(() =>
-        self.clients.matchAll().then((clients) => {
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
           clients.forEach((client) => {
             client.postMessage({ type: 'SW_UPDATED', version: CACHE_NAME });
           });
@@ -33,6 +33,17 @@ self.addEventListener('activate', (event) => {
       )
       .then(() => self.clients.claim()),
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  if (event.data?.type === 'CLEAR_CACHES') {
+    event.waitUntil(
+      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))),
+    );
+  }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -73,7 +84,7 @@ self.addEventListener('fetch', (event) => {
     (async () => {
       if (isAppShell) {
         try {
-          return await fetch(request);
+          return await fetch(request, { cache: 'no-store' });
         } catch {
           const cached = await caches.match(request);
           return cached || new Response('Offline', { status: 503 });

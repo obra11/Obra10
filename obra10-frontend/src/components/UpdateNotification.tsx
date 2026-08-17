@@ -1,12 +1,27 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 
 /**
- * Componente que detecta quando o Service Worker atualiza 
- * e exibe um toast discreto para o usuário.
- * NÃO força reload — o usuário atualiza quando quiser.
+ * Detecta Service Worker novo e mostra barra de atualização
+ * bem visível no mobile (acima da bottom nav).
  */
 export const UpdateNotification: React.FC = () => {
   const [showUpdate, setShowUpdate] = useState(false);
+
+  const applyUpdate = useCallback(async () => {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg?.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+      if (window.caches) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch {
+      /* ignore */
+    }
+    window.location.reload();
+  }, []);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
@@ -17,49 +32,71 @@ export const UpdateNotification: React.FC = () => {
       }
     };
 
-    navigator.serviceWorker.addEventListener('message', handleMessage);
+    const onControllerChange = () => {
+      // Novo SW assumiu controle — recarrega para pegar assets novos
+      window.location.reload();
+    };
 
-    // Force update check on mount
-    navigator.serviceWorker.getRegistration().then(reg => {
-      if (reg) {
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+
+    const check = () => {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        if (!reg) return;
         reg.update().catch(() => {});
-        if (reg.waiting) {
-          setShowUpdate(true);
-        }
+        if (reg.waiting) setShowUpdate(true);
         reg.addEventListener('updatefound', () => {
           const newSW = reg.installing;
-          newSW?.addEventListener('statechange', () => {
-            if (newSW.state === 'installed' || newSW.state === 'activated') {
+          if (!newSW) return;
+          newSW.addEventListener('statechange', () => {
+            if (newSW.state === 'installed') {
               setShowUpdate(true);
             }
           });
         });
-      }
-    });
+      });
+    };
+
+    check();
+    // Revalida ao voltar para o app (comum no celular)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') check();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', check);
+    const interval = window.setInterval(check, 60_000);
 
     return () => {
       navigator.serviceWorker.removeEventListener('message', handleMessage);
+      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', check);
+      window.clearInterval(interval);
     };
   }, []);
 
   if (!showUpdate) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[9999] animate-slide-up">
-      <div className="bg-gray-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 border border-gray-700">
-        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-        <span className="text-sm font-medium">Nova versão disponível</span>
+    <div
+      className="fixed inset-x-0 z-[10000] px-3 pointer-events-none"
+      style={{
+        // Acima da bottom nav do RDO / Obra (~64px + safe area)
+        bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))',
+      }}
+    >
+      <div className="pointer-events-auto mx-auto max-w-lg bg-gray-900 text-white px-4 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 border border-gray-700">
+        <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold leading-tight">Nova versão disponível</p>
+          <p className="text-[11px] text-gray-300 mt-0.5">Toque em Atualizar para carregar as melhorias.</p>
+        </div>
         <button
-          onClick={() => window.location.reload()}
-          className="ml-2 px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors"
+          type="button"
+          onClick={applyUpdate}
+          className="shrink-0 px-4 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-sm font-bold rounded-xl transition-colors"
         >
           Atualizar
-        </button>
-        <button
-          onClick={() => setShowUpdate(false)}
-          className="text-gray-400 hover:text-white text-lg leading-none ml-1"
-        >
-          ×
         </button>
       </div>
     </div>
