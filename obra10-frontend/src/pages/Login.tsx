@@ -5,6 +5,8 @@ import { authService } from '../services/auth.service';
 import api from '../services/api';
 import { Lock, Mail, Loader2, Eye, EyeOff } from 'lucide-react';
 import { Obra10Logo } from '../components/Obra10Logo';
+import { AppVersionBadge } from '../components/AppVersionBadge';
+import { APP_VERSION } from '../appVersion';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -206,6 +208,10 @@ export const Login: React.FC = () => {
 
           <div className="mt-8 text-center text-sm text-gray-500">
             &copy; 2026 Lunardeli Engenharia. Todos os direitos reservados.
+            <div className="mt-2">
+              <AppVersionBadge variant="compact" className="justify-center" />
+              <span className="sr-only">Obra 10 v{APP_VERSION}</span>
+            </div>
           </div>
         </div>
       </div>

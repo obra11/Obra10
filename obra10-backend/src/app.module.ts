@@ -56,6 +56,7 @@ import { ApiVersionMiddleware } from './core/middlewares/api-version.middleware'
               p.endsWith('/index.html') ||
               p.endsWith('/sw.js') ||
               p.endsWith('/manifest.json') ||
+              p.endsWith('/version.json') ||
               p.endsWith('.html')
             ) {
               res.setHeader(

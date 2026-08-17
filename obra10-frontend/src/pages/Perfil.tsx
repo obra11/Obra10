@@ -5,6 +5,7 @@ import {
   ArrowLeft, User, Phone, Lock, Loader2, CheckCircle, AlertCircle, Eye, EyeOff,
   Headphones, Shield, Check, X,
 } from 'lucide-react';
+import { AppVersionBadge } from '../components/AppVersionBadge';
 import api from '../services/api';
 
 const PERFIL_LABELS: Record<string, string> = {
@@ -409,6 +410,10 @@ export const Perfil: React.FC = () => {
             </button>
           </div>
         </form>
+
+        <div className="mt-6">
+          <AppVersionBadge />
+        </div>
       </div>
     </div>
   );

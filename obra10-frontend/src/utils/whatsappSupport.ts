@@ -29,6 +29,8 @@ export type WhatsAppSupportMessageInput = {
   categoria?: string;
   descricao?: string;
   chamadoId?: string;
+  /** Linha de versão do app (ex.: gerada por appVersionSupportLine) */
+  appVersion?: string;
 };
 
 export function buildSupportWhatsAppMessage(input: WhatsAppSupportMessageInput): string {
@@ -41,6 +43,7 @@ export function buildSupportWhatsAppMessage(input: WhatsAppSupportMessageInput):
   if (input.categoria) lines.push(`Categoria: ${input.categoria}`);
   if (input.descricao) lines.push(`Descrição: ${input.descricao}`);
   if (input.chamadoId) lines.push(`ID do chamado: ${input.chamadoId}`);
+  if (input.appVersion) lines.push(input.appVersion);
   lines.push('', 'Preciso de ajuda no Obra 10.');
   return lines.join('\n');
 }

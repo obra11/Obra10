@@ -17,6 +17,8 @@ import {
   buildSupportWhatsAppMessage,
   openSupportWhatsApp,
 } from '../utils/whatsappSupport';
+import { appVersionSupportLine } from '../appVersion';
+import { AppVersionBadge } from '../components/AppVersionBadge';
 
 type Tab = 'faq' | 'chamados' | 'novo';
 
@@ -135,6 +137,7 @@ export const SuportePage: React.FC = () => {
       nome: user?.nome,
       email: user?.email,
       empresa: empresaNome,
+      appVersion: appVersionSupportLine(),
     });
     openSupportWhatsApp(msg);
   };
@@ -169,6 +172,7 @@ export const SuportePage: React.FC = () => {
             categoria: criado.categoria,
             descricao: criado.descricao,
             chamadoId: criado.id,
+            appVersion: appVersionSupportLine(),
           }),
         );
       }
@@ -221,6 +225,10 @@ export const SuportePage: React.FC = () => {
             <MessageCircle size={18} />
             Falar no WhatsApp
           </button>
+        </div>
+
+        <div className="mb-6">
+          <AppVersionBadge />
         </div>
 
         <div className="flex gap-2 mb-6 overflow-x-auto pb-1">

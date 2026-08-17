@@ -1,6 +1,6 @@
 # ============================================
 # Obra 10 — Production Dockerfile
-# Force rebuild: 2026-08-17-v2.9.0-rdo-autoresize
+# Force rebuild: 2026-08-17-v2.9.1-app-version
 # ============================================
 
 # --- Build stage ---
