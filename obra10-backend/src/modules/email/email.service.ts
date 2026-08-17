@@ -294,6 +294,32 @@ export class EmailService {
     );
   }
 
+  async enviarSenhaTemporaria(
+    email: string,
+    nomeUsuario: string,
+    senhaTemporaria: string,
+  ) {
+    await this.send(
+      email,
+      '🔑 Nova senha de acesso — OBRA 10',
+      `
+      <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
+        <h2 style="color:#dc2626;margin-top:0">Senha redefinida pelo suporte</h2>
+        <p>Olá, <strong>${nomeUsuario}</strong>!</p>
+        <p>Uma senha temporária foi gerada para o seu login no OBRA 10:</p>
+        <p style="font-size:18px;letter-spacing:1px;background:#f3f4f6;padding:12px 16px;border-radius:8px;display:inline-block">
+          <strong>Login:</strong> ${email}<br/>
+          <strong>Senha temporária:</strong> ${senhaTemporaria}
+        </p>
+        <p>Acesse o sistema e altere a senha assim que possível.</p>
+        <a href="${this.appUrl}/login" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
+          Fazer login
+        </a>
+      </div>
+    `,
+    );
+  }
+
   async enviarAvisoCobrancaPendente(
     email: string,
     nomeUsuario: string,

@@ -163,9 +163,9 @@ export class TenantService {
           ...endereco,
           numero: dto.numero,
           complemento: dto.complemento,
-          emailVerificado: true, // Auto-verified for dev testing
-          tokenVerificacao: null,
-          tokenVerificacaoExp: null,
+          emailVerificado: false,
+          tokenVerificacao,
+          tokenVerificacaoExp: tokenExp,
           plano: 'BASICO',
           limiteUsuarios: 5,
         },
@@ -197,14 +197,11 @@ export class TenantService {
         });
       }
 
-      // Grant RDO free trial module auto-activated for dev testing
+      // RDO liberado só após confirmação do e-mail
       const moduloRdo = await tx.modulo.findUnique({ where: { slug: 'RDO' } });
       if (moduloRdo) {
         await tx.tenantModulo.create({
-          data: { empresaId: empresa.id, moduloId: moduloRdo.id, ativo: true }, // auto-activated
-        });
-        await tx.usuarioModulo.create({
-          data: { usuarioId: gestor.id, moduloId: moduloRdo.id },
+          data: { empresaId: empresa.id, moduloId: moduloRdo.id, ativo: false },
         });
       }
 
@@ -297,8 +294,8 @@ export class TenantService {
     if (empresa.email) await this.email.enviarBoasVindas(empresa.email, nome);
 
     return {
-      mensagem: 'E-mail verificado com sucesso!',
-      redirect: '/contratacao',
+      mensagem: 'E-mail verificado com sucesso! Faça login para continuar.',
+      redirect: '/login',
     };
   }
 

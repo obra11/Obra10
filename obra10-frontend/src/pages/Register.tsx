@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
-import { ArrowRight, ArrowLeft, Loader2, CheckCircle } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Loader2, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { resolvePacoteObras } from '../utils/pacotesObras';
 
@@ -16,6 +16,8 @@ export const Register: React.FC = () => {
   const [tipo, setTipo] = useState<TipoPessoa>('JURIDICA');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendDone, setResendDone] = useState(false);
 
   useEffect(() => {
     logout();
@@ -95,16 +97,44 @@ export const Register: React.FC = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg p-10 text-center max-w-md w-full">
-          <CheckCircle size={56} className="mx-auto mb-4 text-green-600" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Cadastro concluído!</h2>
-          <p className="text-gray-500 text-sm mb-6">
-            A sua conta foi ativada. Você já pode acessar o sistema com o e-mail <strong>{form.email}</strong>.
+          <Mail size={56} className="mx-auto mb-4 text-red-600" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Confirme seu e-mail</h2>
+          <p className="text-gray-500 text-sm mb-4">
+            Enviamos um link de ativação para <strong>{form.email}</strong>.
+            Só após clicar nesse link o cadastro é concluído e o acesso liberado.
           </p>
+          <p className="text-xs text-gray-400 mb-6">
+            Não encontrou? Confira a pasta de spam. O link expira em 24 horas.
+          </p>
+          {resendDone ? (
+            <div className="mb-4 p-3 bg-green-50 text-green-700 text-sm rounded-xl border border-green-200">
+              E-mail reenviado com sucesso.
+            </div>
+          ) : (
+            <button
+              onClick={async () => {
+                setResendLoading(true);
+                try {
+                  await api.post('/tenants/reenviar-verificacao', { email: form.email });
+                  setResendDone(true);
+                } catch {
+                  setError('Não foi possível reenviar. Tente novamente em instantes.');
+                } finally {
+                  setResendLoading(false);
+                }
+              }}
+              disabled={resendLoading}
+              className="w-full mb-3 py-3 border border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+            >
+              {resendLoading ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
+              Reenviar e-mail de confirmação
+            </button>
+          )}
           <button
             onClick={() => navigate('/login')}
             className="w-full py-3 bg-red-600 text-white font-semibold rounded-xl hover:bg-red-700 transition-all flex items-center justify-center gap-2"
           >
-            Acessar o sistema
+            Ir para o login
           </button>
         </div>
       </div>

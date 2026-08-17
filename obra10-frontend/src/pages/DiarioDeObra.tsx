@@ -626,7 +626,8 @@ export const DiarioDeObra: React.FC = () => {
 
         try {
           const res = await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 180000,
           });
 
           if (res.data?.anexo) {
@@ -777,41 +778,205 @@ export const DiarioDeObra: React.FC = () => {
   const handleEquipChange = (idx: number, field: keyof EquipamentoItem, val: string) => {
     setEquipamentos(prev => prev.map((e, i) => i === idx ? { ...e, [field]: val } : e));
   };
-  const handleFotosDrop = async (files: File[]) => {
-    if (!navigator.onLine) {
-      for (const file of files) {
-        try {
-          const offlineId = generateUUID();
-          const buffer = await readFileAsArrayBuffer(file);
-          const preview = URL.createObjectURL(file);
-          
-          await saveOfflineAttachment({
-            id: offlineId,
-            rdoId: rdoIdAtual || tempRdoId.current,
-            tipo: 'foto',
-            nomeArquivo: file.name,
-            mimeType: file.type || 'image/jpeg',
-            dados: buffer,
-            previewUrl: preview,
-            tentativas: 0,
-            criadoEm: new Date().toISOString()
-          });
+  const mediaRdoKey = () => rdoIdAtual || tempRdoId.current;
 
-          setFotos(prev => [...prev, {
+  const guessVideoMime = (file: File) => {
+    if (file.type && file.type.startsWith('video/')) return file.type;
+    const n = (file.name || '').toLowerCase();
+    if (n.endsWith('.mov')) return 'video/quicktime';
+    if (n.endsWith('.webm')) return 'video/webm';
+    if (n.endsWith('.3gp')) return 'video/3gpp';
+    if (n.endsWith('.m4v')) return 'video/x-m4v';
+    if (n.endsWith('.mkv')) return 'video/x-matroska';
+    if (n.endsWith('.avi')) return 'video/x-msvideo';
+    return 'video/mp4';
+  };
+
+  /** Sempre grava mídia no IndexedDB (online ou offline) para não perder ao salvar sem rede. */
+  const persistMediaFileToIdb = async (
+    file: File,
+    tipo: 'foto' | 'video' | 'anexo',
+    legenda?: string,
+  ): Promise<string> => {
+    const offlineId = generateUUID();
+    const buffer = await readFileAsArrayBuffer(file);
+    const mimeType =
+      tipo === 'video'
+        ? guessVideoMime(file)
+        : file.type || (tipo === 'foto' ? 'image/jpeg' : 'application/octet-stream');
+    const nomeArquivo =
+      file.name ||
+      `${tipo}-${Date.now()}.${tipo === 'video' ? (mimeType === 'video/quicktime' ? 'mov' : 'mp4') : tipo === 'foto' ? 'jpg' : 'bin'}`;
+
+    await saveOfflineAttachment({
+      id: offlineId,
+      rdoId: mediaRdoKey(),
+      tipo,
+      nomeArquivo,
+      mimeType,
+      dados: buffer,
+      previewUrl: tipo === 'foto' ? URL.createObjectURL(file) : undefined,
+      tentativas: 0,
+      criadoEm: new Date().toISOString(),
+      legenda: legenda || '',
+    });
+    return offlineId;
+  };
+
+  /** Garante que tudo que está só na memória também vá para o IndexedDB (antes de salvar offline). */
+  const flushPendingMediaToIdb = async () => {
+    const nextFotos = [...fotos];
+    for (let i = 0; i < nextFotos.length; i++) {
+      if (nextFotos[i].offlineId) continue;
+      try {
+        const offlineId = await persistMediaFileToIdb(
+          nextFotos[i].file,
+          'foto',
+          nextFotos[i].legenda,
+        );
+        nextFotos[i] = {
+          ...nextFotos[i],
+          offlineId,
+          isOfflinePending: true,
+          uploadFalhou: false,
+        };
+      } catch (err) {
+        console.error('Falha ao persistir foto local:', err);
+      }
+    }
+    setFotos(nextFotos);
+
+    const nextVideos = [...videos];
+    for (let i = 0; i < nextVideos.length; i++) {
+      if (nextVideos[i].offlineId) continue;
+      try {
+        const offlineId = await persistMediaFileToIdb(
+          nextVideos[i].file,
+          'video',
+          nextVideos[i].legenda,
+        );
+        nextVideos[i] = {
+          ...nextVideos[i],
+          offlineId,
+          isOfflinePending: true,
+          uploadFalhou: false,
+        };
+      } catch (err) {
+        console.error('Falha ao persistir vídeo local:', err);
+      }
+    }
+    setVideos(nextVideos);
+
+    const nextAnexos = [...anexos];
+    for (let i = 0; i < nextAnexos.length; i++) {
+      if (nextAnexos[i].offlineId) continue;
+      try {
+        const offlineId = await persistMediaFileToIdb(
+          nextAnexos[i].file,
+          'anexo',
+          nextAnexos[i].descricao,
+        );
+        nextAnexos[i] = {
+          ...nextAnexos[i],
+          offlineId,
+          isOfflinePending: true,
+          uploadFalhou: false,
+        };
+      } catch (err) {
+        console.error('Falha ao persistir anexo local:', err);
+      }
+    }
+    setAnexos(nextAnexos);
+  };
+
+  const hydratePendingMediaFromIdb = useCallback(async () => {
+    const keys = new Set<string>();
+    keys.add(tempRdoId.current);
+    if (rdoIdAtual) keys.add(rdoIdAtual);
+    if (rdoId) keys.add(rdoId);
+
+    const seen = new Set<string>();
+    const loadedFotos: Foto[] = [];
+    const loadedVideos: VideoFile[] = [];
+    const loadedAnexos: Anexo[] = [];
+
+    for (const key of keys) {
+      const items = await getOfflineAttachments(key);
+      for (const item of items) {
+        if (seen.has(item.id)) continue;
+        seen.add(item.id);
+        const blob = new Blob([item.dados], { type: item.mimeType });
+        const file = new File([blob], item.nomeArquivo, { type: item.mimeType });
+        if (item.tipo === 'foto') {
+          loadedFotos.push({
+            file,
+            preview: URL.createObjectURL(blob),
+            legenda: item.legenda || '',
+            offlineId: item.id,
+            isOfflinePending: true,
+            uploadFalhou: (item.tentativas || 0) >= 3,
+          });
+        } else if (item.tipo === 'video') {
+          loadedVideos.push({
+            file,
+            legenda: item.legenda || '',
+            offlineId: item.id,
+            isOfflinePending: true,
+            uploadFalhou: (item.tentativas || 0) >= 3,
+          });
+        } else {
+          loadedAnexos.push({
+            file,
+            descricao: item.legenda || '',
+            offlineId: item.id,
+            isOfflinePending: true,
+            uploadFalhou: (item.tentativas || 0) >= 3,
+          });
+        }
+      }
+    }
+
+    if (loadedFotos.length) {
+      setFotos((prev) => {
+        const ids = new Set(prev.map((p) => p.offlineId).filter(Boolean));
+        return [...prev, ...loadedFotos.filter((f) => !ids.has(f.offlineId))];
+      });
+    }
+    if (loadedVideos.length) {
+      setVideos((prev) => {
+        const ids = new Set(prev.map((p) => p.offlineId).filter(Boolean));
+        return [...prev, ...loadedVideos.filter((v) => !ids.has(v.offlineId))];
+      });
+    }
+    if (loadedAnexos.length) {
+      setAnexos((prev) => {
+        const ids = new Set(prev.map((p) => p.offlineId).filter(Boolean));
+        return [...prev, ...loadedAnexos.filter((a) => !ids.has(a.offlineId))];
+      });
+    }
+  }, [rdoIdAtual, rdoId]);
+
+  const handleFotosDrop = async (files: File[]) => {
+    for (const file of files) {
+      try {
+        const preview = URL.createObjectURL(file);
+        const offlineId = await persistMediaFileToIdb(file, 'foto');
+        setFotos((prev) => [
+          ...prev,
+          {
             file,
             preview,
             legenda: '',
             offlineId,
             isOfflinePending: true,
-            uploadFalhou: false
-          }]);
-        } catch (err) {
-          console.error('Erro ao guardar foto offline:', err);
-        }
+            uploadFalhou: false,
+          },
+        ]);
+      } catch (err) {
+        console.error('Erro ao guardar foto no aparelho:', err);
+        showToast('⚠️ Não foi possível guardar a foto no aparelho.');
       }
-      return;
     }
-    setFotos(prev => [...prev, ...files.map(f => ({ file: f, preview: URL.createObjectURL(f), legenda: '' }))]);
   };
   const handleFotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []).filter(
@@ -842,37 +1007,31 @@ export const DiarioDeObra: React.FC = () => {
   };
 
   const handleVideosDrop = async (files: File[]) => {
-    if (!navigator.onLine) {
-      for (const file of files) {
-        try {
-          const offlineId = generateUUID();
-          const buffer = await readFileAsArrayBuffer(file);
-          
-          await saveOfflineAttachment({
-            id: offlineId,
-            rdoId: rdoIdAtual || tempRdoId.current,
-            tipo: 'video',
-            nomeArquivo: file.name,
-            mimeType: file.type || 'video/mp4',
-            dados: buffer,
-            tentativas: 0,
-            criadoEm: new Date().toISOString()
-          });
-
-          setVideos(prev => [...prev, {
-            file,
+    for (const file of files) {
+      try {
+        const mimeType = guessVideoMime(file);
+        const nomeArquivo =
+          file.name ||
+          `video-${Date.now()}.${mimeType === 'video/quicktime' ? 'mov' : 'mp4'}`;
+        const fileNorm = file.type
+          ? file
+          : new File([file], nomeArquivo, { type: mimeType });
+        const offlineId = await persistMediaFileToIdb(fileNorm, 'video');
+        setVideos((prev) => [
+          ...prev,
+          {
+            file: fileNorm,
             legenda: '',
             offlineId,
             isOfflinePending: true,
-            uploadFalhou: false
-          }]);
-        } catch (err) {
-          console.error('Erro ao guardar vídeo offline:', err);
-        }
+            uploadFalhou: false,
+          },
+        ]);
+      } catch (err) {
+        console.error('Erro ao guardar vídeo no aparelho:', err);
+        showToast('⚠️ Não foi possível guardar o vídeo no aparelho.');
       }
-      return;
     }
-    setVideos(prev => [...prev, ...files.map(f => ({ file: f, legenda: '' }))]);
   };
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []).filter(
@@ -903,37 +1062,24 @@ export const DiarioDeObra: React.FC = () => {
   };
 
   const handleAnexosDrop = async (files: File[]) => {
-    if (!navigator.onLine) {
-      for (const file of files) {
-        try {
-          const offlineId = generateUUID();
-          const buffer = await readFileAsArrayBuffer(file);
-          
-          await saveOfflineAttachment({
-            id: offlineId,
-            rdoId: rdoIdAtual || tempRdoId.current,
-            tipo: 'anexo',
-            nomeArquivo: file.name,
-            mimeType: file.type || 'application/octet-stream',
-            dados: buffer,
-            tentativas: 0,
-            criadoEm: new Date().toISOString()
-          });
-
-          setAnexos(prev => [...prev, {
+    for (const file of files) {
+      try {
+        const offlineId = await persistMediaFileToIdb(file, 'anexo');
+        setAnexos((prev) => [
+          ...prev,
+          {
             file,
             descricao: '',
             offlineId,
             isOfflinePending: true,
-            uploadFalhou: false
-          }]);
-        } catch (err) {
-          console.error('Erro ao guardar anexo offline:', err);
-        }
+            uploadFalhou: false,
+          },
+        ]);
+      } catch (err) {
+        console.error('Erro ao guardar anexo no aparelho:', err);
+        showToast('⚠️ Não foi possível guardar o documento no aparelho.');
       }
-      return;
     }
-    setAnexos(prev => [...prev, ...files.map(f => ({ file: f, descricao: '' }))]);
   };
   const handleAnexoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     handleAnexosDrop(Array.from(e.target.files || []));
@@ -1007,14 +1153,21 @@ export const DiarioDeObra: React.FC = () => {
   // Monitorar conexão e sincronizar rascunhos pendentes
   useEffect(() => {
     const onOnline = () => setIsOnline(true);
-    const onOffline = () => setIsOnline(false);
+    const onOffline = () => {
+      setIsOnline(false);
+      // Ao perder rede, força gravar mídias ainda só em memória
+      flushPendingMediaToIdb().catch((err) =>
+        console.warn('Flush offline de mídias falhou:', err),
+      );
+      persistDraftLocal({ pendingSync: true }).catch(() => undefined);
+    };
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
     return () => {
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
     };
-  }, []);
+  }, [persistDraftLocal]);
 
   const syncPendingDraftToServer = useCallback(async (draft: OfflineRdoDraft) => {
     if (!draft.obraId || syncingDraftRef.current) return false;
@@ -1083,13 +1236,36 @@ export const DiarioDeObra: React.FC = () => {
     })();
   }, [isOnline, obraId, rdoIdAtual, syncPendingDraftToServer, showToast]);
 
+  // Restaura fotos/vídeos/docs pendentes do IndexedDB ao abrir o RDO
+  useEffect(() => {
+    if (initLoading || !obraId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!cancelled) await hydratePendingMediaFromIdb();
+      } catch (err) {
+        console.warn('Falha ao restaurar mídias locais:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initLoading, obraId, rdoIdAtual, rdoId, hydratePendingMediaFromIdb]);
+
   const uploadMidas = async (rdoIdAlvo: string) => {
     if (!obraId) return;
 
     let successCount = 0;
+    let failCount = 0;
     const novosAnexos: SavedFile[] = [];
     const totalFiles = fotos.length + videos.length + anexos.length;
     let fileIndex = 0;
+
+    const fotosRestantes: typeof fotos = [];
+    const videosRestantes: typeof videos = [];
+    const anexosRestantes: typeof anexos = [];
+
+    const uploadTimeoutMs = 180000; // 3 min — vídeos de celular
 
     // 1. Fotos
     for (const f of fotos) {
@@ -1102,14 +1278,22 @@ export const DiarioDeObra: React.FC = () => {
       try {
         setToast(`⏳ Fazendo upload das mídias... (${fileIndex}/${totalFiles})`);
         const res = await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: uploadTimeoutMs,
         });
         if (res.data?.anexo) {
           novosAnexos.push(res.data.anexo);
         }
+        if (f.offlineId) {
+          try {
+            await deleteOfflineAttachment(f.offlineId);
+          } catch { /* ignore */ }
+        }
         successCount++;
       } catch (err: any) {
         console.error('Erro ao subir foto:', f.file.name, err);
+        fotosRestantes.push(f);
+        failCount++;
       }
     }
 
@@ -1117,21 +1301,42 @@ export const DiarioDeObra: React.FC = () => {
     for (const v of videos) {
       fileIndex++;
       const formData = new FormData();
-      formData.append('file', v.file);
+      // Garante MIME/nome úteis para iOS (.mov sem type)
+      const rawName = v.file.name || `video-${Date.now()}.mp4`;
+      const mime =
+        v.file.type ||
+        (rawName.toLowerCase().endsWith('.mov')
+          ? 'video/quicktime'
+          : rawName.toLowerCase().endsWith('.webm')
+            ? 'video/webm'
+            : 'video/mp4');
+      const fileToSend =
+        v.file.type === mime
+          ? v.file
+          : new File([v.file], rawName, { type: mime });
+      formData.append('file', fileToSend);
       if (v.legenda) {
         formData.append('legenda', v.legenda);
       }
       try {
         setToast(`⏳ Fazendo upload das mídias... (${fileIndex}/${totalFiles})`);
         const res = await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: uploadTimeoutMs,
         });
         if (res.data?.anexo) {
           novosAnexos.push(res.data.anexo);
         }
+        if (v.offlineId) {
+          try {
+            await deleteOfflineAttachment(v.offlineId);
+          } catch { /* ignore */ }
+        }
         successCount++;
       } catch (err: any) {
         console.error('Erro ao subir vídeo:', v.file.name, err);
+        videosRestantes.push(v);
+        failCount++;
       }
     }
 
@@ -1146,28 +1351,48 @@ export const DiarioDeObra: React.FC = () => {
       try {
         setToast(`⏳ Fazendo upload das mídias... (${fileIndex}/${totalFiles})`);
         const res = await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: uploadTimeoutMs,
         });
         if (res.data?.anexo) {
           novosAnexos.push(res.data.anexo);
         }
+        if (a.offlineId) {
+          try {
+            await deleteOfflineAttachment(a.offlineId);
+          } catch { /* ignore */ }
+        }
         successCount++;
       } catch (err: any) {
         console.error('Erro ao subir anexo:', a.file.name, err);
+        anexosRestantes.push(a);
+        failCount++;
       }
     }
-    
-    // Clear files from memory after upload
-    setFotos([]);
-    setVideos([]);
-    setAnexos([]);
+
+    // Só remove da fila o que realmente subiu
+    setFotos(fotosRestantes);
+    setVideos(videosRestantes);
+    setAnexos(anexosRestantes);
 
     if (novosAnexos.length > 0) {
-      setSavedFiles(prev => [...prev, ...novosAnexos]);
+      setSavedFiles((prev) => [...prev, ...novosAnexos]);
     }
-    
+
     if (successCount > 0) {
-      setTimeout(() => showToast(`✅ ${successCount} arquivo(s) anexado(s) com sucesso!`), 500);
+      setTimeout(
+        () => showToast(`✅ ${successCount} arquivo(s) anexado(s) com sucesso!`),
+        500,
+      );
+    }
+    if (failCount > 0) {
+      setTimeout(
+        () =>
+          showToast(
+            `⚠️ ${failCount} arquivo(s) não foram enviados. Verifique a conexão e tente salvar de novo.`,
+          ),
+        800,
+      );
     }
   };
 
@@ -1178,8 +1403,15 @@ export const DiarioDeObra: React.FC = () => {
     try {
       // Sem sinal: grava no aparelho e marca para sync posterior
       if (!navigator.onLine) {
+        await flushPendingMediaToIdb();
         await persistDraftLocal({ pendingSync: true });
-        showToast('📴 Sem sinal — rascunho salvo no aparelho. Será enviado ao voltar a conexão.');
+        const midias =
+          fotos.length + videos.length + anexos.length;
+        showToast(
+          midias > 0
+            ? `📴 Sem sinal — rascunho e ${midias} mídia(s) salvos no aparelho. Sincronizam ao voltar a conexão.`
+            : '📴 Sem sinal — rascunho salvo no aparelho. Será enviado ao voltar a conexão.',
+        );
         return;
       }
 
@@ -1233,8 +1465,11 @@ export const DiarioDeObra: React.FC = () => {
     } catch (err: any) {
       // Rede falhou no meio: salva localmente mesmo assim
       try {
+        await flushPendingMediaToIdb();
         await persistDraftLocal({ pendingSync: true });
-        showToast('📴 Sem conexão estável — rascunho guardado no aparelho para sincronizar depois.');
+        showToast(
+          '📴 Sem conexão estável — rascunho e mídias guardados no aparelho para sincronizar depois.',
+        );
       } catch {
         showToast(`❌ Erro ao salvar: ${err?.response?.data?.message || 'tente novamente'}`);
       }
@@ -1247,8 +1482,11 @@ export const DiarioDeObra: React.FC = () => {
   const handleEnviar = async () => {
     if (!obraId) return;
     if (!navigator.onLine) {
+      await flushPendingMediaToIdb();
       await persistDraftLocal({ pendingSync: true });
-      showToast('📴 Sem sinal — rascunho salvo no aparelho. Conecte-se para enviar à aprovação.');
+      showToast(
+        '📴 Sem sinal — rascunho e mídias salvos no aparelho. Conecte-se para enviar à aprovação.',
+      );
       return;
     }
     setSaving(true);
@@ -1417,6 +1655,11 @@ export const DiarioDeObra: React.FC = () => {
             {draftPendingSync && (
               <span className="px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border whitespace-nowrap bg-blue-50 text-blue-800 border-blue-200">
                 AGUARDANDO SYNC
+              </span>
+            )}
+            {(fotos.length + videos.length + anexos.length) > 0 && status === 'rascunho' && (
+              <span className="px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border whitespace-nowrap bg-violet-50 text-violet-800 border-violet-200">
+                {fotos.length + videos.length + anexos.length} MÍDIA(S) NO APARELHO
               </span>
             )}
             {isOnline && lastLocalSaveAt && !draftPendingSync && status === 'rascunho' && (

@@ -32,9 +32,54 @@ function safeFilename(originalname: string): string {
 
 /** Allowed image MIME types */
 const ALLOWED_IMAGE_TYPES = /^image\/(jpeg|jpg|png|gif|webp|svg\+xml|heic|heif)$/i;
-/** Allowed document MIME types (for RDO attachments) */
+/** Allowed document/media MIME types (for RDO attachments) — inclui formatos de celular */
 const ALLOWED_DOC_TYPES =
-  /^(image\/(jpeg|jpg|png|gif|webp|heic|heif)|application\/(pdf|vnd\.openxmlformats-officedocument\.(spreadsheetml\.sheet|wordprocessingml\.document))|video\/mp4)$/i;
+  /^(image\/(jpeg|jpg|png|gif|webp|heic|heif)|application\/(pdf|vnd\.openxmlformats-officedocument\.(spreadsheetml\.sheet|wordprocessingml\.document))|video\/(mp4|quicktime|webm|3gpp|3gpp2|x-msvideo|avi|mpeg|ogg|x-m4v|x-matroska))$/i;
+/** Extensões aceitas quando o browser manda MIME vazio/octet-stream (comum no iOS/Android) */
+const ALLOWED_UPLOAD_EXTS =
+  /\.(jpe?g|png|gif|webp|heic|heif|pdf|xlsx|docx|mp4|mov|webm|avi|mkv|3gp|m4v|ogv)$/i;
+
+function isAllowedRdoUpload(file: {
+  mimetype?: string;
+  originalname?: string;
+}): boolean {
+  if (file.mimetype && ALLOWED_DOC_TYPES.test(file.mimetype)) return true;
+  // iOS/Android às vezes mandam application/octet-stream ou string vazia
+  if (
+    (!file.mimetype ||
+      file.mimetype === 'application/octet-stream' ||
+      file.mimetype === 'binary/octet-stream') &&
+    ALLOWED_UPLOAD_EXTS.test(file.originalname || '')
+  ) {
+    return true;
+  }
+  return ALLOWED_UPLOAD_EXTS.test(file.originalname || '');
+}
+
+function resolveMimeType(file: Express.Multer.File): string {
+  if (file.mimetype && file.mimetype !== 'application/octet-stream') {
+    return file.mimetype;
+  }
+  const name = (file.originalname || '').toLowerCase();
+  if (name.endsWith('.mov')) return 'video/quicktime';
+  if (name.endsWith('.webm')) return 'video/webm';
+  if (name.endsWith('.3gp')) return 'video/3gpp';
+  if (name.endsWith('.m4v')) return 'video/x-m4v';
+  if (name.endsWith('.mkv')) return 'video/x-matroska';
+  if (name.endsWith('.avi')) return 'video/x-msvideo';
+  if (name.endsWith('.mp4')) return 'video/mp4';
+  if (name.endsWith('.pdf')) return 'application/pdf';
+  if (/\.jpe?g$/.test(name)) return 'image/jpeg';
+  if (name.endsWith('.png')) return 'image/png';
+  if (name.endsWith('.heic') || name.endsWith('.heif')) return 'image/heic';
+  return file.mimetype || 'application/octet-stream';
+}
+
+function tipoArquivoFromMime(mime: string): string {
+  if (mime.startsWith('video/')) return 'VIDEO_DIARIO';
+  if (mime.startsWith('image/')) return 'FOTO_DIARIO';
+  return 'ANEXO_DIARIO';
+}
 
 @UseGuards(JwtAuthGuard)
 @Controller('upload')
@@ -236,10 +281,10 @@ export class UploadController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
-        if (!ALLOWED_DOC_TYPES.test(file.mimetype)) {
+        if (!isAllowedRdoUpload(file)) {
           return cb(
             new BadRequestException(
-              'Tipo de arquivo não permitido. Aceitos: jpg, png, pdf, xlsx, docx, mp4.',
+              'Tipo de arquivo não permitido. Aceitos: jpg, png, heic, pdf, xlsx, docx, mp4, mov, webm, 3gp.',
             ),
             false,
           );
@@ -261,6 +306,9 @@ export class UploadController {
     @Req() req: any,
   ) {
     if (!file) throw new BadRequestException('Nenhum arquivo enviado');
+    const mimeType = resolveMimeType(file);
+    // Garante Content-Type correto no S3/local mesmo se o browser mandou MIME vazio
+    file.mimetype = mimeType;
     const url = await this.processUpload(file, `rdos/${rdoId}`);
 
     const anexo = await this.prisma.anexo.create({
@@ -269,8 +317,8 @@ export class UploadController {
         criadorId: req.user.sub || req.user.id,
         origem: 'RDO',
         attachableId: rdoId,
-        tipoArquivo: 'FOTO_DIARIO',
-        mimeType: file.mimetype,
+        tipoArquivo: tipoArquivoFromMime(mimeType),
+        mimeType,
         tamanhoBytes: file.size,
         urlS3: url,
         nomeOriginal: legenda || file.originalname,

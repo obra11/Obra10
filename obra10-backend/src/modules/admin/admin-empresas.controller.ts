@@ -161,7 +161,19 @@ export class AdminEmpresasController {
       this.prisma.empresa.findUnique({
         where: { id },
         include: {
-          usuarios: true,
+          usuarios: {
+            where: { deletedAt: null },
+            select: {
+              id: true,
+              nome: true,
+              email: true,
+              perfilGlobal: true,
+              ativo: true,
+              createdAt: true,
+              ultimoLogin: true,
+            },
+            orderBy: { createdAt: 'asc' },
+          },
           obras: true,
           tenantModulos: {
             include: { modulo: true },

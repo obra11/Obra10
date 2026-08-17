@@ -3,21 +3,33 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SuperAdminGuard } from '../../core/guards/super-admin.guard';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { CriarUsuarioAdminDto, AtualizarUsuarioAdminDto } from './dto/admin.dto';
+import { EmailService } from '../email/email.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
 @Controller('admin/usuarios')
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
 export class AdminUsuariosController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly email: EmailService,
+  ) {}
 
   @Get()
   async getUsuarios(@Query('empresaId') empresaId?: string) {
     const where = empresaId ? { empresaId, deletedAt: null } : { deletedAt: null };
     return this.prisma.usuario.findMany({
       where,
-      include: {
-        empresa: { select: { razaoSocial: true, nomeFantasia: true } }
+      select: {
+        id: true,
+        nome: true,
+        email: true,
+        perfilGlobal: true,
+        ativo: true,
+        createdAt: true,
+        ultimoLogin: true,
+        empresaId: true,
+        empresa: { select: { razaoSocial: true, nomeFantasia: true } },
       },
       orderBy: { createdAt: 'desc' },
       take: 200 // Limite de resguardo por performance na grid crua
@@ -28,9 +40,17 @@ export class AdminUsuariosController {
   async getUsuario(@Param('id') id: string) {
     const user = await this.prisma.usuario.findUnique({
       where: { id },
-      include: {
-        empresa: true
-      }
+      select: {
+        id: true,
+        nome: true,
+        email: true,
+        perfilGlobal: true,
+        ativo: true,
+        createdAt: true,
+        ultimoLogin: true,
+        empresaId: true,
+        empresa: true,
+      },
     });
     if (!user) throw new NotFoundException('Usuário não encontrado');
     return user;
@@ -66,12 +86,24 @@ export class AdminUsuariosController {
 
     await this.prisma.usuario.update({
       where: { id },
-      data: { senhaHash }
+      data: { senhaHash, jwtVersion: { increment: 1 } },
     });
 
-    return { 
-      message: 'Senha resetada com sucesso. Copie a senha temporária abaixo e envie ao usuário.',
-      novaSenhaTemporaria: senhaAleatoria 
+    try {
+      await this.email.enviarSenhaTemporaria(
+        user.email,
+        user.nome,
+        senhaAleatoria,
+      );
+    } catch {
+      /* Admin ainda recebe a senha na resposta */
+    }
+
+    return {
+      message:
+        'Senha temporária gerada. Ela também foi enviada por e-mail ao usuário (quando o e-mail estiver configurado). A senha original não pode ser recuperada — apenas redefinida.',
+      login: user.email,
+      novaSenhaTemporaria: senhaAleatoria,
     };
   }
 }

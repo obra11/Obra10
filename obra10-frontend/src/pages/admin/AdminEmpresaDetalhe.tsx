@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { 
   Building, Users, Key, AlertTriangle, ArrowLeft, Loader2, Ban, PlayCircle, ShieldIcon, 
-  Receipt, ClipboardList, Package, DollarSign, Save, Bell, CheckCircle2, Trash2
+  Receipt, ClipboardList, Package, DollarSign, Save, Bell, CheckCircle2, Trash2, Mail
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -36,6 +36,7 @@ export const AdminEmpresaDetalhe: React.FC = () => {
   const [cupomSelecionado, setCupomSelecionado] = useState('');
   const [loadingCupom, setLoadingCupom] = useState(false);
   const [loadingModulo, setLoadingModulo] = useState<string | null>(null);
+  const [reenviandoVerificacao, setReenviandoVerificacao] = useState(false);
   
   // States for Dados Cadastrais Form
   const [formData, setFormData] = useState({
@@ -186,12 +187,34 @@ export const AdminEmpresaDetalhe: React.FC = () => {
   };
 
   const handleResetSenha = async (userId: string) => {
-    if (!window.confirm('Resetar a senha deste usuário?')) return;
+    if (!window.confirm('Gerar senha temporária e enviar por e-mail ao usuário?\n\nA senha original não pode ser recuperada — apenas redefinida.')) return;
     try {
       const res = await api.patch(`/admin/usuarios/${userId}/reset-senha`);
-      window.prompt(res.data.message, res.data.novaSenhaTemporaria);
+      const temp = res.data.novaSenhaTemporaria;
+      const loginEmail = res.data.login || '';
+      window.prompt(
+        `${res.data.message}\n\nLogin: ${loginEmail}\nSenha temporária (copie e guarde se precisar):`,
+        temp,
+      );
     } catch (e) {
       alert('Erro ao resetar senha');
+    }
+  };
+
+  const handleReenviarVerificacao = async () => {
+    const emailAlvo = empresa?.email || empresa?.usuarios?.[0]?.email;
+    if (!emailAlvo) {
+      alert('Empresa sem e-mail cadastrado.');
+      return;
+    }
+    setReenviandoVerificacao(true);
+    try {
+      await api.post('/tenants/reenviar-verificacao', { email: emailAlvo });
+      alert(`E-mail de confirmação reenviado para ${emailAlvo}.`);
+    } catch (e: any) {
+      alert(e?.response?.data?.message || 'Erro ao reenviar verificação.');
+    } finally {
+      setReenviandoVerificacao(false);
     }
   };
 
@@ -278,9 +301,15 @@ export const AdminEmpresaDetalhe: React.FC = () => {
               <span className={`text-xs px-2 py-0.5 rounded-full ${empresa.ativo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                 {empresa.ativo ? 'Ativa' : 'Bloqueada'}
               </span>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${empresa.emailVerificado ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-800'}`}>
+                {empresa.emailVerificado ? 'E-mail verificado' : 'Aguardando confirmação de e-mail'}
+              </span>
             </h1>
             <p className="text-gray-500 text-sm mt-1">
               Documento Principal: {empresa.cpfCnpj || empresa.cnpj || 'Não informado'} • Cadastro: {format(new Date(empresa.createdAt), 'dd/MM/yyyy')}
+            </p>
+            <p className="text-sm text-gray-700 mt-1">
+              Login da conta: <span className="font-semibold">{empresa.email || empresa.usuarios?.[0]?.email || '—'}</span>
             </p>
             <div className="flex gap-2 items-center mt-2 flex-wrap">
               <div className="text-sm font-semibold uppercase tracking-wider text-red-600 border border-red-200 bg-red-50 rounded px-2 w-max">
@@ -304,7 +333,17 @@ export const AdminEmpresaDetalhe: React.FC = () => {
           </div>
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
+          {!empresa.emailVerificado && (
+            <button
+              onClick={handleReenviarVerificacao}
+              disabled={reenviandoVerificacao}
+              className="flex items-center gap-2 px-4 py-2 border border-amber-200 text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-lg text-sm font-semibold transition-colors disabled:opacity-60"
+            >
+              {reenviandoVerificacao ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
+              Reenviar confirmação
+            </button>
+          )}
           <button onClick={handleToggleBloqueio} className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-semibold transition-colors ${empresa.ativo ? 'border-red-200 text-red-600 bg-red-50 hover:bg-red-100' : 'bg-gray-900 text-white hover:bg-gray-800'}`}>
             {empresa.ativo ? <><Ban size={16}/> Bloquear Acesso</> : <><PlayCircle size={16}/> Desbloquear</>}
           </button>
@@ -469,19 +508,27 @@ export const AdminEmpresaDetalhe: React.FC = () => {
           <div className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="bg-gray-50 px-5 py-4 border-b border-gray-200">
-                <h3 className="font-bold text-gray-900 flex items-center gap-2"><Users strokeWidth={2.5} size={18} className="text-gray-400"/> Usuários da Conta</h3>
+                <h3 className="font-bold text-gray-900 flex items-center gap-2"><Users strokeWidth={2.5} size={18} className="text-gray-400"/> Usuários e acesso</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  A senha original nunca fica salva em texto. Use a chave para gerar senha temporária (enviada por e-mail) e relembrar o cliente.
+                </p>
               </div>
               <ul className="divide-y divide-gray-100">
                 {empresa.usuarios.map((u: any) => (
                   <li key={u.id} className="p-4 flex justify-between items-center hover:bg-gray-50">
                     <div>
                       <p className="font-semibold text-sm text-gray-900">{u.nome}</p>
-                      <p className="text-xs text-gray-500">{u.email}</p>
+                      <p className="text-xs text-gray-500">Login: {u.email}</p>
+                      {u.ultimoLogin && (
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          Último login: {format(new Date(u.ultimoLogin), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                        </p>
+                      )}
                       {u.perfilGlobal === 'SUPER_ADMIN' && <span className="inline-flex mt-1 items-center gap-1 text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold"><ShieldIcon size={10}/> SUPER ADMIN</span>}
                     </div>
                     <div className="flex items-center gap-2">
                       {!u.ativo && <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-bold">Bloqueado</span>}
-                      <button onClick={() => handleResetSenha(u.id)} title="Resetar Senha" className="p-1.5 text-gray-400 hover:text-blue-600 border border-gray-200 hover:border-blue-200 hover:bg-blue-50 rounded transition-colors"><Key size={14}/></button>
+                      <button onClick={() => handleResetSenha(u.id)} title="Gerar senha temporária e enviar por e-mail" className="p-1.5 text-gray-400 hover:text-blue-600 border border-gray-200 hover:border-blue-200 hover:bg-blue-50 rounded transition-colors"><Key size={14}/></button>
                     </div>
                   </li>
                 ))}

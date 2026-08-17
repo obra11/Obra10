@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/auth.service';
+import api from '../services/api';
 import { Lock, Mail, Loader2, Eye, EyeOff } from 'lucide-react';
 import { Obra10Logo } from '../components/Obra10Logo';
 
@@ -11,6 +12,9 @@ export const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   // empresaId é auto-detectado pelo backend via e-mail
   const [error, setError] = useState('');
+  const [needsVerify, setNeedsVerify] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendDone, setResendDone] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -18,6 +22,8 @@ export const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setNeedsVerify(false);
+    setResendDone(false);
     setIsLoading(true);
 
     try {
@@ -31,9 +37,26 @@ export const Login: React.FC = () => {
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.response?.data?.message || 'E-mail ou senha incorretos.');
+      const msg = err.response?.data?.message || 'E-mail ou senha incorretos.';
+      setError(msg);
+      if (typeof msg === 'string' && msg.toLowerCase().includes('não confirmado')) {
+        setNeedsVerify(true);
+      }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendVerify = async () => {
+    if (!email) return;
+    setResendLoading(true);
+    try {
+      await api.post('/tenants/reenviar-verificacao', { email });
+      setResendDone(true);
+    } catch {
+      setError('Não foi possível reenviar o e-mail de confirmação.');
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -76,6 +99,22 @@ export const Login: React.FC = () => {
           {error && (
             <div className="mb-6 p-4 bg-red-50 border-l-4 border-lunardeli-red text-red-700 text-sm font-medium rounded-r-md">
               {error}
+              {needsVerify && (
+                <div className="mt-3">
+                  {resendDone ? (
+                    <p className="text-green-700 text-xs">E-mail de confirmação reenviado.</p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleResendVerify}
+                      disabled={resendLoading || !email}
+                      className="text-xs font-bold underline hover:no-underline disabled:opacity-60"
+                    >
+                      {resendLoading ? 'Reenviando...' : 'Reenviar e-mail de confirmação'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

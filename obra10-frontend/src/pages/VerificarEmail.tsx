@@ -19,7 +19,7 @@ export const VerificarEmail: React.FC = () => {
       .then(res => {
         setStatus('success');
         setMessage(res.data.mensagem);
-        setTimeout(() => navigate('/contratacao'), 3000);
+        setTimeout(() => navigate('/login'), 3000);
       })
       .catch(err => {
         setStatus('error');
@@ -50,7 +50,7 @@ export const VerificarEmail: React.FC = () => {
             <CheckCircle size={56} className="mx-auto mb-4 text-green-500" />
             <h2 className="text-2xl font-bold text-gray-900 mb-2">E-mail verificado!</h2>
             <p className="text-gray-500 text-sm mb-4">{message}</p>
-            <p className="text-xs text-gray-400">Redirecionando para seleção de módulos...</p>
+            <p className="text-xs text-gray-400">Redirecionando para o login...</p>
           </>
         )}
         {status === 'error' && (

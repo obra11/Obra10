@@ -52,6 +52,17 @@ export class AuthService {
       );
     }
 
+    // Conta só libera após confirmação do e-mail (exceto Super Admin)
+    if (
+      user.perfilGlobal !== 'SUPER_ADMIN' &&
+      user.empresa &&
+      user.empresa.emailVerificado === false
+    ) {
+      throw new UnauthorizedException(
+        'E-mail ainda não confirmado. Verifique sua caixa de entrada (e o spam) e clique no link de ativação.',
+      );
+    }
+
     // --- Bloqueio de conta por tentativas falhas ---
     if (user.lockedUntil && user.lockedUntil > new Date()) {
       const minutesLeft = Math.ceil(
