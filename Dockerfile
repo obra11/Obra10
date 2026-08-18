@@ -1,10 +1,10 @@
 # ============================================
 # Obra 10 — Production Dockerfile
-# Force rebuild: 2026-08-17-v2.9.7-gallery-anexos
+# Force rebuild: 2026-08-18-redeploy-request-2305
 # ============================================
 
 # Bust layer cache when frontend client assets change
-ARG OBRA10_BUILD_ID=2.9.7-20260817
+ARG OBRA10_BUILD_ID=2.9.7-20260818
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 
 # --- Build stage ---
