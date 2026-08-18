@@ -1,10 +1,10 @@
 # ============================================
 # Obra 10 — Production Dockerfile
-# Force rebuild: 2026-08-17-v2.9.2-units-picker
+# Force rebuild: 2026-08-17-v2.9.6-rdo-logo-card
 # ============================================
 
 # Bust layer cache when frontend client assets change
-ARG OBRA10_BUILD_ID=2.9.2-20260817
+ARG OBRA10_BUILD_ID=2.9.6-20260817
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 
 # --- Build stage ---
