@@ -11,8 +11,8 @@ dist
 # Build artifacts
 *.tsbuildinfo
 
-# Uploads (user-generated content)
-# uploads/
+# Uploads (conteúdo de usuários — NÃO versionar)
+uploads/
 
 # Analysis/walkthrough files (may contain credential logs)
 walkthrough.md

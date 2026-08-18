@@ -40,8 +40,8 @@ Thumbs.db
 # Prisma generated client
 obra10-backend/generated/
 
-# Uploads (user-generated content)
-# obra10-backend/uploads/
+# Uploads (user-generated content — NÃO versionar; quebra deploy Railway)
+obra10-backend/uploads/
 
 # SQLite databases (if any)
 *.db
