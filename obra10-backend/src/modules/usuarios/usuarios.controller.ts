@@ -57,6 +57,12 @@ export class UsuariosController {
     return this.usuariosService.create(req.user.empresaId, dto);
   }
 
+  @Post(':id/reenviar-convite')
+  async reenviarConvite(@Param('id') id: string, @Req() req: any) {
+    await this.assertPodeGerenciarUsuarios(req);
+    return this.usuariosService.reenviarConvite(req.user.empresaId, id);
+  }
+
   @Patch('perfil')
   async atualizarPerfil(@Req() req: any, @Body() dto: UpdatePerfilDto) {
     const userId = req.user?.sub;

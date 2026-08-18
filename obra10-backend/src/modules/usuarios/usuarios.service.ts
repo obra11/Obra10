@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { Prisma, TipoPapelEmpresa } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -14,13 +15,18 @@ import {
   perfilGlobalToTipoPapel,
   RoleCapabilities,
 } from '../../core/capabilities/role-capabilities';
+import { EmailService } from '../email/email.service';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class UsuariosService {
+  private readonly logger = new Logger(UsuariosService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly capabilities: CapabilitiesService,
+    private readonly email: EmailService,
   ) {}
 
   async findAllByEmpresa(empresaId: string) {
@@ -199,6 +205,12 @@ export class UsuariosService {
         capsToStore,
         permissoesObras,
       );
+      await this.enviarConviteSeguro({
+        email,
+        nome,
+        senha,
+        empresaId,
+      });
       return updated;
     }
 
@@ -235,7 +247,89 @@ export class UsuariosService {
       permissoesObras,
     );
 
+    await this.enviarConviteSeguro({
+      email,
+      nome,
+      senha,
+      empresaId,
+    });
+
     return created;
+  }
+
+  /**
+   * Gera nova senha temporária e reenvia o e-mail de acesso ao colaborador.
+   */
+  async reenviarConvite(empresaId: string, usuarioId: string) {
+    const usuario = await this.prisma.usuario.findFirst({
+      where: { id: usuarioId, empresaId, deletedAt: null },
+      select: { id: true, nome: true, email: true },
+    });
+    if (!usuario) throw new NotFoundException('Usuário não encontrado.');
+
+    const senhaTemporaria = this.gerarSenhaTemporaria();
+    const senhaHash = await bcrypt.hash(senhaTemporaria, 12);
+    await this.prisma.usuario.update({
+      where: { id: usuario.id },
+      data: { senhaHash },
+    });
+
+    await this.enviarConviteSeguro({
+      email: usuario.email,
+      nome: usuario.nome,
+      senha: senhaTemporaria,
+      empresaId,
+    });
+
+    return {
+      mensagem: `E-mail de acesso reenviado para ${usuario.email}.`,
+      email: usuario.email,
+    };
+  }
+
+  private gerarSenhaTemporaria(): string {
+    // Fácil de digitar no celular, sem caracteres ambíguos
+    return crypto.randomBytes(5).toString('hex'); // 10 chars hex
+  }
+
+  private async enviarConviteSeguro(params: {
+    email: string;
+    nome: string;
+    senha: string;
+    empresaId: string;
+  }) {
+    try {
+      const empresa = await this.prisma.empresa.findUnique({
+        where: { id: params.empresaId },
+        select: { razaoSocial: true, nomeCompleto: true, nomeFantasia: true },
+      });
+      const nomeEmpresa =
+        empresa?.nomeFantasia ||
+        empresa?.razaoSocial ||
+        empresa?.nomeCompleto ||
+        'sua empresa';
+
+      const obras = await this.prisma.userObraRole.findMany({
+        where: {
+          usuario: { email: params.email, empresaId: params.empresaId },
+          obra: { deletedAt: null },
+        },
+        include: { obra: { select: { nome: true } } },
+        take: 10,
+      });
+
+      await this.email.enviarConviteUsuario({
+        email: params.email,
+        nomeUsuario: params.nome,
+        senhaTemporaria: params.senha,
+        nomeEmpresa,
+        obrasNomes: obras.map((o) => o.obra.nome).filter(Boolean),
+      });
+    } catch (err: any) {
+      this.logger.error(
+        `Falha ao enviar convite para ${params.email}: ${err?.message || err}`,
+      );
+    }
   }
 
   async update(empresaId: string, id: string, dto: any) {

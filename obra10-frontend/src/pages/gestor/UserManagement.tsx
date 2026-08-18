@@ -202,10 +202,26 @@ export const UserManagement: React.FC = () => {
         modulosPersonalizados: {},
       });
       await fetchAll();
+      alert('Usuário criado. Um e-mail com o link de acesso e a senha foi enviado.');
     } catch (err: any) {
       setFormError(err?.response?.data?.message || 'Erro ao criar usuário.');
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  const handleReenviarConvite = async (usuarioId: string, email: string) => {
+    if (!window.confirm(`Reenviar e-mail de acesso para ${email}?\n\nUma nova senha temporária será gerada e enviada por e-mail.`)) {
+      return;
+    }
+    setSavingId('invite_' + usuarioId);
+    try {
+      const res = await api.post(`/usuarios/${usuarioId}/reenviar-convite`);
+      alert(res.data?.mensagem || `E-mail reenviado para ${email}.`);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Erro ao reenviar e-mail.');
+    } finally {
+      setSavingId(null);
     }
   };
 
@@ -515,6 +531,9 @@ export const UserManagement: React.FC = () => {
                 <div className="relative"><Lock className="absolute left-3 top-3 text-gray-300" size={14} />
                   <input required type="password" value={form.senha} onChange={e => setForm(p => ({ ...p, senha: e.target.value }))} className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 outline-none" placeholder="Mínimo 8 caracteres" />
                 </div>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  O colaborador recebe por e-mail o link de acesso e esta senha.
+                </p>
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-500 mb-1 block">Função</label>
@@ -629,6 +648,22 @@ export const UserManagement: React.FC = () => {
                   </div>
                   <button onClick={() => handleDelete(u.id, u.nome)} className="text-gray-300 hover:text-red-400 transition-colors shrink-0">
                     <Trash2 size={16} />
+                  </button>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleReenviarConvite(u.id, u.email)}
+                    disabled={savingId === 'invite_' + u.id}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-lunardeli-red hover:text-red-700 disabled:opacity-60"
+                  >
+                    {savingId === 'invite_' + u.id ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <Mail size={12} />
+                    )}
+                    Reenviar e-mail de acesso
                   </button>
                 </div>
 

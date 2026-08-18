@@ -201,6 +201,11 @@ export class ObraService {
   ) {
     const obra = await this.prisma.obra.findFirst({
       where: { id: obraId, empresaId },
+      include: {
+        empresa: {
+          select: { razaoSocial: true, nomeFantasia: true, nomeCompleto: true },
+        },
+      },
     });
     if (!obra) throw new Error('Obra não encontrada');
 
@@ -226,7 +231,7 @@ export class ObraService {
       finalPerfilId = perfilPadrao.id;
     }
 
-    return this.prisma.userObraRole.upsert({
+    const role = await this.prisma.userObraRole.upsert({
       where: { usuarioId_obraId: { usuarioId: data.usuarioId, obraId } },
       update: { perfilId: finalPerfilId, permissoes: data.permissoes || {} },
       create: {
@@ -236,6 +241,30 @@ export class ObraService {
         permissoes: data.permissoes || {},
       },
     });
+
+    try {
+      const usuario = await this.prisma.usuario.findFirst({
+        where: { id: data.usuarioId, empresaId, deletedAt: null },
+        select: { nome: true, email: true },
+      });
+      if (usuario?.email) {
+        const nomeEmpresa =
+          obra.empresa.nomeFantasia ||
+          obra.empresa.razaoSocial ||
+          obra.empresa.nomeCompleto ||
+          'sua empresa';
+        await this.emailService.enviarVinculoObra({
+          email: usuario.email,
+          nomeUsuario: usuario.nome,
+          nomeEmpresa,
+          nomeObra: obra.nome,
+        });
+      }
+    } catch {
+      // não bloqueia o vínculo se o e-mail falhar
+    }
+
+    return role;
   }
 
   async editarColaborador(

@@ -320,6 +320,68 @@ export class EmailService {
     );
   }
 
+  /** Convite ao cadastrar colaborador na empresa (gestor). */
+  async enviarConviteUsuario(params: {
+    email: string;
+    nomeUsuario: string;
+    senhaTemporaria: string;
+    nomeEmpresa: string;
+    obrasNomes?: string[];
+  }) {
+    const { email, nomeUsuario, senhaTemporaria, nomeEmpresa, obrasNomes } =
+      params;
+    const obrasHtml =
+      obrasNomes && obrasNomes.length
+        ? `<p>Você foi vinculado à(s) obra(s): <strong>${obrasNomes.join(', ')}</strong>.</p>`
+        : '';
+    const loginUrl = `${this.appUrl}/login`;
+    await this.send(
+      email,
+      `👋 Convite para acessar o OBRA 10 — ${nomeEmpresa}`,
+      `
+      <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
+        <h2 style="color:#dc2626;margin-top:0">Você foi convidado ao OBRA 10</h2>
+        <p>Olá, <strong>${nomeUsuario}</strong>!</p>
+        <p>A empresa <strong>${nomeEmpresa}</strong> criou seu acesso ao sistema de gestão de obras.</p>
+        ${obrasHtml}
+        <p style="font-size:16px;background:#f3f4f6;padding:12px 16px;border-radius:8px;line-height:1.6">
+          <strong>E-mail (login):</strong> ${email}<br/>
+          <strong>Senha temporária:</strong> ${senhaTemporaria}
+        </p>
+        <a href="${loginUrl}" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
+          Acessar o OBRA 10
+        </a>
+        <p style="color:#6b7280;font-size:12px">Recomendamos alterar a senha no primeiro acesso (Perfil).</p>
+        <p style="color:#9ca3af;font-size:11px;border-top:1px solid #e5e7eb;padding-top:12px">Ou copie: ${loginUrl}</p>
+      </div>
+    `,
+    );
+  }
+
+  async enviarVinculoObra(params: {
+    email: string;
+    nomeUsuario: string;
+    nomeEmpresa: string;
+    nomeObra: string;
+  }) {
+    const { email, nomeUsuario, nomeEmpresa, nomeObra } = params;
+    const loginUrl = `${this.appUrl}/login`;
+    await this.send(
+      email,
+      `🏗️ Nova obra no OBRA 10 — ${nomeObra}`,
+      `
+      <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
+        <h2 style="color:#dc2626;margin-top:0">Você foi adicionado a uma obra</h2>
+        <p>Olá, <strong>${nomeUsuario}</strong>!</p>
+        <p>A empresa <strong>${nomeEmpresa}</strong> vinculou você à obra <strong>${nomeObra}</strong> no OBRA 10.</p>
+        <a href="${loginUrl}" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
+          Abrir o sistema
+        </a>
+      </div>
+    `,
+    );
+  }
+
   async enviarAvisoCobrancaPendente(
     email: string,
     nomeUsuario: string,

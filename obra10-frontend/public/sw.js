@@ -1,4 +1,4 @@
-const CACHE_NAME = 'obra10-v2.9.8';
+const CACHE_NAME = 'obra10-v2.9.9';
 // Não pré-cachear '/' nem imagens de marca — HTML/JS antigos mostravam watermark Lunardeli.
 const STATIC_ASSETS = [
   '/favicon-16.png',
