@@ -1,12 +1,12 @@
 # ============================================
 # Obra 10 — Production Dockerfile
-# Force rebuild: 2026-08-18-fix-env-before-from
+# Force rebuild: 2026-08-18-mobile-autoresize-textarea
 # ============================================
 
 # --- Build stage ---
 FROM node:22-alpine AS builder
 
-ARG OBRA10_BUILD_ID=2.9.7-20260818
+ARG OBRA10_BUILD_ID=2.9.8-20260818
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 
 # Install build tools for native modules (bcrypt)
@@ -31,7 +31,7 @@ RUN npx prisma generate && npx nest build
 # --- Production stage ---
 FROM node:22-alpine
 
-ARG OBRA10_BUILD_ID=2.9.7-20260818
+ARG OBRA10_BUILD_ID=2.9.8-20260818
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 ENV NODE_ENV=production
 
