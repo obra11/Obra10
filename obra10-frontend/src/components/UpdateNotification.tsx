@@ -9,55 +9,53 @@ import type { AppVersionInfo } from '../appVersion';
 type ServerVersion = AppVersionInfo & { api?: string };
 type UpdateMode = 'soft' | 'force';
 
-const PENDING_KEY = 'obra10_update_pending';
-const PENDING_AT_KEY = 'obra10_update_pending_at';
-/** Soft vira forçada se o usuário ignorar por este tempo. */
-const SOFT_TO_FORCE_MS = 45_000;
-const FORCE_COUNTDOWN_SEC = 5;
+const DISMISS_KEY = 'obra10_update_dismissed_build';
+const FORCE_COUNTDOWN_SEC = 8;
 
 /**
- * Soft: banner fica até o toque (não some sozinho).
- * Force: tela bloqueante + contagem e aplica sozinha — para releases críticas
- * ou quando o aviso soft é ignorado por muito tempo.
+ * Só mostra atualização quando o servidor tem build diferente do embutido.
+ * Não reabre por SW “waiting” se a versão já está correta.
+ * Soft pode ser dispensada (Agora não) até sair um build novo.
  */
 export const UpdateNotification: React.FC = () => {
-  const [mode, setMode] = useState<UpdateMode | null>(() => {
-    try {
-      return sessionStorage.getItem(PENDING_KEY) === '1' ? 'soft' : null;
-    } catch {
-      return null;
-    }
-  });
+  const [mode, setMode] = useState<UpdateMode | null>(null);
   const [serverBuild, setServerBuild] = useState<string | null>(null);
   const [serverVersion, setServerVersion] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(FORCE_COUNTDOWN_SEC);
   const refreshingRef = useRef(false);
-  const modeRef = useRef(mode);
+  const modeRef = useRef<UpdateMode | null>(null);
   const forceTimerRef = useRef<number | null>(null);
-  const softEscalateRef = useRef<number | null>(null);
+  const lastServerBuildRef = useRef<string | null>(null);
 
-  const setUpdateMode = useCallback((next: UpdateMode, buildId?: string | null) => {
-    modeRef.current = next;
-    setMode(next);
+  const isDismissedFor = useCallback((buildId: string) => {
     try {
-      sessionStorage.setItem(PENDING_KEY, '1');
-      sessionStorage.setItem(PENDING_AT_KEY, String(Date.now()));
-      if (buildId) sessionStorage.setItem('obra10_pending_build', buildId);
+      return localStorage.getItem(DISMISS_KEY) === buildId;
     } catch {
-      /* ignore */
+      return false;
     }
   }, []);
+
+  const clearUi = useCallback(() => {
+    modeRef.current = null;
+    setMode(null);
+  }, []);
+
+  const openMode = useCallback(
+    (next: UpdateMode, buildId: string) => {
+      if (next === 'soft' && isDismissedFor(buildId)) return;
+      modeRef.current = next;
+      setMode(next);
+      lastServerBuildRef.current = buildId;
+    },
+    [isDismissedFor],
+  );
 
   const applyUpdate = useCallback(async () => {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
     try {
-      let pendingBuild: string | null = null;
       try {
-        pendingBuild = sessionStorage.getItem('obra10_pending_build');
-        sessionStorage.removeItem(PENDING_KEY);
-        sessionStorage.removeItem(PENDING_AT_KEY);
-        sessionStorage.removeItem('obra10_pending_build');
+        localStorage.removeItem(DISMISS_KEY);
       } catch {
         /* ignore */
       }
@@ -76,10 +74,8 @@ export const UpdateNotification: React.FC = () => {
         const regs = await navigator.serviceWorker.getRegistrations();
         await Promise.all(regs.map((r) => r.unregister()));
       }
-      const mark = serverBuild || pendingBuild;
-      if (mark) {
-        localStorage.setItem('obra10_build', mark);
-      }
+      const mark = serverBuild || lastServerBuildRef.current;
+      if (mark) localStorage.setItem('obra10_build', mark);
       localStorage.setItem('obra10_force_reload', String(Date.now()));
     } catch {
       /* ignore */
@@ -88,6 +84,18 @@ export const UpdateNotification: React.FC = () => {
     url.searchParams.set('_v', String(Date.now()));
     window.location.replace(url.toString());
   }, [serverBuild]);
+
+  const dismissSoft = useCallback(() => {
+    const build = serverBuild || lastServerBuildRef.current;
+    if (build) {
+      try {
+        localStorage.setItem(DISMISS_KEY, build);
+      } catch {
+        /* ignore */
+      }
+    }
+    clearUi();
+  }, [serverBuild, clearUi]);
 
   const shouldForce = useCallback((data: ServerVersion) => {
     if (data.forceUpdate === true) return true;
@@ -98,11 +106,9 @@ export const UpdateNotification: React.FC = () => {
     const remote = String(data.version || '')
       .split('.')
       .map((n) => parseInt(n, 10) || 0);
-    // Minor/major à frente → forçada
     if (remote[0] > local[0] || (remote[0] === local[0] && remote[1] > local[1])) {
       return true;
     }
-    // Mesmo minor, 2+ patches atrás → forçada
     if (
       remote[0] === local[0] &&
       remote[1] === local[1] &&
@@ -122,62 +128,27 @@ export const UpdateNotification: React.FC = () => {
       if (!res.ok) return;
       const data = (await res.json()) as ServerVersion;
       if (!data?.buildId) return;
+
       setServerBuild(data.buildId);
       setServerVersion(data.version || null);
+      lastServerBuildRef.current = data.buildId;
 
+      // Versão já atualizada → some o banner (SW waiting sozinho não conta)
       if (data.buildId === APP_BUILD_ID) {
-        if (modeRef.current !== 'force') {
-          try {
-            sessionStorage.removeItem(PENDING_KEY);
-            sessionStorage.removeItem(PENDING_AT_KEY);
-          } catch {
-            /* ignore */
-          }
-          modeRef.current = null;
-          setMode(null);
-        }
+        clearUi();
         return;
       }
 
       if (shouldForce(data)) {
-        setUpdateMode('force', data.buildId);
-      } else if (modeRef.current !== 'force') {
-        setUpdateMode('soft', data.buildId);
+        openMode('force', data.buildId);
+      } else {
+        openMode('soft', data.buildId);
       }
     } catch {
-      /* offline / API antiga */
+      /* offline */
     }
-  }, [setUpdateMode, shouldForce]);
+  }, [clearUi, openMode, shouldForce]);
 
-  // Soft → force se ignorado
-  useEffect(() => {
-    if (mode !== 'soft') {
-      if (softEscalateRef.current) {
-        window.clearTimeout(softEscalateRef.current);
-        softEscalateRef.current = null;
-      }
-      return;
-    }
-    let startedAt = Date.now();
-    try {
-      const raw = sessionStorage.getItem(PENDING_AT_KEY);
-      if (raw) startedAt = Number(raw) || startedAt;
-    } catch {
-      /* ignore */
-    }
-    const remaining = Math.max(0, SOFT_TO_FORCE_MS - (Date.now() - startedAt));
-    softEscalateRef.current = window.setTimeout(() => {
-      setUpdateMode('force', serverBuild);
-    }, remaining);
-    return () => {
-      if (softEscalateRef.current) {
-        window.clearTimeout(softEscalateRef.current);
-        softEscalateRef.current = null;
-      }
-    };
-  }, [mode, serverBuild, setUpdateMode]);
-
-  // Contagem regressiva da forçada
   useEffect(() => {
     if (mode !== 'force') {
       setCountdown(FORCE_COUNTDOWN_SEC);
@@ -212,62 +183,27 @@ export const UpdateNotification: React.FC = () => {
   useEffect(() => {
     checkServerVersion();
 
-    if (!('serviceWorker' in navigator)) return;
-
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'SW_UPDATED') {
-        if (modeRef.current !== 'force') setUpdateMode('soft');
-      }
-    };
-
-    const checkSw = () => {
-      navigator.serviceWorker.getRegistration().then((reg) => {
-        if (!reg) return;
-        reg.update().catch(() => {});
-        if (reg.waiting && modeRef.current !== 'force') setUpdateMode('soft');
-        const installing = reg.installing;
-        if (installing) {
-          installing.addEventListener('statechange', () => {
-            if (installing.state === 'installed' && reg.waiting && modeRef.current !== 'force') {
-              setUpdateMode('soft');
-            }
-          });
-        }
-        reg.addEventListener('updatefound', () => {
-          const newSW = reg.installing;
-          if (!newSW) return;
-          newSW.addEventListener('statechange', () => {
-            if (newSW.state === 'installed' && modeRef.current !== 'force') {
-              setUpdateMode('soft');
-            }
-          });
-        });
-      });
-    };
-
-    navigator.serviceWorker.addEventListener('message', handleMessage);
-    checkSw();
-
     const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        checkSw();
-        checkServerVersion();
-      }
+      if (document.visibilityState === 'visible') checkServerVersion();
     };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
-    const interval = window.setInterval(() => {
-      checkSw();
-      checkServerVersion();
-    }, 30_000);
+    // Checagem rara — só para pegar deploy novo, não spammar UI
+    const interval = window.setInterval(checkServerVersion, 5 * 60_000);
+
+    // SW: atualiza em background, mas NÃO abre banner sem mismatch de /version
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        reg?.update().catch(() => {});
+      });
+    }
 
     return () => {
-      navigator.serviceWorker.removeEventListener('message', handleMessage);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
       window.clearInterval(interval);
     };
-  }, [checkServerVersion, setUpdateMode]);
+  }, [checkServerVersion]);
 
   if (!mode) return null;
 
@@ -319,10 +255,21 @@ export const UpdateNotification: React.FC = () => {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold leading-tight">Nova versão disponível</p>
           <p className="text-[11px] text-gray-300 mt-0.5">
-            Toque em Atualizar para aplicar. Neste aparelho: {APP_VERSION}
+            Neste aparelho: {APP_VERSION}
             {serverBuild ? ` · Vigente: ${serverBuild}` : ''}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dismissSoft();
+          }}
+          className="shrink-0 px-3 py-2 text-xs font-semibold text-gray-300 hover:text-white"
+        >
+          Agora não
+        </button>
         <button
           type="button"
           onClick={(e) => {

@@ -1,12 +1,12 @@
 # ============================================
 # Obra 10 — Production Dockerfile
-# Force rebuild: 2026-08-18-invite-email-colaboradores
+# Force rebuild: 2026-08-18-pwa-install-update-ux
 # ============================================
 
 # --- Build stage ---
 FROM node:22-alpine AS builder
 
-ARG OBRA10_BUILD_ID=2.9.9-20260818
+ARG OBRA10_BUILD_ID=2.9.10-20260818
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 
 # Install build tools for native modules (bcrypt)
@@ -31,7 +31,7 @@ RUN npx prisma generate && npx nest build
 # --- Production stage ---
 FROM node:22-alpine
 
-ARG OBRA10_BUILD_ID=2.9.9-20260818
+ARG OBRA10_BUILD_ID=2.9.10-20260818
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 ENV NODE_ENV=production
 
