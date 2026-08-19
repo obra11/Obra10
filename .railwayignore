@@ -1,0 +1,12 @@
+# Não enviar lixo local / mídia de usuário no snapshot do Railway
+obra10-backend/uploads/
+obra10-backend/scratch/
+.tmp-brand/
+.tmp-id-visual-lunardeli.pdf
+node_modules/
+.git/
+*.mp4
+*.mov
+*.webm
+*.mkv
+*.avi

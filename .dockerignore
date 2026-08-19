@@ -4,7 +4,13 @@ obra10-frontend/node_modules
 obra10-frontend/dist
 obra10-backend/node_modules
 obra10-backend/dist
+obra10-backend/.env
+obra10-backend/.env.*
+.env
+.env.*
 docs
 *.log
 *.tmp
 *.bak
+obra10-backend/uploads
+.tmp-brand

@@ -14,6 +14,12 @@ import { AutoResizeTextarea } from '../components/AutoResizeTextarea';
 import { useAuth } from '../context/AuthContext';
 import { persistCapturedMediaList } from '../utils/persistCapturedMedia';
 import {
+  checkMediaFileSize,
+  estimateIdbFreeBytes,
+  formatBytes,
+  shouldPersistVideoToIdb,
+} from '../utils/mediaLimits';
+import {
   generateUUID,
   saveOfflineAttachment,
   getOfflineAttachments,
@@ -793,12 +799,36 @@ export const DiarioDeObra: React.FC = () => {
     return 'video/mp4';
   };
 
-  /** Sempre grava mídia no IndexedDB (online ou offline) para não perder ao salvar sem rede. */
+  /**
+   * Grava mídia no IndexedDB para não perder ao salvar sem rede.
+   * Vídeos grandes com rede: pula IDB (evita 2–3 cópias na memória do aparelho).
+   * Retorna null quando o arquivo só fica em memória (upload direto).
+   */
   const persistMediaFileToIdb = async (
     file: File,
     tipo: 'foto' | 'video' | 'anexo',
     legenda?: string,
-  ): Promise<string> => {
+  ): Promise<string | null> => {
+    const sizeCheck = checkMediaFileSize(file, tipo);
+    if (!sizeCheck.ok) {
+      showToast(`⚠️ ${sizeCheck.message}`);
+      throw new Error(sizeCheck.message);
+    }
+
+    if (tipo === 'video' && !shouldPersistVideoToIdb(file, navigator.onLine)) {
+      showToast(
+        `🎥 Vídeo grande (${formatBytes(file.size)}): envio direto, sem cópia offline no aparelho.`,
+      );
+      return null;
+    }
+
+    const free = await estimateIdbFreeBytes();
+    if (free != null && file.size > free * 0.9) {
+      const msg = `Espaço insuficiente no aparelho (livre ~${formatBytes(free)}). Remova vídeos antigos do RDO ou libere armazenamento.`;
+      showToast(`⚠️ ${msg}`);
+      throw new Error(msg);
+    }
+
     const offlineId = generateUUID();
     const buffer = await readFileAsArrayBuffer(file);
     const mimeType =
@@ -835,6 +865,7 @@ export const DiarioDeObra: React.FC = () => {
           'foto',
           nextFotos[i].legenda,
         );
+        if (!offlineId) continue;
         nextFotos[i] = {
           ...nextFotos[i],
           offlineId,
@@ -856,6 +887,7 @@ export const DiarioDeObra: React.FC = () => {
           'video',
           nextVideos[i].legenda,
         );
+        if (!offlineId) continue;
         nextVideos[i] = {
           ...nextVideos[i],
           offlineId,
@@ -877,6 +909,7 @@ export const DiarioDeObra: React.FC = () => {
           'anexo',
           nextAnexos[i].descricao,
         );
+        if (!offlineId) continue;
         nextAnexos[i] = {
           ...nextAnexos[i],
           offlineId,
@@ -960,6 +993,11 @@ export const DiarioDeObra: React.FC = () => {
   const handleFotosDrop = async (files: File[]) => {
     for (const file of files) {
       try {
+        const sizeCheck = checkMediaFileSize(file, 'foto');
+        if (!sizeCheck.ok) {
+          showToast(`⚠️ ${sizeCheck.message}`);
+          continue;
+        }
         const preview = URL.createObjectURL(file);
         const offlineId = await persistMediaFileToIdb(file, 'foto');
         setFotos((prev) => [
@@ -968,8 +1006,8 @@ export const DiarioDeObra: React.FC = () => {
             file,
             preview,
             legenda: '',
-            offlineId,
-            isOfflinePending: true,
+            offlineId: offlineId || undefined,
+            isOfflinePending: Boolean(offlineId),
             uploadFalhou: false,
           },
         ]);
@@ -1010,6 +1048,11 @@ export const DiarioDeObra: React.FC = () => {
   const handleVideosDrop = async (files: File[]) => {
     for (const file of files) {
       try {
+        const sizeCheck = checkMediaFileSize(file, 'video');
+        if (!sizeCheck.ok) {
+          showToast(`⚠️ ${sizeCheck.message}`);
+          continue;
+        }
         const mimeType = guessVideoMime(file);
         const nomeArquivo =
           file.name ||
@@ -1023,8 +1066,8 @@ export const DiarioDeObra: React.FC = () => {
           {
             file: fileNorm,
             legenda: '',
-            offlineId,
-            isOfflinePending: true,
+            offlineId: offlineId || undefined,
+            isOfflinePending: Boolean(offlineId),
             uploadFalhou: false,
           },
         ]);
@@ -1065,14 +1108,19 @@ export const DiarioDeObra: React.FC = () => {
   const handleAnexosDrop = async (files: File[]) => {
     for (const file of files) {
       try {
+        const sizeCheck = checkMediaFileSize(file, 'anexo');
+        if (!sizeCheck.ok) {
+          showToast(`⚠️ ${sizeCheck.message}`);
+          continue;
+        }
         const offlineId = await persistMediaFileToIdb(file, 'anexo');
         setAnexos((prev) => [
           ...prev,
           {
             file,
             descricao: '',
-            offlineId,
-            isOfflinePending: true,
+            offlineId: offlineId || undefined,
+            isOfflinePending: Boolean(offlineId),
             uploadFalhou: false,
           },
         ]);

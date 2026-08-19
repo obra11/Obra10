@@ -3,8 +3,8 @@ import { Download, Share, X } from 'lucide-react';
 
 const DISMISS_KEY = 'pwaInstallDismissed';
 const INSTALLED_KEY = 'pwaInstalled';
-/** Depois de “Agora não”, só volta a sugerir após 14 dias */
-const DISMISS_MS = 14 * 24 * 60 * 60 * 1000;
+/** Depois de “Agora não”, só volta a sugerir após 7 dias */
+const DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
 
 function isStandalone(): boolean {
   const mq = window.matchMedia('(display-mode: standalone)').matches;
@@ -20,11 +20,21 @@ function isIos(): boolean {
   return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
+function isSafariIos(): boolean {
+  if (!isIos()) return false;
+  const ua = navigator.userAgent;
+  // Chrome/Firefox/Edge no iOS não suportam “Adicionar à Tela de Início” como o Safari
+  const isCriOS = /CriOS/i.test(ua);
+  const isFxiOS = /FxiOS/i.test(ua);
+  const isEdgiOS = /EdgiOS/i.test(ua);
+  return !isCriOS && !isFxiOS && !isEdgiOS;
+}
+
 /**
  * Banner de instalação PWA.
  * - Mobile (navegador): mostra instrução / prompt nativo
  * - Já instalado (standalone): nunca mostra
- * - Desktop: só se o Chrome disparar beforeinstallprompt (sem fallback chato)
+ * - Desktop: só se o Chrome disparar beforeinstallprompt
  */
 export const InstallPrompt: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -36,7 +46,12 @@ export const InstallPrompt: React.FC = () => {
       localStorage.setItem(INSTALLED_KEY, 'true');
       return;
     }
-    if (localStorage.getItem(INSTALLED_KEY) === 'true') return;
+    // Se não está standalone, limpa flag antiga que bloqueava o banner
+    try {
+      localStorage.removeItem(INSTALLED_KEY);
+    } catch {
+      /* ignore */
+    }
 
     const dismissed = localStorage.getItem(DISMISS_KEY);
     if (dismissed && Date.now() - Number(dismissed) < DISMISS_MS) return;
@@ -57,18 +72,16 @@ export const InstallPrompt: React.FC = () => {
     window.addEventListener('beforeinstallprompt', onBeforeInstall);
     window.addEventListener('appinstalled', onInstalled);
 
-    // iOS Safari: não tem beforeinstallprompt — mostra dica de “Adicionar à Tela de Início”
     if (isIos() && isMobileUa()) {
       setIosHint(true);
       setShowBanner(true);
     }
 
-    // Android sem evento (raro): após 3s, se ainda for mobile e não instalado
     let fallback: number | undefined;
     if (!isIos() && isMobileUa()) {
       fallback = window.setTimeout(() => {
         setShowBanner((prev) => prev || true);
-      }, 3000);
+      }, 2500);
     }
 
     return () => {
@@ -90,12 +103,18 @@ export const InstallPrompt: React.FC = () => {
       return;
     }
 
-    // iOS / fallback: instrução
     setIosHint(true);
+    if (isIos()) {
+      alert(
+        isSafariIos()
+          ? 'Para instalar no iPhone/iPad (Safari):\n\n1. Toque em Compartilhar (□↑)\n2. Role e toque em “Adicionar à Tela de Início”\n3. Confirme em Adicionar\n\nObs.: no Chrome do iPhone isso não funciona — use o Safari.'
+          : 'No iPhone, abra o site no Safari (não no Chrome):\n\n1. Compartilhar (□↑)\n2. “Adicionar à Tela de Início”\n3. Adicionar',
+      );
+      return;
+    }
+
     alert(
-      isIos()
-        ? 'Para instalar no iPhone/iPad:\n1. Toque em Compartilhar ⎋\n2. Role e toque em “Adicionar à Tela de Início”\n3. Confirme em Adicionar'
-        : 'Para instalar no celular:\nAbra o menu do navegador (⋮) e escolha “Instalar app” ou “Adicionar à tela inicial”.',
+      'Para instalar no Android (Chrome):\n\n1. Toque no menu ⋮ (canto superior)\n2. Escolha “Instalar app” ou “Adicionar à tela inicial”\n3. Confirme\n\nSe não aparecer: feche todas as abas do Obra 10, abra de novo https://obra10.app.br e espere 5 segundos.',
     );
   };
 
@@ -110,7 +129,6 @@ export const InstallPrompt: React.FC = () => {
     <div
       className="fixed inset-x-0 z-[90] px-3 pointer-events-none"
       style={{
-        // Acima da bottom nav no mobile; no desktop no topo
         bottom: 'calc(5.5rem + env(safe-area-inset-bottom, 0px))',
       }}
     >
@@ -125,8 +143,10 @@ export const InstallPrompt: React.FC = () => {
           <h4 className="font-bold text-gray-900 text-sm leading-tight">Instale o Obra 10</h4>
           <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
             {iosHint
-              ? 'No iPhone: Compartilhar → Adicionar à Tela de Início'
-              : 'Acesso rápido como app no celular'}
+              ? isSafariIos()
+                ? 'Safari: Compartilhar → Adicionar à Tela de Início'
+                : 'Abra no Safari → Compartilhar → Tela de Início'
+              : 'Menu ⋮ → Instalar app (Chrome Android)'}
           </p>
         </div>
         <button

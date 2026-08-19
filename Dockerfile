@@ -1,12 +1,12 @@
 # ============================================
 # Obra 10 — Production Dockerfile
-# Force rebuild: 2026-08-18-pwa-install-update-ux
+# Force rebuild: 2026-08-19-p3005-baseline
 # ============================================
 
 # --- Build stage ---
 FROM node:22-alpine AS builder
 
-ARG OBRA10_BUILD_ID=2.9.10-20260818
+ARG OBRA10_BUILD_ID=2.9.10-20260819
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 
 # Install build tools for native modules (bcrypt)
@@ -25,13 +25,15 @@ RUN npm install
 # Copy remaining backend source
 COPY obra10-backend/ .
 
-# Generate Prisma client and build NestJS
+# Generate Prisma client and build NestJS (sem banco real no build)
+ENV PRISMA_BUILD_PLACEHOLDER=1
 RUN npx prisma generate && npx nest build
+ENV PRISMA_BUILD_PLACEHOLDER=
 
 # --- Production stage ---
 FROM node:22-alpine
 
-ARG OBRA10_BUILD_ID=2.9.10-20260818
+ARG OBRA10_BUILD_ID=2.9.10-20260819
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 ENV NODE_ENV=production
 
@@ -44,10 +46,11 @@ COPY --from=builder /app/package.json ./
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./
 COPY --from=builder /app/client ./client
+COPY --from=builder /app/scripts/railway-start.sh ./scripts/railway-start.sh
 
 # Create uploads directory for runtime
-RUN mkdir -p uploads
+RUN mkdir -p uploads && chmod +x scripts/railway-start.sh
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main"]
+CMD ["sh", "scripts/railway-start.sh"]
