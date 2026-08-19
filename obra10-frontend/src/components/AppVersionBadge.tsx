@@ -8,6 +8,7 @@ import {
   formatAppVersion,
   type AppVersionInfo,
 } from '../appVersion';
+import { applyAppUpdate } from '../utils/applyAppUpdate';
 import api from '../services/api';
 
 type Props = {
@@ -32,12 +33,12 @@ export const AppVersionBadge: React.FC<Props> = ({
   const [server, setServer] = useState<AppVersionInfo | null>(null);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        // Prefer API (não passa pelo SW de assets estáticos de forma tão agressiva)
         const res = await api.get('/version', { timeout: 8000 });
         if (!cancelled && res.data?.version) {
           setServer(res.data as AppVersionInfo);
@@ -84,6 +85,12 @@ export const AppVersionBadge: React.FC<Props> = ({
     } catch {
       window.prompt('Copie as informações de versão:', lines.join(' | '));
     }
+  };
+
+  const handleUpdate = async () => {
+    if (updating) return;
+    setUpdating(true);
+    await applyAppUpdate(server?.buildId || null);
   };
 
   if (variant === 'compact') {
@@ -143,18 +150,28 @@ export const AppVersionBadge: React.FC<Props> = ({
           <div className="flex-1">
             <p className="font-semibold">App desatualizado neste aparelho</p>
             <p className="mt-0.5 text-amber-800">
-              A versão vigente é {server?.version}. Toque em atualizar para carregar a nova.
+              A versão vigente é {server?.version}. Atualize para carregar a nova.
             </p>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg"
-            >
-              <RefreshCw size={14} /> Atualizar agora
-            </button>
           </div>
         </div>
       )}
+
+      <button
+        type="button"
+        onClick={handleUpdate}
+        disabled={updating}
+        className={`mt-3 w-full inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 text-sm font-bold rounded-xl transition-colors ${
+          outdated
+            ? 'bg-red-600 hover:bg-red-700 text-white'
+            : 'bg-gray-900 hover:bg-gray-800 text-white'
+        } disabled:opacity-60`}
+      >
+        <RefreshCw size={16} className={updating ? 'animate-spin' : ''} />
+        {updating ? 'Atualizando…' : outdated ? 'Atualizar aplicativo' : 'Verificar e atualizar'}
+      </button>
+      <p className="mt-2 text-[11px] text-gray-400 text-center leading-snug">
+        Limpa o cache do app neste aparelho e recarrega a versão mais recente do servidor.
+      </p>
     </div>
   );
 };

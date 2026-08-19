@@ -53,36 +53,9 @@ export const UpdateNotification: React.FC = () => {
   const applyUpdate = useCallback(async () => {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
-    try {
-      try {
-        localStorage.removeItem(DISMISS_KEY);
-      } catch {
-        /* ignore */
-      }
-      const reg = await navigator.serviceWorker?.getRegistration();
-      if (reg?.waiting) {
-        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-      }
-      if (reg?.active) {
-        reg.active.postMessage({ type: 'CLEAR_CACHES' });
-      }
-      if (window.caches) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((k) => caches.delete(k)));
-      }
-      if (navigator.serviceWorker) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map((r) => r.unregister()));
-      }
-      const mark = serverBuild || lastServerBuildRef.current;
-      if (mark) localStorage.setItem('obra10_build', mark);
-      localStorage.setItem('obra10_force_reload', String(Date.now()));
-    } catch {
-      /* ignore */
-    }
-    const url = new URL(window.location.href);
-    url.searchParams.set('_v', String(Date.now()));
-    window.location.replace(url.toString());
+    const mark = serverBuild || lastServerBuildRef.current;
+    const { applyAppUpdate } = await import('../utils/applyAppUpdate');
+    await applyAppUpdate(mark);
   }, [serverBuild]);
 
   const dismissSoft = useCallback(() => {
