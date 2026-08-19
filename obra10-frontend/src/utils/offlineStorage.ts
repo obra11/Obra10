@@ -144,6 +144,39 @@ export async function clearOfflineAttachmentsForRdo(rdoId: string): Promise<void
   });
 }
 
+/** Remove anexos offline mais velhos que maxAgeMs (libera espaço no aparelho). */
+export async function purgeStaleOfflineAttachments(
+  maxAgeMs: number,
+): Promise<number> {
+  const db = await initOfflineDB();
+  const cutoff = Date.now() - maxAgeMs;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const all = (request.result as OfflineAttachment[]) || [];
+      let removed = 0;
+      for (const item of all) {
+        const created = Date.parse(item.criadoEm || '');
+        if (!Number.isFinite(created) || created < cutoff) {
+          if (item.previewUrl) {
+            try {
+              URL.revokeObjectURL(item.previewUrl);
+            } catch {
+              /* ignore */
+            }
+          }
+          store.delete(item.id);
+          removed += 1;
+        }
+      }
+      resolve(removed);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
 export async function incrementarTentativa(id: string): Promise<void> {
   const db = await initOfflineDB();
   return new Promise((resolve, reject) => {

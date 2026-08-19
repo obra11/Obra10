@@ -4,6 +4,12 @@ export const MAX_RDO_MEDIA_BYTES = 50 * 1024 * 1024;
 export const LARGE_VIDEO_SKIP_IDB_BYTES = 12 * 1024 * 1024;
 /** Fotos/anexos no endpoint de imagem: 15 MB. */
 export const MAX_IMAGE_UPLOAD_BYTES = 15 * 1024 * 1024;
+/** Lado maior da foto após compressão no aparelho. */
+export const IMAGE_COMPRESS_MAX_EDGE = 1920;
+/** Qualidade JPEG da compressão (0–1). */
+export const IMAGE_COMPRESS_QUALITY = 0.78;
+/** Anexos offline órfãos mais velhos que isto são apagados. */
+export const OFFLINE_ATTACHMENT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function formatBytes(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return '0 B';

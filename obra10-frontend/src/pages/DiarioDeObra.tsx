@@ -18,7 +18,10 @@ import {
   estimateIdbFreeBytes,
   formatBytes,
   shouldPersistVideoToIdb,
+  OFFLINE_ATTACHMENT_MAX_AGE_MS,
 } from '../utils/mediaLimits';
+import { compressImageFile } from '../utils/compressImage';
+import { mapWithConcurrency, RDO_UPLOAD_CONCURRENCY } from '../utils/uploadQueue';
 import {
   generateUUID,
   saveOfflineAttachment,
@@ -32,6 +35,7 @@ import {
   deleteOfflineRdoDraft,
   getPendingOfflineRdoDrafts,
   offlineDraftKey,
+  purgeStaleOfflineAttachments,
   type OfflineRdoDraft,
 } from '../utils/offlineStorage';
 
@@ -991,8 +995,9 @@ export const DiarioDeObra: React.FC = () => {
   }, [rdoIdAtual, rdoId]);
 
   const handleFotosDrop = async (files: File[]) => {
-    for (const file of files) {
+    for (const raw of files) {
       try {
+        const file = await compressImageFile(raw);
         const sizeCheck = checkMediaFileSize(file, 'foto');
         if (!sizeCheck.ok) {
           showToast(`⚠️ ${sizeCheck.message}`);
@@ -1093,6 +1098,14 @@ export const DiarioDeObra: React.FC = () => {
     e.target.value = '';
     if (files.length === 0) return;
 
+    for (const f of files) {
+      const sizeCheck = checkMediaFileSize(f, 'video');
+      if (!sizeCheck.ok) {
+        showToast(`⚠️ ${sizeCheck.message}`);
+      }
+    }
+
+    // Sempre tenta guardar cópia na galeria/arquivos do celular
     const result = await persistCapturedMediaList(files, 'video');
     handleVideosDrop(files);
 
@@ -1285,6 +1298,11 @@ export const DiarioDeObra: React.FC = () => {
     })();
   }, [isOnline, obraId, rdoIdAtual, syncPendingDraftToServer, showToast]);
 
+  // Limpa anexos offline antigos (libera memória do aparelho)
+  useEffect(() => {
+    purgeStaleOfflineAttachments(OFFLINE_ATTACHMENT_MAX_AGE_MS).catch(() => {});
+  }, []);
+
   // Restaura fotos/vídeos/docs pendentes do IndexedDB ao abrir o RDO
   useEffect(() => {
     if (initLoading || !obraId) return;
@@ -1308,7 +1326,6 @@ export const DiarioDeObra: React.FC = () => {
     let failCount = 0;
     const novosAnexos: SavedFile[] = [];
     const totalFiles = fotos.length + videos.length + anexos.length;
-    let fileIndex = 0;
 
     const fotosRestantes: typeof fotos = [];
     const videosRestantes: typeof videos = [];
@@ -1316,108 +1333,82 @@ export const DiarioDeObra: React.FC = () => {
 
     const uploadTimeoutMs = 180000; // 3 min — vídeos de celular
 
-    // 1. Fotos
-    for (const f of fotos) {
-      fileIndex++;
-      const formData = new FormData();
-      formData.append('file', f.file);
-      if (f.legenda) {
-        formData.append('legenda', f.legenda);
-      }
-      try {
-        setToast(`⏳ Fazendo upload das mídias... (${fileIndex}/${totalFiles})`);
-        const res = await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: uploadTimeoutMs,
-        });
-        if (res.data?.anexo) {
-          novosAnexos.push(res.data.anexo);
-        }
-        if (f.offlineId) {
-          try {
-            await deleteOfflineAttachment(f.offlineId);
-          } catch { /* ignore */ }
-        }
-        successCount++;
-      } catch (err: any) {
-        console.error('Erro ao subir foto:', f.file.name, err);
-        fotosRestantes.push(f);
-        failCount++;
-      }
-    }
+    type Job =
+      | { kind: 'foto'; item: (typeof fotos)[0] }
+      | { kind: 'video'; item: (typeof videos)[0] }
+      | { kind: 'anexo'; item: (typeof anexos)[0] };
 
-    // 2. Vídeos
-    for (const v of videos) {
-      fileIndex++;
-      const formData = new FormData();
-      // Garante MIME/nome úteis para iOS (.mov sem type)
-      const rawName = v.file.name || `video-${Date.now()}.mp4`;
-      const mime =
-        v.file.type ||
-        (rawName.toLowerCase().endsWith('.mov')
-          ? 'video/quicktime'
-          : rawName.toLowerCase().endsWith('.webm')
-            ? 'video/webm'
-            : 'video/mp4');
-      const fileToSend =
-        v.file.type === mime
-          ? v.file
-          : new File([v.file], rawName, { type: mime });
-      formData.append('file', fileToSend);
-      if (v.legenda) {
-        formData.append('legenda', v.legenda);
-      }
-      try {
-        setToast(`⏳ Fazendo upload das mídias... (${fileIndex}/${totalFiles})`);
-        const res = await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: uploadTimeoutMs,
-        });
-        if (res.data?.anexo) {
-          novosAnexos.push(res.data.anexo);
-        }
-        if (v.offlineId) {
-          try {
-            await deleteOfflineAttachment(v.offlineId);
-          } catch { /* ignore */ }
-        }
-        successCount++;
-      } catch (err: any) {
-        console.error('Erro ao subir vídeo:', v.file.name, err);
-        videosRestantes.push(v);
-        failCount++;
-      }
-    }
+    const jobs: Job[] = [
+      ...fotos.map((item) => ({ kind: 'foto' as const, item })),
+      ...videos.map((item) => ({ kind: 'video' as const, item })),
+      ...anexos.map((item) => ({ kind: 'anexo' as const, item })),
+    ];
 
-    // 3. Anexos
-    for (const a of anexos) {
-      fileIndex++;
-      const formData = new FormData();
-      formData.append('file', a.file);
-      if (a.descricao) {
-        formData.append('legenda', a.descricao);
-      }
-      try {
-        setToast(`⏳ Fazendo upload das mídias... (${fileIndex}/${totalFiles})`);
-        const res = await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: uploadTimeoutMs,
-        });
-        if (res.data?.anexo) {
-          novosAnexos.push(res.data.anexo);
+    await mapWithConcurrency(
+      jobs,
+      RDO_UPLOAD_CONCURRENCY,
+      async (job) => {
+        const formData = new FormData();
+        let offlineId: string | undefined;
+
+        if (job.kind === 'foto') {
+          formData.append('file', job.item.file);
+          if (job.item.legenda) formData.append('legenda', job.item.legenda);
+          offlineId = job.item.offlineId;
+        } else if (job.kind === 'video') {
+          const rawName = job.item.file.name || `video-${Date.now()}.mp4`;
+          const mime =
+            job.item.file.type ||
+            (rawName.toLowerCase().endsWith('.mov')
+              ? 'video/quicktime'
+              : rawName.toLowerCase().endsWith('.webm')
+                ? 'video/webm'
+                : 'video/mp4');
+          const fileToSend =
+            job.item.file.type === mime
+              ? job.item.file
+              : new File([job.item.file], rawName, { type: mime });
+          formData.append('file', fileToSend);
+          if (job.item.legenda) formData.append('legenda', job.item.legenda);
+          offlineId = job.item.offlineId;
+        } else {
+          formData.append('file', job.item.file);
+          if (job.item.descricao) formData.append('legenda', job.item.descricao);
+          offlineId = job.item.offlineId;
         }
-        if (a.offlineId) {
-          try {
-            await deleteOfflineAttachment(a.offlineId);
-          } catch { /* ignore */ }
+
+        try {
+          const res = await api.post(
+            `/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`,
+            formData,
+            {
+              headers: { 'Content-Type': 'multipart/form-data' },
+              timeout: uploadTimeoutMs,
+            },
+          );
+          if (res.data?.anexo) {
+            novosAnexos.push(res.data.anexo);
+          }
+          if (offlineId) {
+            try {
+              await deleteOfflineAttachment(offlineId);
+            } catch {
+              /* ignore */
+            }
+          }
+          successCount++;
+        } catch (err: any) {
+          console.error('Erro ao subir mídia:', err);
+          if (job.kind === 'foto') fotosRestantes.push(job.item);
+          else if (job.kind === 'video') videosRestantes.push(job.item);
+          else anexosRestantes.push(job.item);
+          failCount++;
         }
-        successCount++;
-      } catch (err: any) {
-        console.error('Erro ao subir anexo:', a.file.name, err);
-        anexosRestantes.push(a);
-        failCount++;
-      }
-    }
+      },
+      (done, total) => {
+        setToast(`⏳ Fazendo upload das mídias... (${done}/${total || totalFiles})`);
+      },
+    );
 
     // Só remove da fila o que realmente subiu
     setFotos(fotosRestantes);
