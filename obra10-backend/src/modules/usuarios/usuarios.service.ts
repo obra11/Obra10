@@ -15,6 +15,7 @@ import {
   perfilGlobalToTipoPapel,
   RoleCapabilities,
 } from '../../core/capabilities/role-capabilities';
+import { perfilGlobalToObraNomeInterno } from '../../core/capabilities/obra-perfil';
 import { EmailService } from '../email/email.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -614,18 +615,25 @@ export class UsuariosService {
         : {};
 
     if (permissoesObras && Object.keys(permissoesObras).length > 0) {
-      // Garante perfil COLABORADOR padrão (perfilId=2 é comum no seed; busca por nome)
-      let perfilId = 2;
-      const perfilColab = await this.prisma.perfil.findFirst({
-        where: {
-          OR: [
-            { nomeInterno: 'COLABORADOR' },
-            { nomeInterno: 'USER' },
-            { nomeInterno: 'FIELD' },
-          ],
-        },
+      const nomeInterno = perfilGlobalToObraNomeInterno(perfil);
+      let perfilObra = await this.prisma.perfil.findUnique({
+        where: { nomeInterno },
       });
-      if (perfilColab) perfilId = perfilColab.id;
+      if (!perfilObra) {
+        try {
+          perfilObra = await this.prisma.perfil.create({
+            data: { nomeInterno },
+          });
+        } catch {
+          await this.prisma.$executeRawUnsafe(
+            `SELECT setval('perfis_id_seq', COALESCE((SELECT MAX(id)+1 FROM perfis), 1), false);`,
+          );
+          perfilObra = await this.prisma.perfil.create({
+            data: { nomeInterno },
+          });
+        }
+      }
+      const perfilId = perfilObra.id;
 
       for (const [obraId, permissoes] of Object.entries(permissoesObras)) {
         const obra = await this.prisma.obra.findFirst({
@@ -641,21 +649,49 @@ export class UsuariosService {
             perfilId,
             permissoes: permissoes as Prisma.InputJsonValue,
           },
-          update: { permissoes: permissoes as Prisma.InputJsonValue },
+          update: {
+            perfilId,
+            permissoes: permissoes as Prisma.InputJsonValue,
+          },
         });
       }
       return;
     }
 
-    // Atualiza vínculos existentes com o template do papel
-    if (Object.keys(permissoesPadrao).length === 0) return;
+    // Atualiza vínculos existentes com o template do papel + perfil alinhado ao cadastro
+    if (roles.length === 0) return;
+
+    const nomeInterno = perfilGlobalToObraNomeInterno(perfil);
+    let perfilObra = await this.prisma.perfil.findUnique({
+      where: { nomeInterno },
+    });
+    if (!perfilObra) {
+      try {
+        perfilObra = await this.prisma.perfil.create({
+          data: { nomeInterno },
+        });
+      } catch {
+        await this.prisma.$executeRawUnsafe(
+          `SELECT setval('perfis_id_seq', COALESCE((SELECT MAX(id)+1 FROM perfis), 1), false);`,
+        );
+        perfilObra = await this.prisma.perfil.create({
+          data: { nomeInterno },
+        });
+      }
+    }
 
     await Promise.all(
       roles.map((role) =>
         this.prisma.userObraRole.update({
           where: { id: role.id },
           data: {
-            permissoes: permissoesPadrao as unknown as Prisma.InputJsonValue,
+            perfilId: perfilObra!.id,
+            ...(Object.keys(permissoesPadrao).length > 0
+              ? {
+                  permissoes:
+                    permissoesPadrao as unknown as Prisma.InputJsonValue,
+                }
+              : {}),
           },
         }),
       ),

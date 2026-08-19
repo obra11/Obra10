@@ -1,12 +1,12 @@
 # ============================================
 # Obra 10 — Production Dockerfile
-# Force rebuild: 2026-08-19-p3005-baseline
+# Force rebuild: 2026-08-19-support-install-update
 # ============================================
 
 # --- Build stage ---
 FROM node:22-alpine AS builder
 
-ARG OBRA10_BUILD_ID=2.9.10-20260819
+ARG OBRA10_BUILD_ID=2.9.11-20260819
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 
 # Install build tools for native modules (bcrypt)
@@ -33,7 +33,7 @@ ENV PRISMA_BUILD_PLACEHOLDER=
 # --- Production stage ---
 FROM node:22-alpine
 
-ARG OBRA10_BUILD_ID=2.9.10-20260819
+ARG OBRA10_BUILD_ID=2.9.11-20260819
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 ENV NODE_ENV=production
 

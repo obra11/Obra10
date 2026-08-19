@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { perfilGlobalToObraNomeInterno } from '../../core/capabilities/obra-perfil';
 
 @Injectable()
 export class ObraService {
@@ -8,6 +9,22 @@ export class ObraService {
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
   ) {}
+
+  /** Garante um registro em `perfis` pelo nomeInterno (cria se não existir). */
+  private async ensurePerfil(nomeInterno: string) {
+    let perfil = await this.prisma.perfil.findUnique({
+      where: { nomeInterno },
+    });
+    if (perfil) return perfil;
+    try {
+      return await this.prisma.perfil.create({ data: { nomeInterno } });
+    } catch {
+      await this.prisma.$executeRawUnsafe(
+        `SELECT setval('perfis_id_seq', COALESCE((SELECT MAX(id)+1 FROM perfis), 1), false);`,
+      );
+      return this.prisma.perfil.create({ data: { nomeInterno } });
+    }
+  }
 
   async listarObrasDoUsuario(usuarioId: string) {
     // Busca as obras ATIVAS nas quais o usuário tem um perfil
@@ -76,24 +93,7 @@ export class ObraService {
     }
 
     // 1. Garante que o perfil ENGENHEIRO existe (FORA da transação para não abortar em caso de erro de constraint)
-    let perfil = await this.prisma.perfil.findUnique({
-      where: { nomeInterno: 'ENGENHEIRO' },
-    });
-    if (!perfil) {
-      try {
-        perfil = await this.prisma.perfil.create({
-          data: { nomeInterno: 'ENGENHEIRO' },
-        });
-      } catch (e: any) {
-        // Se der erro de constraint única no ID (sequence desincronizada pelo seed manual), corrige a sequence e tenta de novo
-        await this.prisma.$executeRawUnsafe(
-          `SELECT setval('perfis_id_seq', COALESCE((SELECT MAX(id)+1 FROM perfis), 1), false);`,
-        );
-        perfil = await this.prisma.perfil.create({
-          data: { nomeInterno: 'ENGENHEIRO' },
-        });
-      }
-    }
+    const perfil = await this.ensurePerfil('ENGENHEIRO');
 
     // 2. Cria a obra e vincula o usuário na transação principal
     return this.prisma.$transaction(async (tx) => {
@@ -191,6 +191,20 @@ export class ObraService {
       },
     });
 
+    // Alinha o perfil da obra com o tipo do cadastro (UI nunca permite escolher outro).
+    for (const role of roles) {
+      const expected = perfilGlobalToObraNomeInterno(role.usuario.perfilGlobal);
+      if (role.perfil.nomeInterno === expected) continue;
+      const perfil = await this.ensurePerfil(expected);
+      if (perfil.id === role.perfilId) continue;
+      await this.prisma.userObraRole.update({
+        where: { id: role.id },
+        data: { perfilId: perfil.id },
+      });
+      role.perfilId = perfil.id;
+      role.perfil = perfil;
+    }
+
     return roles;
   }
 
@@ -209,25 +223,20 @@ export class ObraService {
     });
     if (!obra) throw new Error('Obra não encontrada');
 
+    const usuario = await this.prisma.usuario.findFirst({
+      where: { id: data.usuarioId, empresaId, deletedAt: null },
+      select: { nome: true, email: true, perfilGlobal: true },
+    });
+    if (!usuario) {
+      throw new BadRequestException(
+        'Usuário não encontrado nesta empresa.',
+      );
+    }
+
     let finalPerfilId = data.perfilId;
     if (!finalPerfilId) {
-      let perfilPadrao = await this.prisma.perfil.findFirst({
-        where: { nomeInterno: 'COLABORADOR' },
-      });
-      if (!perfilPadrao) {
-        try {
-          perfilPadrao = await this.prisma.perfil.create({
-            data: { nomeInterno: 'COLABORADOR' },
-          });
-        } catch (e) {
-          await this.prisma.$executeRawUnsafe(
-            `SELECT setval('perfis_id_seq', COALESCE((SELECT MAX(id)+1 FROM perfis), 1), false);`,
-          );
-          perfilPadrao = await this.prisma.perfil.create({
-            data: { nomeInterno: 'COLABORADOR' },
-          });
-        }
-      }
+      const nomeInterno = perfilGlobalToObraNomeInterno(usuario.perfilGlobal);
+      const perfilPadrao = await this.ensurePerfil(nomeInterno);
       finalPerfilId = perfilPadrao.id;
     }
 
@@ -243,11 +252,7 @@ export class ObraService {
     });
 
     try {
-      const usuario = await this.prisma.usuario.findFirst({
-        where: { id: data.usuarioId, empresaId, deletedAt: null },
-        select: { nome: true, email: true },
-      });
-      if (usuario?.email) {
+      if (usuario.email) {
         const nomeEmpresa =
           obra.empresa.nomeFantasia ||
           obra.empresa.razaoSocial ||

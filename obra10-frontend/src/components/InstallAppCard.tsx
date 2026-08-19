@@ -96,7 +96,7 @@ export const InstallAppCard: React.FC<{ className?: string }> = ({
         className="mt-3 w-full inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl disabled:opacity-60"
       >
         {ios ? <Share size={16} /> : <Download size={16} />}
-        {busy ? 'Abrindo…' : 'Como instalar'}
+        {busy ? 'Abrindo…' : ios ? 'Como instalar no iPhone' : 'Instalar aplicativo'}
       </button>
     </div>
   );

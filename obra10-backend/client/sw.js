@@ -1,4 +1,4 @@
-const CACHE_NAME = 'obra10-v2.9.10';
+const CACHE_NAME = 'obra10-v2.9.11';
 // Não pré-cachear '/' nem imagens de marca — HTML/JS antigos mostravam watermark Lunardeli.
 const STATIC_ASSETS = [
   '/favicon-16.png',
@@ -13,9 +13,17 @@ const STATIC_ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)),
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(STATIC_ASSETS))
+      .then(() => {
+        // 1ª instalação: ativa na hora (Chrome só sugere “Instalar app” com SW ativo).
+        // Atualizações seguintes: espera o botão “Atualizar” (SKIP_WAITING).
+        if (!self.registration.active) {
+          return self.skipWaiting();
+        }
+      }),
   );
-  // NÃO chama skipWaiting aqui — espera o usuário tocar em "Atualizar"
 });
 
 self.addEventListener('activate', (event) => {

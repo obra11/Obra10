@@ -9,13 +9,48 @@ import {
   type AppVersionInfo,
 } from '../appVersion';
 import { applyAppUpdate } from '../utils/applyAppUpdate';
-import api from '../services/api';
 
 type Props = {
   /** compact = uma linha; card = bloco completo para Perfil/Suporte */
   variant?: 'compact' | 'card';
   className?: string;
 };
+
+function pickVersion(data: unknown): AppVersionInfo | null {
+  if (!data || typeof data !== 'object') return null;
+  const raw = data as Record<string, unknown>;
+  const src =
+    raw.app && typeof raw.app === 'object'
+      ? (raw.app as Record<string, unknown>)
+      : raw;
+  const version = typeof src.version === 'string' ? src.version : null;
+  const buildId = typeof src.buildId === 'string' ? src.buildId : null;
+  if (!version || !buildId) return null;
+  return {
+    version,
+    buildId,
+    releasedAt:
+      typeof src.releasedAt === 'string' ? src.releasedAt : APP_RELEASED_AT,
+    channel: typeof src.channel === 'string' ? src.channel : undefined,
+    name: typeof src.name === 'string' ? src.name : undefined,
+    forceUpdate: src.forceUpdate === true,
+    minClientVersion:
+      typeof src.minClientVersion === 'string'
+        ? src.minClientVersion
+        : undefined,
+  };
+}
+
+async function fetchJson(url: string): Promise<unknown | null> {
+  const res = await fetch(url, {
+    cache: 'no-store',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) return null;
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('json')) return null;
+  return res.json();
+}
 
 /**
  * Mostra a versão deste aparelho/navegador e a versão vigente no servidor.
@@ -38,25 +73,25 @@ export const AppVersionBadge: React.FC<Props> = ({
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const stamp = Date.now();
+      const endpoints = [
+        `/version?_=${stamp}`,
+        `/health?_=${stamp}`,
+        `/version.json?_=${stamp}`,
+      ];
       try {
-        const res = await api.get('/version', { timeout: 8000 });
-        if (!cancelled && res.data?.version) {
-          setServer(res.data as AppVersionInfo);
-          return;
+        for (const url of endpoints) {
+          try {
+            const data = await fetchJson(url);
+            const parsed = pickVersion(data);
+            if (parsed) {
+              if (!cancelled) setServer(parsed);
+              return;
+            }
+          } catch {
+            /* tenta próximo */
+          }
         }
-      } catch {
-        /* fallback abaixo */
-      }
-      try {
-        const res = await fetch(`/version.json?_=${Date.now()}`, {
-          cache: 'no-store',
-        });
-        if (res.ok) {
-          const data = (await res.json()) as AppVersionInfo;
-          if (!cancelled) setServer(data);
-        }
-      } catch {
-        /* ignore */
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -90,7 +125,11 @@ export const AppVersionBadge: React.FC<Props> = ({
   const handleUpdate = async () => {
     if (updating) return;
     setUpdating(true);
-    await applyAppUpdate(server?.buildId || null);
+    try {
+      await applyAppUpdate(server?.buildId || null);
+    } finally {
+      setUpdating(false);
+    }
   };
 
   if (variant === 'compact') {
@@ -127,20 +166,22 @@ export const AppVersionBadge: React.FC<Props> = ({
 
       <dl className="space-y-2 text-sm">
         <div className="flex justify-between gap-3">
-          <dt className="text-gray-500">Neste aparelho</dt>
+          <dt className="text-gray-500">Neste aparelho (instalada)</dt>
           <dd className="font-mono text-xs text-right text-gray-900 font-semibold">
             {formatAppVersion(local)}
           </dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt className="text-gray-500">Vigente (servidor)</dt>
+          <dt className="text-gray-500">No provedor (servidor)</dt>
           <dd className="font-mono text-xs text-right text-gray-900 font-semibold">
             {loading ? '…' : server ? formatAppVersion(server) : 'indisponível'}
           </dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt className="text-gray-500">Liberada em</dt>
-          <dd className="text-xs text-right text-gray-700">{local.releasedAt}</dd>
+          <dt className="text-gray-500">Liberada no provedor</dt>
+          <dd className="text-xs text-right text-gray-700">
+            {loading ? '…' : server?.releasedAt || local.releasedAt}
+          </dd>
         </div>
       </dl>
 
@@ -150,7 +191,8 @@ export const AppVersionBadge: React.FC<Props> = ({
           <div className="flex-1">
             <p className="font-semibold">App desatualizado neste aparelho</p>
             <p className="mt-0.5 text-amber-800">
-              A versão vigente é {server?.version}. Atualize para carregar a nova.
+              A versão vigente no provedor é {server?.version}. Toque em atualizar
+              para carregar a nova.
             </p>
           </div>
         </div>
