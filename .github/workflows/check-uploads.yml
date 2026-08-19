@@ -1,0 +1,16 @@
+# Falha cedo se uploads/ ou mídia de usuário voltarem a ser versionados (quebra deploy Railway).
+name: Check no tracked uploads
+
+on:
+  push:
+    branches: [main, production]
+  pull_request:
+    branches: [main, production]
+
+jobs:
+  check-uploads:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail if uploads are tracked in Git
+        run: node scripts/check-no-tracked-uploads.cjs

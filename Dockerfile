@@ -48,8 +48,13 @@ COPY --from=builder /app/prisma.config.ts ./
 COPY --from=builder /app/client ./client
 COPY --from=builder /app/scripts/railway-start.sh ./scripts/railway-start.sh
 
-# Create uploads directory for runtime
+# Create uploads directory for runtime (dev/local only; produção usa R2)
 RUN mkdir -p uploads && chmod +x scripts/railway-start.sh
+# Guarda: contexto de build não deve trazer mídia de usuário
+RUN if [ -d uploads ] && [ "$(find uploads -type f 2>/dev/null | head -1)" ]; then \
+      echo "ERRO: arquivos em uploads/ no contexto Docker — remova do Git/.dockerignore"; \
+      exit 1; \
+    fi
 
 EXPOSE 3000
 

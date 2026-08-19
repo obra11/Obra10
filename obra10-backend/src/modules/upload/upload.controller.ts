@@ -113,28 +113,48 @@ export class UploadController {
     });
   }
 
+  /** R2/S3 pronto para uso (não usar disco do container). */
+  private isCloudStorageConfigured(): boolean {
+    const key = process.env.AWS_ACCESS_KEY_ID?.trim();
+    const pub = process.env.AWS_S3_PUBLIC_URL?.trim();
+    return Boolean(key && pub && key !== 'dummy');
+  }
+
   private async processUpload(file: Express.Multer.File, folder: string): Promise<string> {
     const fileName = safeFilename(file.originalname);
-    
-    // AWS S3 / Cloudflare R2 Upload
-    if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_S3_PUBLIC_URL) {
+    const contentType = resolveMimeType(file);
+
+    // Cloudflare R2 / S3 — caminho único em produção
+    if (this.isCloudStorageConfigured()) {
       try {
         const s3Key = `uploads/${folder}/${fileName}`;
-        await this.s3Client.send(new PutObjectCommand({
-          Bucket: this.bucketName,
-          Key: s3Key,
-          Body: file.buffer,
-          ContentType: file.mimetype,
-        }));
-        const baseUrl = process.env.AWS_S3_PUBLIC_URL.replace(/\/$/, '');
+        await this.s3Client.send(
+          new PutObjectCommand({
+            Bucket: this.bucketName,
+            Key: s3Key,
+            Body: file.buffer,
+            ContentType: contentType,
+          }),
+        );
+        const baseUrl = process.env.AWS_S3_PUBLIC_URL!.replace(/\/$/, '');
         return `${baseUrl}/${s3Key}`;
       } catch (err: any) {
         console.error('S3 Upload Error:', err);
-        throw new BadRequestException(`Erro no provedor de nuvem (R2/S3): ${err.message}. Verifique as variáveis de ambiente AWS_S3_ENDPOINT, AWS_ACCESS_KEY_ID, etc.`);
+        // Não cai no disco local: evita encher o container Railway
+        throw new BadRequestException(
+          `Erro no provedor de nuvem (R2/S3): ${err.message}. Verifique AWS_S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_S3_PUBLIC_URL.`,
+        );
       }
     }
 
-    // Fallback: Local Disk
+    // Produção sem R2: falha explícita (nunca gravar uploads no container)
+    if (process.env.NODE_ENV === 'production') {
+      throw new BadRequestException(
+        'Upload em produção exige armazenamento em nuvem. Configure AWS_ACCESS_KEY_ID e AWS_S3_PUBLIC_URL (Cloudflare R2).',
+      );
+    }
+
+    // Fallback só em desenvolvimento local
     try {
       const dir = path.join(process.cwd(), 'uploads');
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });

@@ -9,8 +9,9 @@
     "build:backend": "npm --prefix obra10-backend run build",
     "sync:assets": "node sync-assets.js",
     "db:sync": "node obra10-backend/scratch/sync_db_prod_to_local.js",
-    "build": "npm run build:frontend && npm run sync:assets && npm run build:backend",
-    "check:uploads": "node scripts/check-no-tracked-uploads.cjs"
+    "build": "npm run check:uploads && npm run build:frontend && npm run sync:assets && npm run build:backend",
+    "check:uploads": "node scripts/check-no-tracked-uploads.cjs",
+    "prepush": "npm run check:uploads"
   },
   "dependencies": {
     "localtunnel": "^2.0.2"
