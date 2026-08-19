@@ -19,6 +19,7 @@ import {
 } from '../utils/whatsappSupport';
 import { appVersionSupportLine } from '../appVersion';
 import { AppVersionBadge } from '../components/AppVersionBadge';
+import { InstallAppCard } from '../components/InstallAppCard';
 
 type Tab = 'faq' | 'chamados' | 'novo';
 
@@ -227,7 +228,8 @@ export const SuportePage: React.FC = () => {
           </button>
         </div>
 
-        <div className="mb-6">
+        <div className="mb-6 space-y-3">
+          <InstallAppCard />
           <AppVersionBadge />
         </div>
 

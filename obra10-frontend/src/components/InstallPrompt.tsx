@@ -3,8 +3,8 @@ import { Download, Share, X } from 'lucide-react';
 
 const DISMISS_KEY = 'pwaInstallDismissed';
 const INSTALLED_KEY = 'pwaInstalled';
-/** Depois de “Agora não”, só volta a sugerir após 7 dias */
-const DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
+/** Depois de “Agora não”, só volta a sugerir após 1 dia */
+const DISMISS_MS = 1 * 24 * 60 * 60 * 1000;
 
 function isStandalone(): boolean {
   const mq = window.matchMedia('(display-mode: standalone)').matches;
@@ -59,6 +59,7 @@ export const InstallPrompt: React.FC = () => {
     const onBeforeInstall = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
+      (window as any).__obra10DeferredInstall = e;
       setShowBanner(true);
       setIosHint(false);
     };
@@ -66,6 +67,7 @@ export const InstallPrompt: React.FC = () => {
     const onInstalled = () => {
       setShowBanner(false);
       setDeferredPrompt(null);
+      (window as any).__obra10DeferredInstall = null;
       localStorage.setItem(INSTALLED_KEY, 'true');
     };
 
@@ -114,7 +116,7 @@ export const InstallPrompt: React.FC = () => {
     }
 
     alert(
-      'Para instalar no Android (Chrome):\n\n1. Toque no menu ⋮ (canto superior)\n2. Escolha “Instalar app” ou “Adicionar à tela inicial”\n3. Confirme\n\nSe não aparecer: feche todas as abas do Obra 10, abra de novo https://obra10.app.br e espere 5 segundos.',
+      'Para instalar no Android (Chrome):\n\n1. Toque no menu ⋮ (canto superior)\n2. Escolha “Instalar app” ou “Adicionar à tela inicial”\n3. Confirme\n\nUse sempre: https://obra10.app.br\n(Não use app.obra10.com.br — esse endereço não existe.)',
     );
   };
 
