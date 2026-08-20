@@ -16,16 +16,36 @@ function resolveLineHeight(el: HTMLTextAreaElement): number {
   return fontSize * 1.4;
 }
 
+function supportsFieldSizing(): boolean {
+  try {
+    return typeof CSS !== 'undefined' && CSS.supports?.('field-sizing', 'content') === true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Textarea que cresce com o conteúdo (web + mobile/PWA).
- * No iOS/WebKit, altura precisa ir a 0px antes de ler scrollHeight.
+ * No mobile, evita height:0 (colapsa o layout e parece que só o texto rola).
  */
 export const AutoResizeTextarea = React.forwardRef<HTMLTextAreaElement, Props>(
   function AutoResizeTextarea(
-    { minRows = 2, maxHeight = 480, className = '', value, defaultValue, onChange, onInput, onFocus, style, ...rest },
+    {
+      minRows = 2,
+      maxHeight = 480,
+      className = '',
+      value,
+      defaultValue,
+      onChange,
+      onInput,
+      onFocus,
+      style,
+      ...rest
+    },
     forwardedRef,
   ) {
     const innerRef = useRef<HTMLTextAreaElement | null>(null);
+    const nativeFieldSizing = useRef(supportsFieldSizing());
 
     const setRefs = useCallback(
       (node: HTMLTextAreaElement | null) => {
@@ -40,6 +60,16 @@ export const AutoResizeTextarea = React.forwardRef<HTMLTextAreaElement, Props>(
       const el = innerRef.current;
       if (!el) return;
 
+      // Chrome 123+ / Android moderno: CSS nativo, sem JS de altura
+      if (nativeFieldSizing.current) {
+        const st = el.style as CSSStyleDeclaration & { fieldSizing?: string };
+        st.fieldSizing = 'content';
+        el.style.height = 'auto';
+        el.style.overflowY = 'hidden';
+        el.style.minHeight = '';
+        return;
+      }
+
       const cs = getComputedStyle(el);
       const lineHeight = resolveLineHeight(el);
       const paddingY =
@@ -50,17 +80,39 @@ export const AutoResizeTextarea = React.forwardRef<HTMLTextAreaElement, Props>(
         (Number.parseFloat(cs.borderBottomWidth) || 0);
       const minH = Math.ceil(lineHeight * minRows + paddingY + borderY);
 
-      // Crítico no iOS/Safari/Chrome Android: zerar antes de medir
-      el.style.overflowY = 'hidden';
-      el.style.height = '0px';
+      // Preserva scroll da página — height:0 no mobile empurra o teclado/viewport
+      const pageX = window.scrollX;
+      const pageY = window.scrollY;
+      const vv = window.visualViewport;
+      const vvOffset = vv?.offsetTop ?? 0;
 
-      const scrollH = el.scrollHeight;
+      el.style.overflowY = 'hidden';
+      el.style.height = 'auto';
+      // Força reflow antes de medir
+      void el.offsetHeight;
+
+      let scrollH = el.scrollHeight;
+      // Fallback WebKit: se ainda veio “achatado”, tenta 1px
+      if (scrollH < minH - 1) {
+        el.style.height = '1px';
+        void el.offsetHeight;
+        scrollH = Math.max(el.scrollHeight, minH);
+      }
+
       const next = Math.min(Math.max(scrollH, minH), maxHeight);
       el.style.height = `${next}px`;
+      el.style.minHeight = `${minH}px`;
       el.style.overflowY = scrollH > maxHeight + 1 ? 'auto' : 'hidden';
+
+      window.scrollTo(pageX, pageY);
+      if (vv && typeof (document.documentElement as any).scrollTop === 'number') {
+        // Mantém posição relativa ao visualViewport no iOS
+        if (Math.abs((vv.offsetTop ?? 0) - vvOffset) > 1) {
+          window.scrollTo(pageX, pageY);
+        }
+      }
     }, [minRows, maxHeight]);
 
-    // Antes do paint — evita "piscar" e atraso no teclado mobile
     useLayoutEffect(() => {
       resize();
     }, [value, defaultValue, resize]);
@@ -70,7 +122,9 @@ export const AutoResizeTextarea = React.forwardRef<HTMLTextAreaElement, Props>(
       if (!el) return;
 
       const schedule = () => {
-        requestAnimationFrame(() => requestAnimationFrame(resize));
+        requestAnimationFrame(() => {
+          requestAnimationFrame(resize);
+        });
       };
 
       el.addEventListener('input', schedule);
@@ -78,15 +132,17 @@ export const AutoResizeTextarea = React.forwardRef<HTMLTextAreaElement, Props>(
       el.addEventListener('change', schedule);
       el.addEventListener('cut', schedule);
       el.addEventListener('paste', schedule);
+      el.addEventListener('compositionend', schedule);
 
       window.addEventListener('resize', schedule);
       window.visualViewport?.addEventListener('resize', schedule);
+      window.visualViewport?.addEventListener('scroll', schedule);
 
+      // Observa só o pai — observar o próprio textarea gera loop ao mudar height
       let ro: ResizeObserver | null = null;
-      if (typeof ResizeObserver !== 'undefined') {
+      if (typeof ResizeObserver !== 'undefined' && el.parentElement) {
         ro = new ResizeObserver(schedule);
-        ro.observe(el);
-        if (el.parentElement) ro.observe(el.parentElement);
+        ro.observe(el.parentElement);
       }
 
       schedule();
@@ -97,8 +153,10 @@ export const AutoResizeTextarea = React.forwardRef<HTMLTextAreaElement, Props>(
         el.removeEventListener('change', schedule);
         el.removeEventListener('cut', schedule);
         el.removeEventListener('paste', schedule);
+        el.removeEventListener('compositionend', schedule);
         window.removeEventListener('resize', schedule);
         window.visualViewport?.removeEventListener('resize', schedule);
+        window.visualViewport?.removeEventListener('scroll', schedule);
         ro?.disconnect();
       };
     }, [resize]);
@@ -109,7 +167,7 @@ export const AutoResizeTextarea = React.forwardRef<HTMLTextAreaElement, Props>(
         ref={setRefs}
         value={value}
         defaultValue={defaultValue}
-        rows={1}
+        rows={minRows}
         onFocus={(e) => {
           onFocus?.(e);
           requestAnimationFrame(resize);
@@ -123,7 +181,10 @@ export const AutoResizeTextarea = React.forwardRef<HTMLTextAreaElement, Props>(
           requestAnimationFrame(resize);
         }}
         className={`resize-none overflow-hidden box-border ${className}`}
-        style={style}
+        style={{
+          fieldSizing: nativeFieldSizing.current ? 'content' : undefined,
+          ...style,
+        } as React.CSSProperties}
       />
     );
   },
