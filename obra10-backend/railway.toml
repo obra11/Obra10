@@ -2,4 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "npx prisma migrate deploy && npm run start:prod"
+# Mantém baseline P3005 + start (scripts/railway-start.sh)
+startCommand = "sh scripts/railway-start.sh"
+healthcheckPath = "/health"
+healthcheckTimeout = 300

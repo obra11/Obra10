@@ -1,0 +1,46 @@
+name: Deploy Railway
+
+# Dispara deploy no Railway a partir do GitHub (não depende do webhook automático).
+# Configure o secret RAILWAY_TOKEN em:
+# GitHub → Settings → Secrets and variables → Actions
+# Token: https://railway.app/account/tokens
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, production]
+
+concurrency:
+  group: railway-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy from source
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ded39ed6-e471-4ee4-b28c-aefa0fcd0d68
+          RAILWAY_SERVICE_ID: 16745ab3-eb4e-457c-a96a-64b671256fa1
+          RAILWAY_ENVIRONMENT_ID: 55f50a98-4511-46b3-b519-c7f86e76a21b
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "Secret RAILWAY_TOKEN ausente. Crie em GitHub Actions secrets."
+            exit 1
+          fi
+          railway link --project "$RAILWAY_PROJECT_ID" --service "$RAILWAY_SERVICE_ID" --environment "$RAILWAY_ENVIRONMENT_ID"
+          # Sobe o código local do checkout (inclui client 2.9.11) e força build novo
+          cd obra10-backend
+          railway up --detach --ci
