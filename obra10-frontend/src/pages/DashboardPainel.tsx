@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { FileText, Users, LayoutDashboard, Image as ImageIcon, Loader2, ArrowRight, CheckCircle, Clock, AlertCircle, XCircle, AlertTriangle, Bell } from 'lucide-react';
+import { FileText, Users, LayoutDashboard, Image as ImageIcon, Loader2, ArrowRight, CheckCircle, Clock, AlertCircle, XCircle, AlertTriangle, Bell, TrendingUp } from 'lucide-react';
 import api from '../services/api';
 import { format } from 'date-fns';
 import { parseUTCDate } from '../utils/date';
 import { useNavigate } from 'react-router-dom';
 import { MediaGalleryModal } from '../components/MediaGalleryModal';
+import { AvancoObraBar } from '../components/AvancoObraBar';
 
 type RdoStatus = 'RASCUNHO' | 'EM_PREENCHIMENTO' | 'SUBMETIDO' | 'APROVADO' | 'REJEITADO';
 
@@ -35,6 +36,10 @@ interface DashboardStats {
   rdosPendentes: number;
   efetivoHoje: number;
   status: string;
+  percentualAvanco?: number | null;
+  clienteNome?: string | null;
+  dataInicio?: string | null;
+  dataPrevisaoTermino?: string | null;
   atividadesRecentes: Array<{
     id: string;
     dataReferencia: string;
@@ -137,6 +142,26 @@ export const Dashboard: React.FC = () => {
                   <p className="text-2xl font-bold text-gray-800">{stats?.status || obraAtiva?.status || 'ATIVA'}</p>
                 </div>
               </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8 flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="bg-red-50 text-lunardeli-red p-3 rounded-lg shrink-0 self-start">
+                <TrendingUp size={22} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-bold text-gray-800">Evolução da obra</h2>
+                <p className="text-xs text-gray-500 mt-0.5 mb-3">
+                  Acompanhe o avanço físico e a linha do tempo fotográfica do canteiro.
+                </p>
+                <AvancoObraBar percentual={stats?.percentualAvanco ?? obraAtiva?.percentualAvanco} />
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate(`/obras/${obraAtiva?.id}/evolucao`)}
+                className="min-h-12 px-4 bg-lunardeli-red hover:bg-red-700 text-white text-sm font-bold rounded-xl inline-flex items-center justify-center gap-1.5 shrink-0"
+              >
+                Ver evolução <ArrowRight size={14} />
+              </button>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">

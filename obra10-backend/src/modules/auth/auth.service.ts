@@ -255,6 +255,10 @@ export class AuthService {
         endereco: obra.endereco,
         status: obra.status,
         imageUrl: obra.imageUrl,
+        clienteNome: obra.clienteNome,
+        dataInicio: obra.dataInicio,
+        dataPrevisaoTermino: obra.dataPrevisaoTermino,
+        percentualAvanco: obra.percentualAvanco,
         minhasPermissoes: isPrivilegiado
           ? ['SUPER']
           : Object.keys(permissoesObj),

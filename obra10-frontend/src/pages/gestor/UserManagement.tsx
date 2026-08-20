@@ -85,7 +85,7 @@ const CAP_LABELS: { key: keyof Omit<RoleCapabilities, 'modulosPadrao'>; label: s
   { key: 'gerenciarFinanceiro', label: 'Financeiro e plano', hint: 'Acessar assinatura, cobranças e upgrade de plano', group: 'Empresa' },
   { key: 'gerenciarCatalogo', label: 'Cadastro Base', hint: 'Criar, editar e importar insumos do catálogo', group: 'Empresa' },
   { key: 'criarObra', label: 'Criar nova obra', hint: 'Cadastrar novos canteiros na conta', group: 'Obras' },
-  { key: 'editarObra', label: 'Editar obras', hint: 'Alterar nome, endereço e dados das obras', group: 'Obras' },
+  { key: 'editarObra', label: 'Editar obras', hint: 'Alterar nome, endereço, avanço e dados das obras', group: 'Obras' },
   { key: 'excluirObra', label: 'Excluir obras', hint: 'Remover obras da empresa', group: 'Obras' },
   { key: 'acessoTodasObras', label: 'Acesso a todas as obras', hint: 'Vê todas as obras sem vínculo explícito', group: 'Obras' },
   { key: 'aprovarRdo', label: 'Aprovar RDO', hint: 'Pode aprovar e reabrir diários de obra', group: 'RDO' },

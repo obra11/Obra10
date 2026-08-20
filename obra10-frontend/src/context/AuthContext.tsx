@@ -54,6 +54,10 @@ export interface Obra {
   endereco?: string;
   status: string;
   imageUrl?: string;
+  clienteNome?: string | null;
+  dataInicio?: string | null;
+  dataPrevisaoTermino?: string | null;
+  percentualAvanco?: number | null;
   minhasPermissoes?: string[];
   permissoes?: Record<string, string>;
 }

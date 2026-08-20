@@ -2,6 +2,11 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { perfilGlobalToObraNomeInterno } from '../../core/capabilities/obra-perfil';
+import {
+  clampPercentual,
+  montarTimelineEvolucao,
+  parseDateOnly,
+} from './obra-evolucao.helper';
 
 const JANELA_DIAS_PROBLEMAS = 30;
 const MAX_PROBLEMAS_PAINEL = 8;
@@ -206,6 +211,10 @@ export class ObraService {
           endereco: obra.endereco,
           status: obra.status,
           imageUrl: obra.imageUrl,
+          clienteNome: obra.clienteNome,
+          dataInicio: obra.dataInicio,
+          dataPrevisaoTermino: obra.dataPrevisaoTermino,
+          percentualAvanco: obra.percentualAvanco,
           createdAt: obra.createdAt,
         },
       };
@@ -297,12 +306,45 @@ export class ObraService {
   async editarObra(
     id: string,
     empresaId: string,
-    data: { nome?: string; endereco?: string; status?: string },
+    data: {
+      nome?: string;
+      endereco?: string;
+      status?: string;
+      clienteNome?: string | null;
+      dataInicio?: string | null;
+      dataPrevisaoTermino?: string | null;
+      percentualAvanco?: number | null;
+    },
   ) {
     if (!id) throw new Error('ID não fornecido');
     const obra = await this.prisma.obra.findFirst({ where: { id, empresaId } });
     if (!obra)
       throw new Error('Obra não encontrada ou não pertence a esta empresa.');
+
+    const dataInicio = parseDateOnly(data.dataInicio);
+    const dataPrevisaoTermino = parseDateOnly(data.dataPrevisaoTermino);
+    if (data.dataInicio !== undefined && dataInicio === undefined) {
+      throw new BadRequestException('dataInicio deve estar no formato YYYY-MM-DD.');
+    }
+    if (data.dataPrevisaoTermino !== undefined && dataPrevisaoTermino === undefined) {
+      throw new BadRequestException(
+        'dataPrevisaoTermino deve estar no formato YYYY-MM-DD.',
+      );
+    }
+    if (
+      dataInicio instanceof Date &&
+      dataPrevisaoTermino instanceof Date &&
+      dataPrevisaoTermino < dataInicio
+    ) {
+      throw new BadRequestException(
+        'A previsão de término não pode ser anterior à data de início.',
+      );
+    }
+
+    const percentualAvanco = clampPercentual(data.percentualAvanco);
+    if (data.percentualAvanco !== undefined && percentualAvanco === undefined) {
+      throw new BadRequestException('percentualAvanco deve ser um número de 0 a 100.');
+    }
 
     return this.prisma.obra.update({
       where: { id },
@@ -310,6 +352,12 @@ export class ObraService {
         ...(data.nome && { nome: data.nome }),
         ...(data.endereco !== undefined && { endereco: data.endereco }),
         ...(data.status && { status: data.status }),
+        ...(data.clienteNome !== undefined && {
+          clienteNome: data.clienteNome?.trim() || null,
+        }),
+        ...(dataInicio !== undefined && { dataInicio }),
+        ...(dataPrevisaoTermino !== undefined && { dataPrevisaoTermino }),
+        ...(percentualAvanco !== undefined && { percentualAvanco }),
       },
     });
   }
@@ -639,8 +687,107 @@ export class ObraService {
       rdosPendentes,
       efetivoHoje,
       status: obra.status,
+      percentualAvanco: obra.percentualAvanco,
+      clienteNome: obra.clienteNome,
+      dataInicio: obra.dataInicio,
+      dataPrevisaoTermino: obra.dataPrevisaoTermino,
       atividadesRecentes,
       principaisProblemas,
+    };
+  }
+
+  async getEvolucao(obraId: string, empresaId: string) {
+    const obra = await this.prisma.obra.findFirst({
+      where: { id: obraId, empresaId, deletedAt: null },
+    });
+    if (!obra) {
+      throw new BadRequestException('Obra não encontrada ou sem acesso.');
+    }
+
+    const tenantRdo = { obraId, deletedAt: null, obra: { empresaId } };
+
+    const [rdos, anexos] = await Promise.all([
+      this.prisma.rdo.findMany({
+        where: tenantRdo,
+        orderBy: { dataReferencia: 'desc' },
+        select: {
+          id: true,
+          dataReferencia: true,
+          status: true,
+          dadosExtras: true,
+          atividades: {
+            where: { deletedAt: null },
+            select: { descricao: true },
+          },
+        },
+        take: 400,
+      }),
+      this.prisma.anexo.findMany({
+        where: {
+          obraId,
+          deletedAt: null,
+          origem: { in: ['RDO', 'RDO_ATIVIDADE'] },
+          obra: { empresaId, deletedAt: null },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          attachableId: true,
+          urlS3: true,
+          mimeType: true,
+          tipoArquivo: true,
+          nomeOriginal: true,
+          createdAt: true,
+          criador: { select: { nome: true } },
+        },
+        take: 2000,
+      }),
+    ]);
+
+    const rdosInput = rdos.map((rdo) => {
+      const extras = (rdo.dadosExtras as any) || {};
+      const jsonAtividades = Array.isArray(extras.atividadesExecutadas)
+        ? extras.atividadesExecutadas
+            .map((a: any) => String(a?.descricao || '').trim())
+            .filter(Boolean)
+        : [];
+      const tabelaAtividades = rdo.atividades
+        .map((a) => String(a.descricao || '').trim())
+        .filter(Boolean);
+      return {
+        id: rdo.id,
+        dataReferencia: rdo.dataReferencia,
+        status: rdo.status,
+        atividades: jsonAtividades.length > 0 ? jsonAtividades : tabelaAtividades,
+      };
+    });
+
+    const fotosInput = anexos.map((a) => ({
+      id: a.id,
+      rdoId: a.attachableId,
+      urlS3: a.urlS3,
+      mimeType: a.mimeType,
+      tipoArquivo: a.tipoArquivo,
+      nomeOriginal: a.nomeOriginal,
+      createdAt: a.createdAt,
+      criadorNome: a.criador?.nome || null,
+    }));
+
+    const { dias, resumo } = montarTimelineEvolucao(rdosInput, fotosInput);
+
+    return {
+      obra: {
+        id: obra.id,
+        nome: obra.nome,
+        status: obra.status,
+        imageUrl: obra.imageUrl,
+        clienteNome: obra.clienteNome,
+        dataInicio: obra.dataInicio,
+        dataPrevisaoTermino: obra.dataPrevisaoTermino,
+        percentualAvanco: obra.percentualAvanco,
+      },
+      resumo,
+      dias,
     };
   }
 }

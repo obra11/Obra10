@@ -9,9 +9,23 @@ export const Configuracoes: React.FC = () => {
   const { user, obraAtiva, setObraAtiva, updateObraImage, fetchSession } = useAuth();
   const navigate = useNavigate();
 
+  const toDateInput = (value?: string | null) => {
+    if (!value) return '';
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return match ? `${match[1]}-${match[2]}-${match[3]}` : '';
+  };
+
   const [nome, setNome] = useState(obraAtiva?.nome || '');
   const [endereco, setEndereco] = useState(obraAtiva?.endereco || '');
   const [status, setStatus] = useState(obraAtiva?.status || 'ATIVA');
+  const [clienteNome, setClienteNome] = useState(obraAtiva?.clienteNome || '');
+  const [dataInicio, setDataInicio] = useState(toDateInput(obraAtiva?.dataInicio));
+  const [dataPrevisaoTermino, setDataPrevisaoTermino] = useState(
+    toDateInput(obraAtiva?.dataPrevisaoTermino),
+  );
+  const [percentualAvanco, setPercentualAvanco] = useState(
+    obraAtiva?.percentualAvanco == null ? '' : String(obraAtiva.percentualAvanco),
+  );
 
   const [loadingSave, setLoadingSave] = useState(false);
   const [loadingDelete, setLoadingDelete] = useState(false);
@@ -25,18 +39,40 @@ export const Configuracoes: React.FC = () => {
       setNome(obraAtiva.nome);
       setEndereco(obraAtiva.endereco || '');
       setStatus(obraAtiva.status);
+      setClienteNome(obraAtiva.clienteNome || '');
+      setDataInicio(toDateInput(obraAtiva.dataInicio));
+      setDataPrevisaoTermino(toDateInput(obraAtiva.dataPrevisaoTermino));
+      setPercentualAvanco(
+        obraAtiva.percentualAvanco == null ? '' : String(obraAtiva.percentualAvanco),
+      );
     }
   }, [obraAtiva]);
 
-  const isGestor = user?.perfilGlobal === 'GESTOR';
+  const isGestor =
+    user?.perfilGlobal === 'GESTOR' || user?.perfilGlobal === 'SUPER_ADMIN';
 
   const handleSave = async () => {
     if (!nome.trim() || !obraAtiva) return;
     setLoadingSave(true);
     setSaveSuccess(false);
     try {
-      await api.patch(`/obras/${obraAtiva.id}`, { nome, endereco, status });
-      const updatedObra = { ...obraAtiva, nome, endereco, status };
+      const payload = {
+        nome,
+        endereco,
+        status,
+        clienteNome: clienteNome.trim() || null,
+        dataInicio: dataInicio || null,
+        dataPrevisaoTermino: dataPrevisaoTermino || null,
+        percentualAvanco: percentualAvanco.trim() === '' ? null : Number(percentualAvanco),
+      };
+      const res = await api.patch(`/obras/${obraAtiva.id}`, payload);
+      const updatedObra = {
+        ...obraAtiva,
+        ...payload,
+        percentualAvanco: res.data?.percentualAvanco ?? payload.percentualAvanco,
+        dataInicio: res.data?.dataInicio ?? payload.dataInicio,
+        dataPrevisaoTermino: res.data?.dataPrevisaoTermino ?? payload.dataPrevisaoTermino,
+      };
       setObraAtiva(updatedObra);
       await fetchSession();
       setSaveSuccess(true);
@@ -104,7 +140,7 @@ export const Configuracoes: React.FC = () => {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Configurações da Obra</h1>
-          <p className="text-sm text-gray-500">Gerencie as informações gerais, imagem de capa, status e exclusão do canteiro ativo.</p>
+          <p className="text-sm text-gray-500">Gerencie as informações gerais, evolução, imagem de capa, status e exclusão do canteiro ativo.</p>
         </div>
       </div>
 
@@ -203,6 +239,56 @@ export const Configuracoes: React.FC = () => {
                     );
                   })}
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Cliente / contratante</label>
+                <input
+                  type="text"
+                  disabled={!isGestor}
+                  value={clienteNome}
+                  onChange={(e) => setClienteNome(e.target.value)}
+                  className="w-full px-3.5 py-2 border rounded-lg focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red outline-none disabled:bg-gray-50 disabled:text-gray-500"
+                  placeholder="Nome do cliente da obra"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Data de início</label>
+                  <input
+                    type="date"
+                    disabled={!isGestor}
+                    value={dataInicio}
+                    onChange={(e) => setDataInicio(e.target.value)}
+                    className="w-full min-h-12 px-3.5 py-2 border rounded-lg focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red outline-none disabled:bg-gray-50 disabled:text-gray-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Previsão de término</label>
+                  <input
+                    type="date"
+                    disabled={!isGestor}
+                    value={dataPrevisaoTermino}
+                    onChange={(e) => setDataPrevisaoTermino(e.target.value)}
+                    className="w-full min-h-12 px-3.5 py-2 border rounded-lg focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red outline-none disabled:bg-gray-50 disabled:text-gray-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Avanço físico (%)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  inputMode="numeric"
+                  disabled={!isGestor}
+                  value={percentualAvanco}
+                  onChange={(e) => setPercentualAvanco(e.target.value)}
+                  className="w-full sm:w-40 min-h-12 px-3.5 py-2 border rounded-lg focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red outline-none disabled:bg-gray-50 disabled:text-gray-500"
+                  placeholder="0–100"
+                />
               </div>
             </div>
           </div>

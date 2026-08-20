@@ -56,15 +56,19 @@ model Empresa {
 }
 
 model Obra {
-  id           String         @id @default(uuid())
-  empresaId    String         @map("empresa_id")
-  nome         String
-  endereco     String?
-  imageUrl     String?        @map("image_url")
-  status       String         @default("ATIVA")
-  createdAt    DateTime       @default(now()) @map("created_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
-  deletedAt    DateTime?      @map("deleted_at")
+  id                  String         @id @default(uuid())
+  empresaId           String         @map("empresa_id")
+  nome                String
+  endereco            String?
+  imageUrl            String?        @map("image_url")
+  status              String         @default("ATIVA")
+  clienteNome         String?        @map("cliente_nome")
+  dataInicio          DateTime?      @map("data_inicio")
+  dataPrevisaoTermino DateTime?      @map("data_previsao_termino")
+  percentualAvanco    Int?           @map("percentual_avanco")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+  deletedAt           DateTime?      @map("deleted_at")
   alertas      AlertaObra[]
   anexos       Anexo[]
   auditLogs    AuditLog[]

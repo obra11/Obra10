@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List, Headphones } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
+import { AvancoObraBar } from '../components/AvancoObraBar';
 
 export const CompanyDashboard: React.FC = () => {
   const { user, empresa, obras, logout, setObraAtiva, updateEmpresaLogo, updateUserPhoto } = useAuth();
@@ -483,6 +484,9 @@ export const CompanyDashboard: React.FC = () => {
                       <span className="line-clamp-2">{obra.endereco}</span>
                     </div>
                   )}
+                  {obra.percentualAvanco != null && (
+                    <AvancoObraBar percentual={obra.percentualAvanco} className="mb-4" />
+                  )}
                   
                   <div className="mt-auto pt-4 border-t border-gray-100">
                     <button 
@@ -531,6 +535,9 @@ export const CompanyDashboard: React.FC = () => {
                     ) : (
                       <div className="mb-3" />
                     )}
+                    {obra.percentualAvanco != null && (
+                      <AvancoObraBar percentual={obra.percentualAvanco} className="mb-3" showLabel={false} />
+                    )}
                   </div>
 
                   <button 
@@ -576,6 +583,9 @@ export const CompanyDashboard: React.FC = () => {
                         <MapPin size={13} className="shrink-0 text-gray-400" />
                         <span className="truncate">{obra.endereco}</span>
                       </p>
+                    )}
+                    {obra.percentualAvanco != null && (
+                      <p className="text-[11px] font-bold text-gray-600 mt-1">{obra.percentualAvanco}% de avanço</p>
                     )}
                   </div>
                 </div>

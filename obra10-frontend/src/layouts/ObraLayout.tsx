@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   LogOut, Settings, LayoutDashboard, Users, FileText, ArrowLeft, BarChart2, Loader2,
   Beaker, ClipboardCheck, Home, Package, Calendar, Clock, Layers, Files, ShieldCheck, Heart, BadgeDollarSign,
-  Building2, User, Boxes, Headphones, MoreHorizontal, X
+  Building2, User, Boxes, Headphones, MoreHorizontal, X, TrendingUp
 } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
@@ -106,6 +106,7 @@ export const ObraLayout: React.FC = () => {
   // Static permanent items
   const baseItems = [
     { name: 'Painel Geral', icon: LayoutDashboard, path: `/obras/${obraAtiva?.id}/dashboard`, visible: true },
+    { name: 'Evolução', icon: TrendingUp, path: `/obras/${obraAtiva?.id}/evolucao`, visible: true },
   ];
 
   // Dynamic module items based on what the company contracted AND what the user has permission for

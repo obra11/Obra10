@@ -26,6 +26,7 @@ import { Assinatura } from '../pages/Assinatura';
 import { Efetivo } from '../pages/obras/Efetivo';
 import { Perfil } from '../pages/Perfil';
 import { Configuracoes } from '../pages/obras/Configuracoes';
+import { EvolucaoObra } from '../pages/obras/EvolucaoObra';
 import { CatalogoPage } from '../pages/CatalogoPage';
 
 import { AdminRoute } from './AdminRoute';
@@ -107,6 +108,7 @@ export const AppRoutes: React.FC = () => {
 
       <Route path="/obras/:obraId/*" element={<ProtectedRoute><ObraLayout /></ProtectedRoute>}>
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="evolucao" element={<EvolucaoObra />} />
         <Route path="rdos" element={<RdoList />} />
         <Route path="rdos/novo" element={<DiarioDeObra />} />
         <Route path="rdos/:rdoId" element={<DiarioDeObra />} />
