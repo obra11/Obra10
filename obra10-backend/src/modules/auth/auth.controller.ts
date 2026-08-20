@@ -29,22 +29,43 @@ export class AuthController {
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    // Auto-lookup empresaId if not provided
+    const email = String(dto.email || '').trim().toLowerCase();
+    const senha = String(dto.senha || '');
+
+    // Auto-lookup empresaId se não veio no body.
+    // Mesmo e-mail pode existir em mais de uma empresa — tenta a senha em cada conta.
     let empresaId = dto.empresaId;
     if (!empresaId) {
-      const usuario = await this.prisma.usuario.findFirst({
-        where: { email: dto.email, ativo: true },
-        select: { empresaId: true },
+      const candidatos = await this.prisma.usuario.findMany({
+        where: {
+          email: { equals: email, mode: 'insensitive' },
+          ativo: true,
+          deletedAt: null,
+        },
+        select: { id: true, empresaId: true, senhaHash: true },
       });
-      if (!usuario) throw new UnauthorizedException('Credenciais inválidas.');
-      empresaId = usuario.empresaId;
+      if (!candidatos.length) {
+        throw new UnauthorizedException('Credenciais inválidas.');
+      }
+      if (candidatos.length === 1) {
+        empresaId = candidatos[0].empresaId;
+      } else {
+        const bcrypt = await import('bcrypt');
+        let matched: (typeof candidatos)[number] | null = null;
+        for (const c of candidatos) {
+          if (await bcrypt.compare(senha, c.senhaHash)) {
+            matched = c;
+            break;
+          }
+        }
+        if (!matched) {
+          throw new UnauthorizedException('Credenciais inválidas.');
+        }
+        empresaId = matched.empresaId;
+      }
     }
 
-    const result = await this.authService.login(
-      dto.email,
-      dto.senha,
-      empresaId,
-    );
+    const result = await this.authService.login(email, senha, empresaId);
 
     res.cookie('obra10_token', result.access_token, {
       httpOnly: true,

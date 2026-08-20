@@ -26,8 +26,13 @@ export class AuthService {
   ) {}
 
   async login(email: string, senhaPlana: string, empresaId: string) {
-    const user = await this.prisma.usuario.findUnique({
-      where: { empresaId_email: { empresaId, email } },
+    const emailNorm = String(email || '').trim().toLowerCase();
+    const user = await this.prisma.usuario.findFirst({
+      where: {
+        empresaId,
+        email: { equals: emailNorm, mode: 'insensitive' },
+        deletedAt: null,
+      },
       include: {
         empresa: {
           include: {
