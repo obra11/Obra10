@@ -127,39 +127,54 @@ function moveItemInArray<T>(list: T[], from: number, direction: -1 | 1): T[] {
   return next;
 }
 
-type ReorderButtonsProps = {
+type ItemSideActionsProps = {
   index: number;
   total: number;
   disabled?: boolean;
   onMove: (direction: -1 | 1) => void;
+  onRemove: () => void;
+  removeTitle?: string;
 };
 
-const ReorderButtons: React.FC<ReorderButtonsProps> = ({
+/** Coluna compacta: subir / descer / lixeira — libera espaço para o texto. */
+const ItemSideActions: React.FC<ItemSideActionsProps> = ({
   index,
   total,
   disabled,
   onMove,
+  onRemove,
+  removeTitle = 'Remover',
 }) => (
-  <div className="flex flex-col gap-0.5 shrink-0">
+  <div className="flex flex-col items-center gap-0.5 shrink-0 -mr-0.5">
     <button
       type="button"
       onClick={() => onMove(-1)}
       disabled={disabled || index === 0}
-      className="p-1.5 min-h-[36px] min-w-[36px] flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded disabled:opacity-30 disabled:hover:bg-transparent"
+      className="p-1 h-7 w-7 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-200/80 rounded disabled:opacity-25 disabled:hover:bg-transparent"
       title="Mover para cima"
       aria-label="Mover para cima"
     >
-      <ChevronUp size={16} />
+      <ChevronUp size={15} />
     </button>
     <button
       type="button"
       onClick={() => onMove(1)}
       disabled={disabled || index >= total - 1}
-      className="p-1.5 min-h-[36px] min-w-[36px] flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded disabled:opacity-30 disabled:hover:bg-transparent"
+      className="p-1 h-7 w-7 flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-200/80 rounded disabled:opacity-25 disabled:hover:bg-transparent"
       title="Mover para baixo"
       aria-label="Mover para baixo"
     >
-      <ChevronDown size={16} />
+      <ChevronDown size={15} />
+    </button>
+    <button
+      type="button"
+      onClick={onRemove}
+      disabled={disabled}
+      className="p-1 h-7 w-7 flex items-center justify-center text-red-500 hover:text-red-700 hover:bg-red-50 rounded disabled:opacity-25 disabled:hover:bg-transparent"
+      title={removeTitle}
+      aria-label={removeTitle}
+    >
+      <Trash2 size={14} />
     </button>
   </div>
 );
@@ -2026,50 +2041,45 @@ export const DiarioDeObra: React.FC = () => {
            >
              <div className="space-y-3">
                {atividadesExecutadas.map((atv, i) => (
-                  <div key={i} className="flex flex-col sm:flex-row gap-2 items-start p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                    <ReorderButtons
+                  <div key={i} className="flex gap-1.5 items-start p-2.5 sm:p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <AutoResizeTextarea
+                        minRows={2}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white"
+                        placeholder="Descrição detalhada da atividade executada..."
+                        value={atv.descricao}
+                        onChange={e => {
+                          const newVal = e.target.value;
+                          setAtividadesExecutadas(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: newVal } : item));
+                        }}
+                        disabled={isReadOnly}
+                      />
+                      <select
+                        className="w-full sm:w-44 border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red bg-white text-gray-700 font-medium"
+                        value={atv.status}
+                        onChange={e => {
+                          const newVal = e.target.value as 'em andamento' | 'pausado' | 'finalizada';
+                          setAtividadesExecutadas(prev => prev.map((item, idx) => idx === i ? { ...item, status: newVal } : item));
+                        }}
+                        disabled={isReadOnly}
+                      >
+                        <option value="em andamento">Em andamento</option>
+                        <option value="pausado">Pausado</option>
+                        <option value="finalizada">Finalizada</option>
+                      </select>
+                    </div>
+                    <ItemSideActions
                       index={i}
                       total={atividadesExecutadas.length}
                       disabled={isReadOnly}
                       onMove={(dir) =>
                         setAtividadesExecutadas((prev) => moveItemInArray(prev, i, dir))
                       }
+                      onRemove={() =>
+                        setAtividadesExecutadas((prev) => prev.filter((_, idx) => idx !== i))
+                      }
+                      removeTitle="Remover atividade"
                     />
-                    <AutoResizeTextarea
-                      minRows={2}
-                      className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white"
-                      placeholder="Descrição detalhada da atividade executada..."
-                      value={atv.descricao}
-                      onChange={e => {
-                        const newVal = e.target.value;
-                        setAtividadesExecutadas(prev => prev.map((item, idx) => idx === i ? { ...item, descricao: newVal } : item));
-                      }}
-                      disabled={isReadOnly}
-                    />
-                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 pt-0.5">
-                   <select 
-                     className="w-full sm:w-40 border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red bg-white text-gray-700 font-medium" 
-                     value={atv.status} 
-                     onChange={e => {
-                       const newVal = e.target.value as 'em andamento' | 'pausado' | 'finalizada';
-                       setAtividadesExecutadas(prev => prev.map((item, idx) => idx === i ? { ...item, status: newVal } : item));
-                     }}
-                     disabled={isReadOnly}
-                   >
-                     <option value="em andamento">Em andamento</option>
-                     <option value="pausado">Pausado</option>
-                     <option value="finalizada">Finalizada</option>
-                   </select>
-                   <button 
-                     type="button"
-                     onClick={() => setAtividadesExecutadas(prev => prev.filter((_, idx) => idx !== i))} 
-                     className="p-1.5 text-red-500 hover:bg-red-50 rounded self-end sm:self-auto shrink-0"
-                     title="Remover atividade"
-                     disabled={isReadOnly}
-                   >
-                     <Trash2 size={16}/>
-                   </button>
-                 </div>
                   </div>
                 ))}
                {atividadesExecutadas.length === 0 && (
@@ -2097,15 +2107,7 @@ export const DiarioDeObra: React.FC = () => {
              >
                <div className="space-y-3">
                  {observacoes.map((obs, i) => (
-                   <div key={i} className="flex flex-col sm:flex-row gap-2 items-start p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                     <ReorderButtons
-                       index={i}
-                       total={observacoes.length}
-                       disabled={isReadOnly}
-                       onMove={(dir) =>
-                         setObservacoes((prev) => moveItemInArray(prev, i, dir))
-                       }
-                     />
+                   <div key={i} className="flex gap-1.5 items-start p-2.5 sm:p-3 bg-gray-50 border border-gray-200 rounded-lg">
                      <AutoResizeTextarea
                        minRows={2}
                        className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white"
@@ -2117,15 +2119,18 @@ export const DiarioDeObra: React.FC = () => {
                        }}
                        disabled={isReadOnly}
                      />
-                     <button
-                       type="button"
-                       onClick={() => setObservacoes(prev => prev.filter((_, idx) => idx !== i))}
-                       className="p-1.5 text-red-500 hover:bg-red-50 rounded shrink-0"
-                       title="Remover observação"
+                     <ItemSideActions
+                       index={i}
+                       total={observacoes.length}
                        disabled={isReadOnly}
-                     >
-                       <Trash2 size={16}/>
-                     </button>
+                       onMove={(dir) =>
+                         setObservacoes((prev) => moveItemInArray(prev, i, dir))
+                       }
+                       onRemove={() =>
+                         setObservacoes((prev) => prev.filter((_, idx) => idx !== i))
+                       }
+                       removeTitle="Remover observação"
+                     />
                    </div>
                  ))}
                  {observacoes.length === 0 && (
@@ -2154,19 +2159,11 @@ export const DiarioDeObra: React.FC = () => {
              >
                <div className="space-y-3">
                  {atividadesPendentes.map((atv, i) => (
-                   <div key={i} className="flex flex-col gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                     <div className="flex flex-col sm:flex-row gap-2 items-start">
-                       <ReorderButtons
-                         index={i}
-                         total={atividadesPendentes.length}
-                         disabled={isReadOnly}
-                         onMove={(dir) =>
-                           setAtividadesPendentes((prev) => moveItemInArray(prev, i, dir))
-                         }
-                       />
+                   <div key={i} className="flex gap-1.5 items-start p-2.5 sm:p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                     <div className="flex-1 min-w-0 space-y-2">
                        <AutoResizeTextarea
                          minRows={2}
-                         className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white"
+                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white"
                          placeholder="Descrição da atividade pendente..."
                          value={atv.descricao}
                          onChange={e => {
@@ -2175,25 +2172,28 @@ export const DiarioDeObra: React.FC = () => {
                          }}
                          disabled={isReadOnly}
                        />
-                       <button
-                         type="button"
-                         onClick={() => setAtividadesPendentes(prev => prev.filter((_, idx) => idx !== i))}
-                         className="p-1.5 text-red-500 hover:bg-red-50 rounded shrink-0"
-                         title="Remover atividade pendente"
+                       <input
+                         className="w-full sm:w-72 border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white disabled:bg-gray-50"
+                         placeholder="Responsável pela atividade..."
+                         value={atv.responsavel}
+                         onChange={e => {
+                           const newVal = e.target.value;
+                           setAtividadesPendentes(prev => prev.map((item, idx) => idx === i ? { ...item, responsavel: newVal } : item));
+                         }}
                          disabled={isReadOnly}
-                       >
-                         <Trash2 size={16}/>
-                       </button>
+                       />
                      </div>
-                     <input
-                       className="w-full sm:w-72 border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white disabled:bg-gray-50"
-                       placeholder="Responsável pela atividade..."
-                       value={atv.responsavel}
-                       onChange={e => {
-                         const newVal = e.target.value;
-                         setAtividadesPendentes(prev => prev.map((item, idx) => idx === i ? { ...item, responsavel: newVal } : item));
-                       }}
+                     <ItemSideActions
+                       index={i}
+                       total={atividadesPendentes.length}
                        disabled={isReadOnly}
+                       onMove={(dir) =>
+                         setAtividadesPendentes((prev) => moveItemInArray(prev, i, dir))
+                       }
+                       onRemove={() =>
+                         setAtividadesPendentes((prev) => prev.filter((_, idx) => idx !== i))
+                       }
+                       removeTitle="Remover atividade pendente"
                      />
                    </div>
                  ))}
