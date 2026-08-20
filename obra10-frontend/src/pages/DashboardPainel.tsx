@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { FileText, Users, LayoutDashboard, Image as ImageIcon, Loader2, ArrowRight, CheckCircle, Clock, AlertCircle, XCircle } from 'lucide-react';
+import { FileText, Users, LayoutDashboard, Image as ImageIcon, Loader2, ArrowRight, CheckCircle, Clock, AlertCircle, XCircle, AlertTriangle, Bell } from 'lucide-react';
 import api from '../services/api';
 import { format } from 'date-fns';
 import { parseUTCDate } from '../utils/date';
@@ -19,6 +19,18 @@ const STATUS_CONFIG: Record<RdoStatus, { label: string; color: string; icon: Rea
 
 const getStatus = (s: string) => STATUS_CONFIG[s as RdoStatus] ?? STATUS_CONFIG.RASCUNHO;
 
+type GravidadeProblema = 'alta' | 'media' | 'baixa';
+
+interface ProblemaPainel {
+  id: string;
+  tipo: string;
+  titulo: string;
+  detalhe: string;
+  gravidade: GravidadeProblema;
+  data: string;
+  link: string;
+}
+
 interface DashboardStats {
   rdosPendentes: number;
   efetivoHoje: number;
@@ -29,7 +41,14 @@ interface DashboardStats {
     status: string;
     descricao: string;
   }>;
+  principaisProblemas?: ProblemaPainel[];
 }
+
+const GRAVIDADE_CONFIG: Record<GravidadeProblema, { label: string; wrap: string; icon: React.ReactNode }> = {
+  alta:  { label: 'Alta',  wrap: 'bg-red-50 text-lunardeli-red border-red-100', icon: <AlertTriangle size={16} /> },
+  media: { label: 'Média', wrap: 'bg-amber-50 text-amber-700 border-amber-100', icon: <AlertCircle size={16} /> },
+  baixa: { label: 'Baixa', wrap: 'bg-gray-50 text-gray-600 border-gray-200',     icon: <Bell size={16} /> },
+};
 
 export const Dashboard: React.FC = () => {
   const { obraAtiva } = useAuth();
@@ -118,6 +137,52 @@ export const Dashboard: React.FC = () => {
                   <p className="text-2xl font-bold text-gray-800">{stats?.status || obraAtiva?.status || 'ATIVA'}</p>
                 </div>
               </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+              <h2 className="text-xl font-bold text-gray-800 mb-4">Principais problemas</h2>
+              {!stats?.principaisProblemas || stats.principaisProblemas.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+                  <CheckCircle size={40} className="mb-3 opacity-20" />
+                  <p className="text-sm">Nenhum problema recente nesta obra.</p>
+                </div>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {stats.principaisProblemas.map((item) => {
+                    const grav = GRAVIDADE_CONFIG[item.gravidade] ?? GRAVIDADE_CONFIG.media;
+                    return (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => item.link && navigate(item.link)}
+                          className="w-full text-left py-3.5 flex items-start gap-3 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors"
+                        >
+                          <span className={`mt-0.5 h-9 w-9 shrink-0 rounded-lg border flex items-center justify-center ${grav.wrap}`}>
+                            {grav.icon}
+                          </span>
+                          <span className="flex-1 min-w-0">
+                            <span className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-semibold text-gray-800">{item.titulo}</span>
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${grav.wrap}`}>
+                                {grav.label}
+                              </span>
+                            </span>
+                            <span className="block text-xs text-gray-500 mt-0.5 line-clamp-2">{item.detalhe}</span>
+                          </span>
+                          <span className="shrink-0 text-right flex flex-col items-end gap-1">
+                            <span className="text-[11px] text-gray-400 whitespace-nowrap">
+                              {format(parseUTCDate(item.data), 'dd/MM/yyyy')}
+                            </span>
+                            <span className="text-xs font-bold text-lunardeli-red flex items-center gap-0.5">
+                              Ver <ArrowRight size={10} />
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

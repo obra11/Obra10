@@ -3,6 +3,151 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { perfilGlobalToObraNomeInterno } from '../../core/capabilities/obra-perfil';
 
+const JANELA_DIAS_PROBLEMAS = 30;
+const MAX_PROBLEMAS_PAINEL = 8;
+
+const MOTIVO_NAO_EXECUCAO_LABEL: Record<string, string> = {
+  FALTA_MATERIAL: 'Falta de material',
+  FALTA_MAO_DE_OBRA: 'Falta de mão de obra',
+  CHUVA: 'Chuva / clima',
+  EQUIPAMENTO_INDISPONIVEL: 'Equipamento indisponível',
+  AGUARDANDO_APROVACAO: 'Aguardando aprovação',
+  PROJETO_NAO_LIBERADO: 'Projeto não liberado',
+  RETRABALHO: 'Retrabalho',
+  INTERFERENCIA_TERCEIROS: 'Interferência de terceiros',
+  OUTROS: 'Outros',
+};
+
+type TipoProblemaPainel =
+  | 'RDO_REJEITADO'
+  | 'MOTIVO_NAO_EXECUCAO'
+  | 'OCORRENCIA'
+  | 'ALERTA';
+
+type GravidadeProblemaPainel = 'alta' | 'media' | 'baixa';
+
+type ProblemaPainelItem = {
+  id: string;
+  tipo: TipoProblemaPainel;
+  titulo: string;
+  detalhe: string;
+  gravidade: GravidadeProblemaPainel;
+  data: Date;
+  link: string;
+};
+
+function truncarTexto(texto: string, max = 160): string {
+  const t = String(texto || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!t) return '';
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1).trimEnd()}…`;
+}
+
+function labelMotivoNaoExecucao(motivo: string): string {
+  return MOTIVO_NAO_EXECUCAO_LABEL[motivo] || motivo.replace(/_/g, ' ').toLowerCase();
+}
+
+function tituloAlerta(tipo: string): string {
+  const conhecidos: Record<string, string> = {
+    AFERICAO_VENCENDO: 'Aferição vencendo',
+  };
+  if (conhecidos[tipo]) return conhecidos[tipo];
+  const texto = tipo.replace(/_/g, ' ').toLowerCase();
+  return texto ? texto.charAt(0).toUpperCase() + texto.slice(1) : 'Alerta da obra';
+}
+
+function inferirMotivoClima(dadosExtras: any): string {
+  const textClima = [
+    dadosExtras?.climaManha,
+    dadosExtras?.climaTarde,
+    dadosExtras?.climaNoite,
+    dadosExtras?.clima,
+    dadosExtras?.condicoesClimaticas,
+  ]
+    .filter(Boolean)
+    .map((c) => String(c).toLowerCase())
+    .join(' ');
+  if (
+    textClima.includes('chuva') ||
+    textClima.includes('chuvoso') ||
+    textClima.includes('chuvosa')
+  ) {
+    return 'CHUVA';
+  }
+  return 'OUTROS';
+}
+
+function agregarMotivosNaoExecucao(
+  rdos: Array<{
+    dataReferencia: Date;
+    dadosExtras: unknown;
+    tarefas: Array<{ motivoNaoExecucao: string | null }>;
+  }>,
+): Array<{ motivo: string; total: number; ultimaData: Date }> {
+  const motivoMap: Record<string, { total: number; ultimaData: Date }> = {};
+  const registrar = (motivo: string | null | undefined, data: Date) => {
+    if (!motivo) return;
+    const key = String(motivo);
+    const atual = motivoMap[key];
+    if (!atual) {
+      motivoMap[key] = { total: 1, ultimaData: data };
+      return;
+    }
+    atual.total += 1;
+    if (data > atual.ultimaData) atual.ultimaData = data;
+  };
+
+  for (const rdo of rdos) {
+    const d = (rdo.dadosExtras as any) || {};
+    const atividades = d.atividadesExecutadas || [];
+    if (Array.isArray(atividades) && atividades.length > 0) {
+      for (const a of atividades) {
+        if (!a?.descricao) continue;
+        if (a.status === 'finalizada') continue;
+        registrar(a.motivoNaoExecucao || inferirMotivoClima(d), rdo.dataReferencia);
+      }
+    } else {
+      for (const t of rdo.tarefas) {
+        registrar(t.motivoNaoExecucao, rdo.dataReferencia);
+      }
+    }
+  }
+
+  return Object.entries(motivoMap)
+    .map(([motivo, v]) => ({ motivo, ...v }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 3);
+}
+
+function extrairOcorrenciasDadosExtras(
+  rdos: Array<{ id: string; dataReferencia: Date; dadosExtras: unknown }>,
+  obraId: string,
+): ProblemaPainelItem[] {
+  const items: ProblemaPainelItem[] = [];
+  for (const rdo of rdos) {
+    const extras = (rdo.dadosExtras as any) || {};
+    const lista = extras.ocorrencias;
+    if (!Array.isArray(lista)) continue;
+    lista.forEach((o: any, idx: number) => {
+      const tipo = String(o?.tipoOcorrencia || o?.tipo || 'Ocorrência').trim();
+      const descricao = String(o?.descricao || o?.texto || '').trim();
+      if (!tipo && !descricao) return;
+      items.push({
+        id: `ocorrencia-json-${rdo.id}-${idx}`,
+        tipo: 'OCORRENCIA',
+        titulo: tipo || 'Ocorrência',
+        detalhe: truncarTexto(descricao || 'Sem descrição'),
+        gravidade: 'media',
+        data: rdo.dataReferencia,
+        link: `/obras/${obraId}/rdos/${rdo.id}`,
+      });
+    });
+  }
+  return items;
+}
+
 @Injectable()
 export class ObraService {
   constructor(
@@ -313,27 +458,93 @@ export class ObraService {
       throw new Error('Obra não encontrada ou sem acesso.');
     }
 
-    // 1. RDOs Pendentes (SUBMETIDO)
-    const rdosPendentes = await this.prisma.rdo.count({
-      where: { obraId, status: 'SUBMETIDO', deletedAt: null },
-    });
+    const since = new Date();
+    since.setDate(since.getDate() - JANELA_DIAS_PROBLEMAS);
+    const tenantRdo = { obraId, deletedAt: null, obra: { empresaId } };
 
-    // 2. Últimos RDOs para efetivo e atividade recente
-    const latestRdos = await this.prisma.rdo.findMany({
-      where: { obraId, deletedAt: null },
-      orderBy: { dataReferencia: 'desc' },
-      take: 5,
-      include: {
-        efetivos: {
-          where: { deletedAt: null },
+    const [
+      rdosPendentes,
+      latestRdos,
+      rdosRejeitados,
+      rdosPeriodo,
+      ocorrenciasDb,
+      alertasNaoLidos,
+    ] = await Promise.all([
+      this.prisma.rdo.count({
+        where: { ...tenantRdo, status: 'SUBMETIDO' },
+      }),
+      this.prisma.rdo.findMany({
+        where: tenantRdo,
+        orderBy: { dataReferencia: 'desc' },
+        take: 5,
+        include: {
+          efetivos: { where: { deletedAt: null } },
+          atividades: { where: { deletedAt: null } },
         },
-        atividades: {
-          where: { deletedAt: null },
+      }),
+      this.prisma.rdo.findMany({
+        where: {
+          ...tenantRdo,
+          status: 'REJEITADO',
+          updatedAt: { gte: since },
         },
-      },
-    });
+        orderBy: { updatedAt: 'desc' },
+        take: MAX_PROBLEMAS_PAINEL,
+        select: {
+          id: true,
+          dataReferencia: true,
+          rejeitadoMotivo: true,
+          updatedAt: true,
+          aprovacaoAt: true,
+        },
+      }),
+      this.prisma.rdo.findMany({
+        where: {
+          ...tenantRdo,
+          dataReferencia: { gte: since },
+        },
+        select: {
+          id: true,
+          dataReferencia: true,
+          dadosExtras: true,
+          tarefas: { select: { motivoNaoExecucao: true } },
+        },
+        take: 500,
+      }),
+      this.prisma.rdoOcorrencia.findMany({
+        where: {
+          deletedAt: null,
+          createdAt: { gte: since },
+          rdo: tenantRdo,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: MAX_PROBLEMAS_PAINEL,
+        select: {
+          id: true,
+          tipoOcorrencia: true,
+          descricao: true,
+          createdAt: true,
+          rdoId: true,
+        },
+      }),
+      this.prisma.alertaObra.findMany({
+        where: {
+          obraId,
+          lido: false,
+          createdAt: { gte: since },
+          obra: { empresaId },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: MAX_PROBLEMAS_PAINEL,
+        select: {
+          id: true,
+          tipo: true,
+          mensagem: true,
+          createdAt: true,
+        },
+      }),
+    ]);
 
-    // Efetivo Hoje: soma das quantidades do RDO mais recente
     let efetivoHoje = 0;
     if (latestRdos.length > 0) {
       const latestRdo = latestRdos[0];
@@ -352,7 +563,6 @@ export class ObraService {
       }
     }
 
-    // Atividades Recentes: mapear últimos 5 RDOs
     const atividadesRecentes = latestRdos.map((rdo) => {
       const d = (rdo.dadosExtras as any) || {};
       const atividades = d.atividadesExecutadas || [];
@@ -370,11 +580,67 @@ export class ObraService {
       };
     });
 
+    const problemasRejeitados: ProblemaPainelItem[] = rdosRejeitados.map((rdo) => ({
+      id: `rejeitado-${rdo.id}`,
+      tipo: 'RDO_REJEITADO',
+      titulo: 'RDO rejeitado',
+      detalhe: truncarTexto(rdo.rejeitadoMotivo || 'Sem motivo informado'),
+      gravidade: 'alta',
+      data: rdo.aprovacaoAt || rdo.updatedAt || rdo.dataReferencia,
+      link: `/obras/${obraId}/rdos/${rdo.id}`,
+    }));
+
+    const problemasMotivos: ProblemaPainelItem[] = agregarMotivosNaoExecucao(
+      rdosPeriodo,
+    ).map((m) => ({
+      id: `motivo-${m.motivo}`,
+      tipo: 'MOTIVO_NAO_EXECUCAO',
+      titulo: `Não execução: ${labelMotivoNaoExecucao(m.motivo)}`,
+      detalhe: `${m.total} ocorrência${m.total === 1 ? '' : 's'} nos últimos ${JANELA_DIAS_PROBLEMAS} dias`,
+      gravidade: 'media',
+      data: m.ultimaData,
+      link: `/obras/${obraId}/rdos/dashboard`,
+    }));
+
+    const problemasOcorrenciasTabela: ProblemaPainelItem[] = ocorrenciasDb.map(
+      (o) => ({
+        id: `ocorrencia-${o.id}`,
+        tipo: 'OCORRENCIA',
+        titulo: o.tipoOcorrencia || 'Ocorrência',
+        detalhe: truncarTexto(o.descricao || 'Sem descrição'),
+        gravidade: 'media',
+        data: o.createdAt,
+        link: `/obras/${obraId}/rdos/${o.rdoId}`,
+      }),
+    );
+    const problemasOcorrencias =
+      problemasOcorrenciasTabela.length > 0
+        ? problemasOcorrenciasTabela
+        : extrairOcorrenciasDadosExtras(rdosPeriodo, obraId);
+
+    const problemasAlertas: ProblemaPainelItem[] = alertasNaoLidos.map((a) => ({
+      id: `alerta-${a.id}`,
+      tipo: 'ALERTA',
+      titulo: tituloAlerta(a.tipo),
+      detalhe: truncarTexto(a.mensagem || 'Alerta da obra'),
+      gravidade: 'baixa',
+      data: a.createdAt,
+      link: `/obras/${obraId}/rdos`,
+    }));
+
+    const principaisProblemas = [
+      ...problemasRejeitados,
+      ...problemasMotivos,
+      ...problemasOcorrencias,
+      ...problemasAlertas,
+    ].slice(0, MAX_PROBLEMAS_PAINEL);
+
     return {
       rdosPendentes,
       efetivoHoje,
       status: obra.status,
       atividadesRecentes,
+      principaisProblemas,
     };
   }
 }
