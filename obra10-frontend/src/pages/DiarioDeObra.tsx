@@ -117,6 +117,53 @@ interface AtividadePendenteItem {
   responsavel: string;
 }
 
+/** Move item uma posição para cima (-1) ou para baixo (+1). */
+function moveItemInArray<T>(list: T[], from: number, direction: -1 | 1): T[] {
+  const to = from + direction;
+  if (to < 0 || to >= list.length) return list;
+  const next = [...list];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+type ReorderButtonsProps = {
+  index: number;
+  total: number;
+  disabled?: boolean;
+  onMove: (direction: -1 | 1) => void;
+};
+
+const ReorderButtons: React.FC<ReorderButtonsProps> = ({
+  index,
+  total,
+  disabled,
+  onMove,
+}) => (
+  <div className="flex flex-col gap-0.5 shrink-0">
+    <button
+      type="button"
+      onClick={() => onMove(-1)}
+      disabled={disabled || index === 0}
+      className="p-1.5 min-h-[36px] min-w-[36px] flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded disabled:opacity-30 disabled:hover:bg-transparent"
+      title="Mover para cima"
+      aria-label="Mover para cima"
+    >
+      <ChevronUp size={16} />
+    </button>
+    <button
+      type="button"
+      onClick={() => onMove(1)}
+      disabled={disabled || index >= total - 1}
+      className="p-1.5 min-h-[36px] min-w-[36px] flex items-center justify-center text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded disabled:opacity-30 disabled:hover:bg-transparent"
+      title="Mover para baixo"
+      aria-label="Mover para baixo"
+    >
+      <ChevronDown size={16} />
+    </button>
+  </div>
+);
+
 /** Converte texto legado (string) ou array no formato estruturado de observações. */
 function parseObservacoes(raw: unknown): ObservacaoItem[] {
   if (typeof raw === 'string') {
@@ -1980,6 +2027,14 @@ export const DiarioDeObra: React.FC = () => {
              <div className="space-y-3">
                {atividadesExecutadas.map((atv, i) => (
                   <div key={i} className="flex flex-col sm:flex-row gap-2 items-start p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <ReorderButtons
+                      index={i}
+                      total={atividadesExecutadas.length}
+                      disabled={isReadOnly}
+                      onMove={(dir) =>
+                        setAtividadesExecutadas((prev) => moveItemInArray(prev, i, dir))
+                      }
+                    />
                     <AutoResizeTextarea
                       minRows={2}
                       className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white"
@@ -2043,6 +2098,14 @@ export const DiarioDeObra: React.FC = () => {
                <div className="space-y-3">
                  {observacoes.map((obs, i) => (
                    <div key={i} className="flex flex-col sm:flex-row gap-2 items-start p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                     <ReorderButtons
+                       index={i}
+                       total={observacoes.length}
+                       disabled={isReadOnly}
+                       onMove={(dir) =>
+                         setObservacoes((prev) => moveItemInArray(prev, i, dir))
+                       }
+                     />
                      <AutoResizeTextarea
                        minRows={2}
                        className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white"
@@ -2093,6 +2156,14 @@ export const DiarioDeObra: React.FC = () => {
                  {atividadesPendentes.map((atv, i) => (
                    <div key={i} className="flex flex-col gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                      <div className="flex flex-col sm:flex-row gap-2 items-start">
+                       <ReorderButtons
+                         index={i}
+                         total={atividadesPendentes.length}
+                         disabled={isReadOnly}
+                         onMove={(dir) =>
+                           setAtividadesPendentes((prev) => moveItemInArray(prev, i, dir))
+                         }
+                       />
                        <AutoResizeTextarea
                          minRows={2}
                          className="flex-1 min-w-0 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white"
