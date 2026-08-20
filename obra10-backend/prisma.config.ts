@@ -7,7 +7,8 @@ import { defineConfig } from 'prisma/config';
  */
 const isBuildOnly =
   process.env.PRISMA_BUILD_PLACEHOLDER === '1' ||
-  process.env.npm_lifecycle_event === 'build';
+  process.env.npm_lifecycle_event === 'build' ||
+  process.env.npm_lifecycle_event === 'postinstall';
 
 function normalizeDatabaseUrl(raw: string | undefined): string | undefined {
   if (raw == null) return undefined;

@@ -14,6 +14,9 @@ RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
+# Placeholder antes do npm install: postinstall roda `prisma generate` sem banco.
+ENV PRISMA_BUILD_PLACEHOLDER=1
+
 # Copy package.json, prisma schema, and prisma config first (layer caching)
 COPY obra10-backend/package.json ./
 COPY obra10-backend/prisma.config.ts ./
@@ -26,7 +29,6 @@ RUN npm install
 COPY obra10-backend/ .
 
 # Generate Prisma client and build NestJS (sem banco real no build)
-ENV PRISMA_BUILD_PLACEHOLDER=1
 RUN npx prisma generate && npx nest build
 ENV PRISMA_BUILD_PLACEHOLDER=
 
