@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
-import { RdoStatus, StatusExecucaoTarefa } from '@prisma/client';
+import { RdoStatus, StatusExecucaoTarefa, TipoRelatorioRdo } from '@prisma/client';
 
 /**
  * Versão atual do schema JSON do dadosExtras.
@@ -21,11 +21,60 @@ interface DadosExtrasMinimos {
   data: string; // ISO date string (YYYY-MM-DD)
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseIsoDateOnly(raw: string): Date | null {
+  const match = String(raw || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  const d = new Date(`${match[1]}-${match[2]}-${match[3]}T12:00:00.000Z`);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function resolverTipoRelatorio(dados: any): TipoRelatorioRdo {
+  const raw = String(dados?.tipoRelatorio || '').toUpperCase();
+  return raw === 'PERIODO' ? TipoRelatorioRdo.PERIODO : TipoRelatorioRdo.DIA;
+}
+
 function validarDadosExtras(dados: any): dados is DadosExtrasMinimos {
   if (!dados || typeof dados !== 'object') return false;
   if (typeof dados.versao !== 'number') return false;
   if (!dados.data || typeof dados.data !== 'string') return false;
+  if (resolverTipoRelatorio(dados) !== TipoRelatorioRdo.PERIODO) return true;
+
+  const inicio = String(dados.dataInicio || dados.data || '');
+  const fim = String(dados.dataFim || '');
+  if (!ISO_DATE.test(inicio.slice(0, 10)) || !ISO_DATE.test(fim.slice(0, 10))) {
+    return false;
+  }
+  const dInicio = parseIsoDateOnly(inicio);
+  const dFim = parseIsoDateOnly(fim);
+  if (!dInicio || !dFim || dInicio > dFim) return false;
+
+  const diasChuva = Number(dados.diasChuva);
+  if (!Number.isFinite(diasChuva) || diasChuva < 0 || !Number.isInteger(diasChuva)) {
+    return false;
+  }
   return true;
+}
+
+function camposPeriodoDoExtras(dados: any): {
+  tipoRelatorio: TipoRelatorioRdo;
+  dataReferencia: Date;
+  dataFim: Date | null;
+} {
+  const tipoRelatorio = resolverTipoRelatorio(dados);
+  if (tipoRelatorio === TipoRelatorioRdo.PERIODO) {
+    const dataReferencia = parseIsoDateOnly(dados.dataInicio || dados.data)!;
+    const dataFim = parseIsoDateOnly(dados.dataFim)!;
+    return { tipoRelatorio, dataReferencia, dataFim };
+  }
+  const dataReferencia = parseIsoDateOnly(dados.data);
+  if (!dataReferencia) {
+    throw new BadRequestException(
+      'dataReferencia inválida — use formato YYYY-MM-DD.',
+    );
+  }
+  return { tipoRelatorio, dataReferencia, dataFim: null };
 }
 
 @Injectable()
@@ -99,6 +148,8 @@ export class RdoService {
         criadorId: true,
         aprovadorId: true,
         dataReferencia: true,
+        dataFim: true,
+        tipoRelatorio: true,
         status: true,
         createdAt: true,
         updatedAt: true,
@@ -209,20 +260,32 @@ export class RdoService {
 
   // ===================== CRUD RDO BASE =====================
   async create(obraId: string, criadorId: string, dataParams: any) {
-    const rawDate = dataParams.dataReferencia ?? dataParams.data;
-    if (!rawDate)
-      throw new BadRequestException('Campo dataReferencia é obrigatório.');
-    const dataRef = new Date(rawDate);
-    if (isNaN(dataRef.getTime()))
-      throw new BadRequestException(
-        'dataReferencia inválida — use formato YYYY-MM-DD.',
-      );
-
     const dadosExtras = dataParams.dadosExtras ?? null;
     if (dadosExtras && !validarDadosExtras(dadosExtras)) {
       throw new BadRequestException(
-        'dadosExtras inválido: campos obrigatórios (versao, data) ausentes.',
+        'dadosExtras inválido: para período informe data início, data fim e dias de chuva (>= 0).',
       );
+    }
+
+    let tipoRelatorio: TipoRelatorioRdo = TipoRelatorioRdo.DIA;
+    let dataRef: Date;
+    let dataFim: Date | null = null;
+
+    if (dadosExtras) {
+      const campos = camposPeriodoDoExtras(dadosExtras);
+      tipoRelatorio = campos.tipoRelatorio;
+      dataRef = campos.dataReferencia;
+      dataFim = campos.dataFim;
+    } else {
+      const rawDate = dataParams.dataReferencia ?? dataParams.data;
+      if (!rawDate)
+        throw new BadRequestException('Campo dataReferencia é obrigatório.');
+      const parsed = parseIsoDateOnly(String(rawDate));
+      if (!parsed)
+        throw new BadRequestException(
+          'dataReferencia inválida — use formato YYYY-MM-DD.',
+        );
+      dataRef = parsed;
     }
 
     return this.prisma.rdo.create({
@@ -230,6 +293,8 @@ export class RdoService {
         obraId,
         criadorId,
         dataReferencia: dataRef,
+        dataFim,
+        tipoRelatorio,
         status: RdoStatus.RASCUNHO,
         dadosExtras: dadosExtras
           ? { ...dadosExtras, versao: DADOS_EXTRAS_VERSAO }
@@ -249,12 +314,13 @@ export class RdoService {
       );
     if (!validarDadosExtras(dadosExtras)) {
       throw new BadRequestException(
-        'dadosExtras inválido: campos obrigatórios (versao, data) ausentes.',
+        'dadosExtras inválido: para período informe data início, data fim e dias de chuva (>= 0).',
       );
     }
 
     // Injetar versão canônica para garantir compatibilidade futura
     const extrasVersioned = { ...dadosExtras, versao: DADOS_EXTRAS_VERSAO };
+    const campos = camposPeriodoDoExtras(extrasVersioned);
 
     const isPrivileged = await this.isPrivilegedEditor(user);
 
@@ -270,6 +336,9 @@ export class RdoService {
       where: { id: rdoId },
       data: {
         dadosExtras: extrasVersioned,
+        dataReferencia: campos.dataReferencia,
+        dataFim: campos.dataFim,
+        tipoRelatorio: campos.tipoRelatorio,
         status,
       },
     });

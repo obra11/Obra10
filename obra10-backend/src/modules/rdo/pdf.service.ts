@@ -96,6 +96,29 @@ export class PdfService {
     });
 
     const extras = (rdo.dadosExtras as any) || {};
+    const isPeriodo =
+      rdo.tipoRelatorio === 'PERIODO' ||
+      String(extras.tipoRelatorio || '').toUpperCase() === 'PERIODO';
+
+    const formatPdfDate = (d: Date | string | null | undefined) => {
+      if (!d) return '-';
+      const date = d instanceof Date ? d : new Date(d);
+      if (isNaN(date.getTime())) return '-';
+      return date.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        timeZone: 'UTC',
+      });
+    };
+
+    const dataStr = isPeriodo
+      ? `${formatPdfDate(rdo.dataReferencia)} a ${formatPdfDate(rdo.dataFim || extras.dataFim)}`
+      : new Date(rdo.dataReferencia).toLocaleDateString('pt-BR', {
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric',
+        });
 
     const pdfDoc = await PDFDocument.create();
     const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -182,11 +205,6 @@ export class PdfService {
     // ── CABEÇALHO ───────────────────────────────────────────────────────────────
     const empresa = rdo.obra.empresa;
     const nomeEmpresa = empresa.nomeFantasia || empresa.razaoSocial || 'Empresa';
-    const dataStr = new Date(rdo.dataReferencia).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-    });
 
     // Carrega logo da empresa (se houver) para o card de cabeçalho
     const LOGO_MAX_W = 72;
@@ -232,7 +250,9 @@ export class PdfService {
     });
     drawText('OBRA 10', m.l + 12, headerTop - 2, 16, bold, LUNARDELI_DARK);
 
-    const subtitle = 'RELATORIO DIARIO DE OBRA';
+    const subtitle = isPeriodo
+      ? 'RELATORIO DE OBRA - PERIODO'
+      : 'RELATORIO DIARIO DE OBRA';
     const subtitleW = reg.widthOfTextAtSize(subtitle, 9);
     ctx.page.drawText(subtitle, {
       x: ctx.w - m.r - subtitleW,
@@ -322,9 +342,9 @@ export class PdfService {
       color: LUNARDELI_DARK,
     });
 
-    ctx.page.drawText('DATA:', { x: col2X, y: cardTextY1, size: 8, font: bold, color: LUNARDELI_DARK });
+    ctx.page.drawText(isPeriodo ? 'PERIODO:' : 'DATA:', { x: col2X, y: cardTextY1, size: 8, font: bold, color: LUNARDELI_DARK });
     ctx.page.drawText(safeStr(dataStr), {
-      x: col2X + 35,
+      x: col2X + (isPeriodo ? 50 : 35),
       y: cardTextY1,
       size: 8,
       font: reg,
@@ -364,8 +384,8 @@ export class PdfService {
 
     ctx.y = cardY - 15;
 
-    // ── CONDICOES DO DIA ─────────────────────────────────────────────────────────
-    drawSectionTitle('CONDICOES DO DIA');
+    // ── CONDICOES DO DIA / PERIODO ───────────────────────────────────────────────
+    drawSectionTitle(isPeriodo ? 'CONDICOES DO PERIODO' : 'CONDICOES DO DIA');
     
     ensureSpace(45);
     const condCardH = 36;
@@ -381,16 +401,22 @@ export class PdfService {
       borderWidth: 0.8,
     });
     
-    const condCols = [
-      { label: 'MANHA', value: safeStr(extras.climaManha) },
-      { label: 'TARDE', value: safeStr(extras.climaTarde) },
-      { label: 'NOITE', value: safeStr(extras.climaNoite) },
-      { label: 'TERRENO', value: safeStr(extras.condicaoTerreno) },
-      { label: 'TEMP. MIN', value: extras.tempMin ? `${extras.tempMin}°C` : '-' },
-      { label: 'TEMP. MAX', value: extras.tempMax ? `${extras.tempMax}°C` : '-' },
-    ];
+    const condCols = isPeriodo
+      ? [
+          { label: 'DIAS DE CHUVA', value: extras.diasChuva != null && extras.diasChuva !== '' ? String(extras.diasChuva) : '-' },
+          { label: 'TEMP. MIN', value: extras.tempMin ? `${extras.tempMin}°C` : '-' },
+          { label: 'TEMP. MAX', value: extras.tempMax ? `${extras.tempMax}°C` : '-' },
+        ]
+      : [
+          { label: 'MANHA', value: safeStr(extras.climaManha) },
+          { label: 'TARDE', value: safeStr(extras.climaTarde) },
+          { label: 'NOITE', value: safeStr(extras.climaNoite) },
+          { label: 'TERRENO', value: safeStr(extras.condicaoTerreno) },
+          { label: 'TEMP. MIN', value: extras.tempMin ? `${extras.tempMin}°C` : '-' },
+          { label: 'TEMP. MAX', value: extras.tempMax ? `${extras.tempMax}°C` : '-' },
+        ];
     
-    const colW = CONTENT_W / 6;
+    const colW = CONTENT_W / condCols.length;
     const labelY = condCardY + condCardH - 12;
     const valY = condCardY + 8;
     

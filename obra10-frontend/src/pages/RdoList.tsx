@@ -82,6 +82,18 @@ const STATUS_CONFIG: Record<
 const getStatus = (s: string) =>
   STATUS_CONFIG[s as RdoStatus] ?? STATUS_CONFIG.RASCUNHO;
 
+function isRdoPeriodo(rdo: any): boolean {
+  return String(rdo?.tipoRelatorio || '').toUpperCase() === 'PERIODO';
+}
+
+function formatRdoDataLista(rdo: any): string {
+  const inicio = format(parseUTCDate(rdo.dataReferencia), 'dd/MM/yyyy');
+  if (isRdoPeriodo(rdo) && rdo.dataFim) {
+    return `${inicio} – ${format(parseUTCDate(rdo.dataFim), 'dd/MM/yyyy')}`;
+  }
+  return inicio;
+}
+
 export const RdoList: React.FC = () => {
   const { obraAtiva } = useAuth();
   const navigate = useNavigate();
@@ -1713,6 +1725,11 @@ export const RdoList: React.FC = () => {
                         }
                       >
                         #{rdo.sequencial ?? rdo.id.slice(-6).toUpperCase()}
+                        {isRdoPeriodo(rdo) && (
+                          <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-red-50 text-lunardeli-red border border-red-100">
+                            Período
+                          </span>
+                        )}
                       </td>
                       <td
                         className="p-4 font-medium text-lunardeli-dark cursor-pointer"
@@ -1720,7 +1737,7 @@ export const RdoList: React.FC = () => {
                           navigate(`/obras/${obraAtiva?.id}/rdos/${rdo.id}`)
                         }
                       >
-                        {format(parseUTCDate(rdo.dataReferencia), 'dd/MM/yyyy')}
+                        {formatRdoDataLista(rdo)}
                       </td>
                       <td
                         className="p-4 text-gray-600 text-sm cursor-pointer"
@@ -1728,8 +1745,9 @@ export const RdoList: React.FC = () => {
                           navigate(`/obras/${obraAtiva?.id}/rdos/${rdo.id}`)
                         }
                       >
-                        {rdo.dadosExtras?.climaManha ?? '-'} /{' '}
-                        {rdo.dadosExtras?.climaTarde ?? '-'}
+                        {isRdoPeriodo(rdo)
+                          ? 'Período'
+                          : `${rdo.dadosExtras?.climaManha ?? '-'} / ${rdo.dadosExtras?.climaTarde ?? '-'}`}
                       </td>
                       <td
                         className="p-4 text-gray-600 text-sm cursor-pointer"
@@ -1841,6 +1859,11 @@ export const RdoList: React.FC = () => {
                         <span className="text-xs font-bold text-lunardeli-red">
                           #{rdo.sequencial ?? rdo.id.slice(-6).toUpperCase()}
                         </span>
+                        {isRdoPeriodo(rdo) && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-red-50 text-lunardeli-red border border-red-100">
+                            Período
+                          </span>
+                        )}
                         <span
                           className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${st.color}`}
                         >
@@ -1848,10 +1871,12 @@ export const RdoList: React.FC = () => {
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 truncate">
-                        {rdo.dadosExtras?.climaManha
-                          ? `${rdo.dadosExtras.climaManha}`
-                          : '—'}{' '}
-                        · {rdo.dadosExtras?.condicaoTerreno ?? '—'}
+                        {isRdoPeriodo(rdo)
+                          ? formatRdoDataLista(rdo)
+                          : rdo.dadosExtras?.climaManha
+                            ? `${rdo.dadosExtras.climaManha}`
+                            : '—'}{' '}
+                        {isRdoPeriodo(rdo) ? '' : `· ${rdo.dadosExtras?.condicaoTerreno ?? '—'}`}
                       </p>
                     </button>
 
@@ -1975,8 +2000,13 @@ export const RdoList: React.FC = () => {
                               #{rdo.sequencial ?? rdo.id.slice(-6).toUpperCase()}
                             </span>
                             <span className="text-sm text-gray-700">
-                              {format(parseUTCDate(rdo.dataReferencia), 'dd/MM/yyyy')}
+                              {formatRdoDataLista(rdo)}
                             </span>
+                            {isRdoPeriodo(rdo) && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-red-50 text-lunardeli-red border border-red-100">
+                                Período
+                              </span>
+                            )}
                           </div>
                           <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${st.color}`}>
                             {st.label}

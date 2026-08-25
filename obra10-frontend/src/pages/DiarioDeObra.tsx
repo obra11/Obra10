@@ -5,7 +5,7 @@ import {
   ClipboardList, CloudSun, Users, Hammer, Drill,
   CheckSquare, FileSpreadsheet, Paperclip, MessageSquare, ShieldCheck,
   Plus, Trash2, Video, FileText, Image as ImageIcon, Save, Send, RotateCcw, ArrowLeft,
-  ChevronDown, ChevronUp, Maximize2, Minimize2, Camera, FolderOpen, Images
+  ChevronDown, ChevronUp, Maximize2, Minimize2, Camera, FolderOpen, Images, Calendar
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { parseUTCDate } from '../utils/date';
@@ -115,6 +115,19 @@ interface ObservacaoItem {
 interface AtividadePendenteItem {
   descricao: string;
   responsavel: string;
+}
+
+type TipoRelatorio = 'DIA' | 'PERIODO';
+
+function isoDateOnly(value: any, fallback: string): string {
+  if (!value) return fallback;
+  const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : fallback;
+}
+
+function tipoDeExtras(extras: any, rdo?: any): TipoRelatorio {
+  const raw = String(extras?.tipoRelatorio || rdo?.tipoRelatorio || 'DIA').toUpperCase();
+  return raw === 'PERIODO' ? 'PERIODO' : 'DIA';
 }
 
 /** Move item uma posição para cima (-1) ou para baixo (+1). */
@@ -379,6 +392,9 @@ export const DiarioDeObra: React.FC = () => {
   // ── Seção 1 ── Informações gerais
   const today = new Date().toISOString().split('T')[0];
   const [data, setData] = useState(today);
+  const [dataFim, setDataFim] = useState(today);
+  const [tipoRelatorio, setTipoRelatorio] = useState<TipoRelatorio | null>(null);
+  const [diasChuva, setDiasChuva] = useState('0');
   const [nomeObra, setNomeObra] = useState('');
   const [responsavel, setResponsavel] = useState('');
 
@@ -419,6 +435,9 @@ export const DiarioDeObra: React.FC = () => {
           setNomeObra(rdo.obra?.nome || '');
           setRdoNumberStr(`RDO #${rdo.sequencial ?? rdo.id.slice(-6).toUpperCase()}`);
           setData(extras.data || rdo.dataReferencia?.split('T')[0] || today);
+          setTipoRelatorio(tipoDeExtras(extras, rdo));
+          setDataFim(isoDateOnly(extras.dataFim || rdo.dataFim, extras.data || today));
+          setDiasChuva(String(extras.diasChuva ?? 0));
           setResponsavel(extras.responsavel || '');
           setClimaManha(extras.climaManha || '');
           setClimaTarde(extras.climaTarde || '');
@@ -462,6 +481,9 @@ export const DiarioDeObra: React.FC = () => {
             if (local?.pendingSync && local.dadosExtras) {
               const le = local.dadosExtras;
               setData(le.data || extras.data || today);
+              setTipoRelatorio(tipoDeExtras(le, rdo));
+              setDataFim(isoDateOnly(le.dataFim, le.data || extras.data || today));
+              setDiasChuva(String(le.diasChuva ?? extras.diasChuva ?? 0));
               setResponsavel(le.responsavel || '');
               setClimaManha(le.climaManha || '');
               setClimaTarde(le.climaTarde || '');
@@ -492,6 +514,9 @@ export const DiarioDeObra: React.FC = () => {
             if (local?.dadosExtras) {
               const le = local.dadosExtras;
               setData(le.data || today);
+              setTipoRelatorio(tipoDeExtras(le));
+              setDataFim(isoDateOnly(le.dataFim, le.data || today));
+              setDiasChuva(String(le.diasChuva ?? 0));
               setResponsavel(le.responsavel || '');
               setClimaManha(le.climaManha || '');
               setClimaTarde(le.climaTarde || '');
@@ -529,6 +554,9 @@ export const DiarioDeObra: React.FC = () => {
           if (local?.dadosExtras) {
             const le = local.dadosExtras;
             setData(le.data || today);
+            setTipoRelatorio(tipoDeExtras(le));
+            setDataFim(isoDateOnly(le.dataFim, le.data || today));
+            setDiasChuva(String(le.diasChuva ?? 0));
             setResponsavel(le.responsavel || '');
             setClimaManha(le.climaManha || '');
             setClimaTarde(le.climaTarde || '');
@@ -766,9 +794,12 @@ export const DiarioDeObra: React.FC = () => {
       const extras = rdo.dadosExtras || {};
 
       setResponsavel(extras.responsavel || '');
-      setClimaManha(extras.climaManha || '');
-      setClimaTarde(extras.climaTarde || '');
-      setClimaNoite(extras.climaNoite || '');
+      if (tipoRelatorio === 'DIA') {
+        setClimaManha(extras.climaManha || '');
+        setClimaTarde(extras.climaTarde || '');
+        setClimaNoite(extras.climaNoite || '');
+      }
+      setDiasChuva(String(extras.diasChuva ?? diasChuva));
       setTempMin(extras.tempMin || '');
       setTempMax(extras.tempMax || '');
       setPessoas(extras.pessoas?.length ? extras.pessoas : [{ nome: '', funcao: '', empresa: '' }]);
@@ -1215,23 +1246,31 @@ export const DiarioDeObra: React.FC = () => {
   };
 
   // ── Builder do payload JSON ──
-  const buildDadosExtras = () => ({
-    versao: 1,
-    data,
-    responsavel,
-    climaManha,
-    climaTarde,
-    climaNoite,
-    tempMin,
-    tempMax,
-    pessoas,
-    profissionais,
-    materiais,
-    equipamentos,
-    atividadesExecutadas,
-    atividadesPendentes,
-    observacoes,
-  });
+  const buildDadosExtras = () => {
+    const tipo = tipoRelatorio || 'DIA';
+    const isPeriodo = tipo === 'PERIODO';
+    return {
+      versao: 1,
+      data,
+      tipoRelatorio: tipo,
+      dataInicio: data,
+      dataFim: isPeriodo ? dataFim : undefined,
+      diasChuva: isPeriodo ? Math.max(0, Math.floor(Number(diasChuva) || 0)) : undefined,
+      responsavel,
+      climaManha: isPeriodo ? '' : climaManha,
+      climaTarde: isPeriodo ? '' : climaTarde,
+      climaNoite: isPeriodo ? '' : climaNoite,
+      tempMin,
+      tempMax,
+      pessoas,
+      profissionais,
+      materiais,
+      equipamentos,
+      atividadesExecutadas,
+      atividadesPendentes,
+      observacoes,
+    };
+  };
 
   const persistDraftLocal = useCallback(async (opts?: { pendingSync?: boolean }) => {
     if (!obraId || isReadOnly || status !== 'rascunho') return;
@@ -1255,21 +1294,21 @@ export const DiarioDeObra: React.FC = () => {
   }, [
     obraId, isReadOnly, status, draftPendingSync, rdoIdAtual,
     aprovadorIdSelecionado, rdoNumberStr, nomeObra,
-    data, responsavel, climaManha, climaTarde, climaNoite, tempMin, tempMax,
+    data, dataFim, tipoRelatorio, diasChuva, responsavel, climaManha, climaTarde, climaNoite, tempMin, tempMax,
     pessoas, profissionais, materiais, equipamentos,
     atividadesExecutadas, atividadesPendentes, observacoes,
   ]);
 
   // Autosave contínuo no aparelho (protege perda sem sinal / fechamento acidental)
   useEffect(() => {
-    if (!autosaveReady.current || !obraId || isReadOnly || status !== 'rascunho' || initLoading) return;
+    if (!autosaveReady.current || !obraId || isReadOnly || status !== 'rascunho' || initLoading || !tipoRelatorio) return;
     const timer = window.setTimeout(() => {
       persistDraftLocal().catch((err) => console.warn('Autosave local falhou:', err));
     }, 1200);
     return () => window.clearTimeout(timer);
   }, [
     persistDraftLocal, obraId, isReadOnly, status, initLoading,
-    data, responsavel, climaManha, climaTarde, climaNoite, tempMin, tempMax,
+    data, dataFim, tipoRelatorio, diasChuva, responsavel, climaManha, climaTarde, climaNoite, tempMin, tempMax,
     pessoas, profissionais, materiais, equipamentos,
     atividadesExecutadas, atividadesPendentes, observacoes, aprovadorIdSelecionado,
   ]);
@@ -1498,9 +1537,28 @@ export const DiarioDeObra: React.FC = () => {
     }
   };
 
+  const validarPeriodo = (): boolean => {
+    if (tipoRelatorio !== 'PERIODO') return true;
+    if (!data || !dataFim) {
+      showToast('Informe a data de início e a data de fim do período.');
+      return false;
+    }
+    if (data > dataFim) {
+      showToast('A data de início não pode ser depois da data de fim.');
+      return false;
+    }
+    const n = Number(diasChuva);
+    if (!Number.isFinite(n) || n < 0) {
+      showToast('Informe o número de dias de chuva (0 ou mais).');
+      return false;
+    }
+    return true;
+  };
+
   // ── Salvar Rascunho ──
   const handleSalvarRascunho = async () => {
     if (!obraId) return;
+    if (!validarPeriodo()) return;
     setSaving(true);
     try {
       // Sem sinal: grava no aparelho e marca para sync posterior
@@ -1583,6 +1641,7 @@ export const DiarioDeObra: React.FC = () => {
   // ── Enviar para aprovação ──
   const handleEnviar = async () => {
     if (!obraId) return;
+    if (!validarPeriodo()) return;
     if (!navigator.onLine) {
       await flushPendingMediaToIdb();
       await persistDraftLocal({ pendingSync: true });
@@ -1744,7 +1803,9 @@ export const DiarioDeObra: React.FC = () => {
               <span className="sm:hidden">Voltar</span>
             </button>
             <div className="min-w-0">
-              <h1 className="text-lg md:text-2xl font-bold text-gray-900 tracking-tight truncate">Diário de Obra</h1>
+              <h1 className="text-lg md:text-2xl font-bold text-gray-900 tracking-tight truncate">
+                {tipoRelatorio === 'PERIODO' ? 'Relatório de período' : 'Diário de Obra'}
+              </h1>
               <p className="text-xs md:text-sm text-gray-500 font-medium truncate">{initLoading ? 'Carregando...' : `${rdoNumberStr}`}</p>
             </div>
           </div>
@@ -1777,6 +1838,40 @@ export const DiarioDeObra: React.FC = () => {
       </div>
 
       <div className="max-w-4xl mx-auto px-3 md:px-8 py-5 md:py-8 space-y-4 md:space-y-6">
+
+        {!initLoading && tipoRelatorio === null ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 md:p-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-1">Que tipo de relatório?</h2>
+            <p className="text-sm text-gray-500 mb-6">Escolha se este documento cobre um dia ou um prazo entre duas datas.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setTipoRelatorio('DIA')}
+                className="text-left p-5 rounded-xl border-2 border-gray-200 hover:border-lunardeli-red hover:bg-red-50/50 active:bg-red-50 transition-colors"
+              >
+                <span className="flex items-center gap-2 text-lunardeli-red font-bold mb-2">
+                  <Calendar size={20} /> Relatório do dia
+                </span>
+                <span className="block text-sm text-gray-600 leading-relaxed">
+                  Um diário de obra para uma data: clima da manhã, tarde e noite, efetivo e atividades do dia.
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipoRelatorio('PERIODO')}
+                className="text-left p-5 rounded-xl border-2 border-gray-200 hover:border-lunardeli-red hover:bg-red-50/50 active:bg-red-50 transition-colors"
+              >
+                <span className="flex items-center gap-2 text-lunardeli-red font-bold mb-2">
+                  <Calendar size={20} /> Relatório de período
+                </span>
+                <span className="block text-sm text-gray-600 leading-relaxed">
+                  Um prazo entre duas datas: você informa quantos dias choveu, o efetivo e as mesmas seções do diário.
+                </span>
+              </button>
+            </div>
+          </div>
+        ) : (
+        <>
 
         {/* Copiar RDO anterior */}
         {!rdoId && previousRdos.length > 0 && (
@@ -1841,7 +1936,14 @@ export const DiarioDeObra: React.FC = () => {
           onToggle={() => toggleSection('sec1')}
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <InputField label="Data" type="date" value={data} onChange={(e: any) => setData(e.target.value)} disabled={isReadOnly} />
+            {tipoRelatorio === 'PERIODO' ? (
+              <>
+                <InputField label="Data início" type="date" value={data} onChange={(e: any) => setData(e.target.value)} disabled={isReadOnly} />
+                <InputField label="Data fim" type="date" value={dataFim} onChange={(e: any) => setDataFim(e.target.value)} disabled={isReadOnly} />
+              </>
+            ) : (
+              <InputField label="Data" type="date" value={data} onChange={(e: any) => setData(e.target.value)} disabled={isReadOnly} />
+            )}
             <InputField label="Número RDO" value={rdoNumberStr} disabled />
             <div className="sm:col-span-2">
                <InputField label="Nome da obra" value={nomeObra} onChange={(e: any) => setNomeObra(e.target.value)} placeholder="Ex: Edifício Residencial Solar" disabled={isReadOnly} />
@@ -1859,11 +1961,27 @@ export const DiarioDeObra: React.FC = () => {
           isCollapsed={!!collapsedSections.sec2}
           onToggle={() => toggleSection('sec2')}
         >
+          {tipoRelatorio === 'PERIODO' ? (
+            <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 mb-6">
+              <InputField
+                label="Número de dias de chuva no período"
+                type="number"
+                min={0}
+                step={1}
+                value={diasChuva}
+                onChange={(e: any) => setDiasChuva(e.target.value)}
+                placeholder="Ex: 4"
+                disabled={isReadOnly}
+              />
+              <p className="text-xs text-gray-500 mt-2">Quantos dias choveu entre a data de início e a data de fim.</p>
+            </div>
+          ) : (
           <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
             {renderWeatherShift('Manhã', climaManha, setClimaManha)}
             {renderWeatherShift('Tarde', climaTarde, setClimaTarde)}
             {renderWeatherShift('Noite', climaNoite, setClimaNoite)}
           </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
              <InputField label="Temperatura mínima (°C)" type="number" value={tempMin} onChange={(e: any) => setTempMin(e.target.value)} placeholder="Ex: 18" disabled={isReadOnly} />
              <InputField label="Temperatura máxima (°C)" type="number" value={tempMax} onChange={(e: any) => setTempMax(e.target.value)} placeholder="Ex: 32" disabled={isReadOnly} />
@@ -2828,10 +2946,12 @@ export const DiarioDeObra: React.FC = () => {
           </CollapsibleSection>
         )}
         
+      </>
+        )}
       </div>
 
       {/* ═══ Mobile Floating Action Bar ═══ */}
-      {status === 'rascunho' && (
+      {status === 'rascunho' && tipoRelatorio && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           <div className="flex items-center gap-2 px-4 py-3">
             <button

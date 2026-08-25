@@ -162,12 +162,14 @@ model UserObraRole {
 }
 
 model Rdo {
-  id              String          @id @default(uuid())
-  obraId          String          @map("obra_id")
-  criadorId       String          @map("criador_id")
-  aprovadorId     String?         @map("aprovador_id")
-  dataReferencia  DateTime        @map("data_referencia")
-  status          RdoStatus       @default(RASCUNHO)
+  id              String           @id @default(uuid())
+  obraId          String           @map("obra_id")
+  criadorId       String           @map("criador_id")
+  aprovadorId     String?          @map("aprovador_id")
+  dataReferencia  DateTime         @map("data_referencia")
+  dataFim         DateTime?        @map("data_fim")
+  tipoRelatorio   TipoRelatorioRdo @default(DIA) @map("tipo_relatorio")
+  status          RdoStatus        @default(RASCUNHO)
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")
   deletedAt       DateTime?       @map("deleted_at")
@@ -541,6 +543,11 @@ enum TipoPapelEmpresa {
 enum TipoPessoa {
   FISICA
   JURIDICA
+}
+
+enum TipoRelatorioRdo {
+  DIA
+  PERIODO
 }
 
 enum RdoStatus {
