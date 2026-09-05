@@ -728,7 +728,7 @@ export const DiarioDeObra: React.FC = () => {
         try {
           const res = await api.post(`/upload/obra/${obraId}/rdo/${rdoIdAlvo}/fotos`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
-            timeout: 180000,
+            timeout: 600000,
           });
 
           if (res.data?.anexo) {
@@ -1432,7 +1432,7 @@ export const DiarioDeObra: React.FC = () => {
     const videosRestantes: typeof videos = [];
     const anexosRestantes: typeof anexos = [];
 
-    const uploadTimeoutMs = 180000; // 3 min — vídeos de celular
+    const uploadTimeoutMs = 600000; // 10 min — vídeos até ~100 MB em 4G do canteiro
 
     type Job =
       | { kind: 'foto'; item: (typeof fotos)[0] }

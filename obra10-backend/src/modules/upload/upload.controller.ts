@@ -30,6 +30,14 @@ function safeFilename(originalname: string): string {
   return `${crypto.randomUUID()}${extname(originalname).toLowerCase()}`;
 }
 
+/** Limites de upload (bytes) — alinhados ao frontend `mediaLimits.ts`. */
+const MAX_IMAGE_UPLOAD_BYTES = 15 * 1024 * 1024;
+/**
+ * Vídeos/anexos do RDO. 100 MB = 2× o teto antigo e cabe no Cloudflare (plano atual).
+ * Acima disso exige upload direto ao R2 (URL pré-assinada) ou plano Cloudflare Business+.
+ */
+const MAX_RDO_UPLOAD_BYTES = 100 * 1024 * 1024;
+
 /** Allowed image MIME types */
 const ALLOWED_IMAGE_TYPES = /^image\/(jpeg|jpg|png|gif|webp|svg\+xml|heic|heif)$/i;
 /** Allowed document/media MIME types (for RDO attachments) — inclui formatos de celular */
@@ -188,7 +196,7 @@ export class UploadController {
     @Req() req: any,
     @UploadedFile(
       new ParseFilePipe({
-        validators: [new MaxFileSizeValidator({ maxSize: 15 * 1024 * 1024 })],
+        validators: [new MaxFileSizeValidator({ maxSize: MAX_IMAGE_UPLOAD_BYTES })],
       }),
     )
     file: Express.Multer.File,
@@ -240,7 +248,7 @@ export class UploadController {
     @Req() req: any,
     @UploadedFile(
       new ParseFilePipe({
-        validators: [new MaxFileSizeValidator({ maxSize: 15 * 1024 * 1024 })],
+        validators: [new MaxFileSizeValidator({ maxSize: MAX_IMAGE_UPLOAD_BYTES })],
       }),
     )
     file: Express.Multer.File,
@@ -286,7 +294,7 @@ export class UploadController {
     @Req() req: any,
     @UploadedFile(
       new ParseFilePipe({
-        validators: [new MaxFileSizeValidator({ maxSize: 15 * 1024 * 1024 })],
+        validators: [new MaxFileSizeValidator({ maxSize: MAX_IMAGE_UPLOAD_BYTES })],
       }),
     )
     file: Express.Multer.File,
@@ -312,6 +320,7 @@ export class UploadController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
+      limits: { fileSize: MAX_RDO_UPLOAD_BYTES },
       fileFilter: (_req, file, cb) => {
         if (!isAllowedRdoUpload(file)) {
           return cb(
@@ -330,7 +339,7 @@ export class UploadController {
     @Param('rdoId') rdoId: string,
     @UploadedFile(
       new ParseFilePipe({
-        validators: [new MaxFileSizeValidator({ maxSize: 50 * 1024 * 1024 })],
+        validators: [new MaxFileSizeValidator({ maxSize: MAX_RDO_UPLOAD_BYTES })],
       }),
     )
     file: Express.Multer.File,
