@@ -274,7 +274,7 @@ const CollapsibleSection = ({
   title,
   badge,
   children,
-  isCollapsed = false,
+  isCollapsed = true,
   onToggle,
 }: {
   icon: any;
@@ -310,6 +310,11 @@ const CollapsibleSection = ({
   </div>
 );
 
+const ALL_SECTIONS_EXPANDED: Record<string, boolean> = {
+  sec1: true, sec2: true, sec3: true, sec4: true, sec5: true,
+  sec6: true, sec7: true, sec8: true, sec9: true, sec10: true,
+};
+
 const InputField = ({ label, type = 'text', ...props }: any) => (
   <div>
     <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
@@ -341,14 +346,16 @@ export const DiarioDeObra: React.FC = () => {
   const [rdoNumberStr, setRdoNumberStr] = useState<string>(generateRdoNumber());
   const [motivoRejeicaoBackend, setMotivoRejeicaoBackend] = useState<string>('');
 
-  // ── Estado de seções recolhidas / minimizadas ──
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
-  const toggleSection = (key: string) => setCollapsedSections(prev => ({ ...prev, [key]: !prev[key] }));
-  const expandAllSections = () => setCollapsedSections({});
-  const collapseAllSections = () => setCollapsedSections({
-    sec1: true, sec2: true, sec3: true, sec4: true, sec5: true,
-    sec6: true, sec7: true, sec8: true, sec9: true, sec10: true
-  });
+  // Aberto só se a chave estiver true — ao abrir o RDO, nenhuma seção começa expandida.
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const toggleSection = (key: string) =>
+    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  const expandAllSections = () => setExpandedSections({ ...ALL_SECTIONS_EXPANDED });
+  const collapseAllSections = () => setExpandedSections({});
+
+  useEffect(() => {
+    setExpandedSections({});
+  }, [rdoId]);
 
   const obraAtual = (user as any)?.obrasPermitidas?.find((o: any) => (o.obraId || o.id) === obraId) || obras?.find((o: any) => o.id === obraId);
   const permRdo = obraAtual?.permissoes?.RDO || obraAtual?.permissoes?.rdo;
@@ -1932,7 +1939,7 @@ export const DiarioDeObra: React.FC = () => {
         <CollapsibleSection
           icon={ClipboardList}
           title="1. Informações gerais"
-          isCollapsed={!!collapsedSections.sec1}
+          isCollapsed={!expandedSections.sec1}
           onToggle={() => toggleSection('sec1')}
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1958,7 +1965,7 @@ export const DiarioDeObra: React.FC = () => {
         <CollapsibleSection
           icon={CloudSun}
           title="2. Condições climáticas"
-          isCollapsed={!!collapsedSections.sec2}
+          isCollapsed={!expandedSections.sec2}
           onToggle={() => toggleSection('sec2')}
         >
           {tipoRelatorio === 'PERIODO' ? (
@@ -1993,7 +2000,7 @@ export const DiarioDeObra: React.FC = () => {
           <CollapsibleSection
             icon={Users}
             title="3. Presentes na vistoria"
-            isCollapsed={!!collapsedSections.sec3}
+            isCollapsed={!expandedSections.sec3}
             onToggle={() => toggleSection('sec3')}
           >
             <div className="space-y-3">
@@ -2018,7 +2025,7 @@ export const DiarioDeObra: React.FC = () => {
             icon={Hammer}
             title="4. Efetivo de mão de obra"
             badge={<span className="ml-2 px-2.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">{totalEfetivo} trabalhadores</span>}
-            isCollapsed={!!collapsedSections.sec4}
+            isCollapsed={!expandedSections.sec4}
             onToggle={() => toggleSection('sec4')}
           >
             <div className="flex flex-col sm:flex-row gap-3 items-end mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
@@ -2083,7 +2090,7 @@ export const DiarioDeObra: React.FC = () => {
           <CollapsibleSection
             icon={Drill}
             title="5. Materiais e equipamentos"
-            isCollapsed={!!collapsedSections.sec5}
+            isCollapsed={!expandedSections.sec5}
             onToggle={() => toggleSection('sec5')}
           >
             <div className="mb-6">
@@ -2154,7 +2161,7 @@ export const DiarioDeObra: React.FC = () => {
            <CollapsibleSection
              icon={CheckSquare}
              title="6. Atividades Executadas"
-             isCollapsed={!!collapsedSections.sec6}
+             isCollapsed={!expandedSections.sec6}
              onToggle={() => toggleSection('sec6')}
            >
              <div className="space-y-3">
@@ -2220,7 +2227,7 @@ export const DiarioDeObra: React.FC = () => {
              <CollapsibleSection
                icon={MessageSquare}
                title="7. Observações gerais"
-               isCollapsed={!!collapsedSections.sec7}
+               isCollapsed={!expandedSections.sec7}
                onToggle={() => toggleSection('sec7')}
              >
                <div className="space-y-3">
@@ -2272,7 +2279,7 @@ export const DiarioDeObra: React.FC = () => {
              <CollapsibleSection
                icon={FileSpreadsheet}
                title="8. Atividades Pendentes"
-               isCollapsed={!!collapsedSections.sec8}
+               isCollapsed={!expandedSections.sec8}
                onToggle={() => toggleSection('sec8')}
              >
                <div className="space-y-3">
@@ -2338,7 +2345,7 @@ export const DiarioDeObra: React.FC = () => {
           <CollapsibleSection
             icon={Paperclip}
             title="9. Mídias e Anexos"
-            isCollapsed={!!collapsedSections.sec9}
+            isCollapsed={!expandedSections.sec9}
             onToggle={() => toggleSection('sec9')}
           >
             
@@ -2745,7 +2752,7 @@ export const DiarioDeObra: React.FC = () => {
           <CollapsibleSection
             icon={ShieldCheck}
             title="10. Validação e Aprovação"
-            isCollapsed={!!collapsedSections.sec10}
+            isCollapsed={!expandedSections.sec10}
             onToggle={() => toggleSection('sec10')}
           >
 
