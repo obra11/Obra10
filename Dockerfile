@@ -1,12 +1,12 @@
-# ============================================
-# Obra 10 — Production Dockerfile
-# Force rebuild: 2026-09-05-upload-100mb-2.9.16
+﻿# ============================================
+# Obra 10 â€” Production Dockerfile
+# Force rebuild: 2026-09-05-relatorios-pdf-fotos-2.9.17
 # ============================================
 
 # --- Build stage ---
 FROM node:22-alpine AS builder
 
-ARG OBRA10_BUILD_ID=2.9.16-20260905
+ARG OBRA10_BUILD_ID=2.9.17-20260905
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 
 # Install build tools for native modules (bcrypt)
@@ -35,7 +35,7 @@ ENV PRISMA_BUILD_PLACEHOLDER=
 # --- Production stage ---
 FROM node:22-alpine
 
-ARG OBRA10_BUILD_ID=2.9.16-20260905
+ARG OBRA10_BUILD_ID=2.9.17-20260905
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 ENV NODE_ENV=production
 
@@ -50,11 +50,11 @@ COPY --from=builder /app/prisma.config.ts ./
 COPY --from=builder /app/client ./client
 COPY --from=builder /app/scripts/railway-start.sh ./scripts/railway-start.sh
 
-# Create uploads directory for runtime (dev/local only; produção usa R2)
+# Create uploads directory for runtime (dev/local only; produÃ§Ã£o usa R2)
 RUN mkdir -p uploads && chmod +x scripts/railway-start.sh
-# Guarda: contexto de build não deve trazer mídia de usuário
+# Guarda: contexto de build nÃ£o deve trazer mÃ­dia de usuÃ¡rio
 RUN if [ -d uploads ] && [ "$(find uploads -type f 2>/dev/null | head -1)" ]; then \
-      echo "ERRO: arquivos em uploads/ no contexto Docker — remova do Git/.dockerignore"; \
+      echo "ERRO: arquivos em uploads/ no contexto Docker â€” remova do Git/.dockerignore"; \
       exit 1; \
     fi
 

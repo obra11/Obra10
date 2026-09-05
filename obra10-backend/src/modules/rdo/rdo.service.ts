@@ -170,6 +170,145 @@ export class RdoService {
     }));
   }
 
+  /**
+   * Lista RDOs de todas as obras acessíveis do usuário na empresa (sem contexto de obra).
+   * Respeita VIEW_APPROVED / VIEW_PARTIAL_APPROVED por obra. Limite 500.
+   */
+  async findAllByEmpresa(userId: string, empresaId: string) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: userId, deletedAt: null },
+      select: { perfilGlobal: true, capabilities: true },
+    });
+    if (!usuario) {
+      throw new ForbiddenException('Usuário não encontrado ou inativo.');
+    }
+
+    const caps = await this.capabilities.resolveForUser({
+      empresaId,
+      perfilGlobal: usuario.perfilGlobal,
+      capabilitiesOverride: usuario.capabilities,
+    });
+
+    const acessoTodas =
+      usuario.perfilGlobal === 'SUPER_ADMIN' || caps.acessoTodasObras;
+
+    type ObraPerm = { id: string; nome: string; permissoes: Record<string, string> };
+    let obras: ObraPerm[];
+
+    if (acessoTodas) {
+      const list = await this.prisma.obra.findMany({
+        where: { empresaId, deletedAt: null },
+        select: { id: true, nome: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      const privilegiadoPerms =
+        caps.modulosPadrao && Object.keys(caps.modulosPadrao).length > 0
+          ? caps.modulosPadrao
+          : { RDO: caps.criarEditarRdo ? 'EDIT' : 'VIEW' };
+      obras = list.map((o) => ({
+        id: o.id,
+        nome: o.nome,
+        permissoes: privilegiadoPerms as Record<string, string>,
+      }));
+    } else {
+      const list = await this.prisma.obra.findMany({
+        where: {
+          empresaId,
+          deletedAt: null,
+          status: { not: 'INATIVA' },
+          userObraRole: { some: { usuarioId: userId } },
+        },
+        include: {
+          userObraRole: {
+            where: { usuarioId: userId },
+            select: { permissoes: true },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      obras = list.map((o) => ({
+        id: o.id,
+        nome: o.nome,
+        permissoes: (o.userObraRole[0]?.permissoes || {}) as Record<
+          string,
+          string
+        >,
+      }));
+    }
+
+    if (obras.length === 0) return [];
+
+    const obraIdsAll = obras.map((o) => o.id);
+    const obraIdsApprovedOnly = obras
+      .filter((o) => {
+        const p = o.permissoes?.RDO || o.permissoes?.rdo;
+        return p === 'VIEW_APPROVED' || p === 'VIEW_PARTIAL_APPROVED';
+      })
+      .map((o) => o.id);
+    const obraIdsFull = obraIdsAll.filter(
+      (id) => !obraIdsApprovedOnly.includes(id),
+    );
+
+    const orClauses: Array<Record<string, unknown>> = [];
+    if (obraIdsFull.length) {
+      orClauses.push({ obraId: { in: obraIdsFull } });
+    }
+    if (obraIdsApprovedOnly.length) {
+      orClauses.push({
+        obraId: { in: obraIdsApprovedOnly },
+        status: RdoStatus.APROVADO,
+      });
+    }
+    if (!orClauses.length) return [];
+
+    const allForSeq = await this.prisma.rdo.findMany({
+      where: { obraId: { in: obraIdsAll }, deletedAt: null },
+      select: { id: true, obraId: true },
+      orderBy: [
+        { obraId: 'asc' },
+        { dataReferencia: 'asc' },
+        { createdAt: 'asc' },
+      ],
+    });
+    const sequenceMap = new Map<string, number>();
+    const counters = new Map<string, number>();
+    for (const r of allForSeq) {
+      const n = (counters.get(r.obraId) || 0) + 1;
+      counters.set(r.obraId, n);
+      sequenceMap.set(r.id, n);
+    }
+
+    const list = await this.prisma.rdo.findMany({
+      where: { deletedAt: null, OR: orClauses },
+      select: {
+        id: true,
+        obraId: true,
+        dataReferencia: true,
+        dataFim: true,
+        tipoRelatorio: true,
+        status: true,
+        createdAt: true,
+        criador: { select: { nome: true } },
+        obra: { select: { id: true, nome: true } },
+      },
+      orderBy: [{ dataReferencia: 'desc' }, { createdAt: 'desc' }],
+      take: 500,
+    });
+
+    return list.map((rdo) => ({
+      id: rdo.id,
+      obraId: rdo.obraId,
+      obraNome: rdo.obra?.nome || '-',
+      dataReferencia: rdo.dataReferencia,
+      dataFim: rdo.dataFim,
+      tipoRelatorio: rdo.tipoRelatorio,
+      status: rdo.status,
+      sequencial: sequenceMap.get(rdo.id) || 1,
+      criadorNome: rdo.criador?.nome || '-',
+      createdAt: rdo.createdAt,
+    }));
+  }
+
   async findOne(id: string, obraId: string, obraRole?: any) {
     const rdo = await this.prisma.rdo.findFirst({
       where: { id, obraId, deletedAt: null },

@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useAuth, type Obra } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List, Headphones } from 'lucide-react';
+import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List, Headphones, FileText } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
 
@@ -265,6 +265,9 @@ export const CompanyDashboard: React.FC = () => {
                 <input type="file" className="hidden" accept="image/*" onChange={handleUserPhotoUpload} />
               </label>
             </div>
+            <button onClick={() => navigate('/relatorios')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Relatórios">
+              <FileText size={18} className="sm:mr-2 text-lunardeli-red" /> <span className="hidden sm:inline">Relatórios</span>
+            </button>
             <button onClick={() => navigate('/catalogo')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Cadastro Base">
               <Boxes size={18} className="sm:mr-2 text-lunardeli-red" /> <span className="hidden sm:inline">Cadastro Base</span>
             </button>

@@ -9,6 +9,7 @@ import { ProtectedRoute } from './ProtectedRoute';
 import { useAuth } from '../context/AuthContext';
 
 import { CompanyDashboard } from '../pages/CompanyDashboard';
+import { RelatoriosEmpresa } from '../pages/RelatoriosEmpresa';
 
 import { UserManagement } from '../pages/gestor/UserManagement';
 import { Financeiro } from '../pages/gestor/Financeiro';
@@ -103,6 +104,7 @@ export const AppRoutes: React.FC = () => {
 
       {/* === MAIN DASHBOARD & CATALOGO === */}
       <Route path="/dashboard" element={<ProtectedRoute><CompanyDashboard /></ProtectedRoute>} />
+      <Route path="/relatorios" element={<ProtectedRoute><RelatoriosEmpresa /></ProtectedRoute>} />
       <Route path="/catalogo" element={<ProtectedRoute><CatalogoPage /></ProtectedRoute>} />
 
       <Route path="/obras/:obraId/*" element={<ProtectedRoute><ObraLayout /></ProtectedRoute>}>

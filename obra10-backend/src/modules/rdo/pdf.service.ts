@@ -688,29 +688,50 @@ export class PdfService {
     // ── LISTA DE ANEXOS ──────────────────────────────────────────────────────────
     if (anexos.length > 0) {
       drawSectionTitle('ANEXOS E MIDIAS');
+      const fotosCount = anexos.filter((a) => a.mimeType?.startsWith('image/')).length;
+      if (incluirFotos && fotosCount > 0) {
+        ensureSpace(14);
+        drawText(
+          `${fotosCount} foto(s) impressa(s) na galeria ao final deste PDF.`,
+          m.l + 4,
+          ctx.y,
+          8,
+          reg,
+          GRAY,
+        );
+        ctx.y -= 14;
+      }
       for (const a of anexos) {
+        const isImage = !!a.mimeType?.startsWith('image/');
+        // Com fotos impressas, nao listar fotos como link azul (so video/docs)
+        if (incluirFotos && isImage) continue;
+
         ensureSpace(16);
-        
+
         let badge = '[ARQUIVO]';
-        if (a.mimeType?.startsWith('image/')) badge = '[FOTO]';
+        if (isImage) badge = '[FOTO]';
         else if (a.mimeType?.startsWith('video/')) badge = '[VIDEO]';
-        
+
         const badgeW = bold.widthOfTextAtSize(badge + ' ', 8);
         const tamanhoKb = (a.tamanhoBytes / 1024).toFixed(0);
         const sizeStr = ` (${tamanhoKb} KB)`;
         const linkText = a.nomeOriginal || 'Arquivo';
-        
-        const maxLinkW = CONTENT_W - badgeW - reg.widthOfTextAtSize(sizeStr, 8) - 15;
+
+        const maxLinkW =
+          CONTENT_W - badgeW - reg.widthOfTextAtSize(sizeStr, 8) - 15;
         let displayedLink = linkText;
         if (reg.widthOfTextAtSize(displayedLink, 8) > maxLinkW) {
-          while (displayedLink.length > 5 && reg.widthOfTextAtSize(displayedLink + '...', 8) > maxLinkW) {
+          while (
+            displayedLink.length > 5 &&
+            reg.widthOfTextAtSize(displayedLink + '...', 8) > maxLinkW
+          ) {
             displayedLink = displayedLink.substring(0, displayedLink.length - 1);
           }
           displayedLink += '...';
         }
-        
+
         drawText(badge, m.l + 4, ctx.y, 8, bold, LUNARDELI_DARK);
-        
+
         const linkX = m.l + 4 + badgeW;
         ctx.page.drawText(displayedLink, {
           x: linkX,
@@ -719,7 +740,7 @@ export class PdfService {
           font: bold,
           color: COLOR_LINK,
         });
-        
+
         const linkW = bold.widthOfTextAtSize(displayedLink, 8);
         ctx.page.drawLine({
           start: { x: linkX, y: ctx.y - 1.5 },
@@ -733,7 +754,7 @@ export class PdfService {
           linkX + linkW,
           ctx.y + 9,
         ]);
-        
+
         const sizeX = linkX + linkW;
         ctx.page.drawText(sizeStr, {
           x: sizeX,
@@ -742,7 +763,7 @@ export class PdfService {
           font: reg,
           color: GRAY,
         });
-        
+
         ctx.y -= 14;
       }
       ctx.y -= 6;
@@ -764,211 +785,28 @@ export class PdfService {
         : '-';
       const aprovText = `Aprovado por: ${aprovNome} em ${aprovData}`;
       const aprovW = reg.widthOfTextAtSize(aprovText, 8);
-      ctx.page.drawText(aprovText, { x: ctx.w - m.r - aprovW, y: ctx.y, size: 8, font: reg, color: GREEN });
+      ctx.page.drawText(aprovText, {
+        x: ctx.w - m.r - aprovW,
+        y: ctx.y,
+        size: 8,
+        font: reg,
+        color: GREEN,
+      });
     }
 
     ctx.y -= 14;
-    const rodapeTs = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const rodapeTs = new Date().toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
     drawText(`Gerado pelo OBRA 10 em ${rodapeTs}`, m.l, ctx.y, 7, reg, LIGHT_GRAY);
 
-    // ── FOTOS (páginas adicionais em grade 2x4) ───────────────────────────────────────────────
+    // ── FOTOS (2 por pagina, grandes e enquadradas) ─────────────────────────────
     if (incluirFotos) {
-      const imagens = anexos.filter(a =>
-        a.mimeType?.startsWith('image/') &&
-        (a.mimeType === 'image/jpeg' || a.mimeType === 'image/png')
-      );
-
-      const colW = 245;
-      const cellH = 170;
-      const gapX = 15;
-      const gapY = 8;
-      const maxRowsPerPage = 4;
-      const maxColsPerPage = 2;
-      const itemsPerPage = maxRowsPerPage * maxColsPerPage; // 8
-
-      let currentFotoPage!: PDFPage;
-
-      for (let idx = 0; idx < imagens.length; idx++) {
-        const pageIdx = idx % itemsPerPage;
-        const isNewPage = pageIdx === 0;
-
-        if (isNewPage) {
-          currentFotoPage = pdfDoc.addPage([595.28, 841.89]);
-          const FW = currentFotoPage.getWidth();
-          const FH = currentFotoPage.getHeight();
-
-          // Cabeçalho da página de fotos
-          currentFotoPage.drawRectangle({
-            x: m.l,
-            y: FH - m.t - 2,
-            width: 5,
-            height: 12,
-            color: LUNARDELI_RED,
-          });
-          currentFotoPage.drawText('OBRA 10', {
-            x: m.l + 10,
-            y: FH - m.t,
-            size: 11,
-            font: bold,
-            color: LUNARDELI_DARK,
-          });
-          
-          const pagNum = Math.floor(idx / itemsPerPage) + 1;
-          const sub = `GALERIA DE FOTOS — PÁGINA ${pagNum}`;
-          const subW = reg.widthOfTextAtSize(sub, 8);
-          currentFotoPage.drawText(sub, {
-            x: FW - m.r - subW,
-            y: FH - m.t,
-            size: 8,
-            font: reg,
-            color: GRAY,
-          });
-          
-          currentFotoPage.drawLine({
-            start: { x: m.l, y: FH - m.t - 8 },
-            end: { x: FW - m.r, y: FH - m.t - 8 },
-            thickness: 0.5,
-            color: LUNARDELI_LIGHT_GRAY,
-          });
-        }
-
-        const img = imagens[idx];
-        const col = pageIdx % maxColsPerPage;
-        const row = Math.floor(pageIdx / maxColsPerPage);
-
-        // Calcular coordenadas da célula
-        const cellX = m.l + col * (colW + gapX);
-        const cellY = (841.89 - m.t - 15) - (row + 1) * cellH - row * gapY;
-
-        try {
-          // 1. Carregar bytes da imagem (local ou remoto)
-          let imgBytes: Uint8Array;
-          if (img.urlS3.startsWith('/uploads/') || img.urlS3.startsWith('uploads/')) {
-            const cleanPath = img.urlS3.startsWith('/') ? img.urlS3 : `/${img.urlS3}`;
-            const filePath = path.join(process.cwd(), cleanPath);
-            imgBytes = new Uint8Array(fs.readFileSync(filePath));
-          } else {
-            const response = await fetch(img.urlS3);
-            if (!response.ok) continue;
-            const arrayBuf = await response.arrayBuffer();
-            imgBytes = new Uint8Array(arrayBuf);
-          }
-
-          // 2. Detectar orientação EXIF
-          const orientation = this.getExifOrientation(imgBytes);
-
-          // 3. Incorporar no PDF
-          let embeddedImg;
-          if (img.mimeType === 'image/jpeg') {
-            embeddedImg = await pdfDoc.embedJpg(imgBytes);
-          } else {
-            embeddedImg = await pdfDoc.embedPng(imgBytes);
-          }
-
-          // 4. Calcular redimensionamento mantendo aspect ratio
-          const maxW = 245;
-          const maxH = 120;
-          const isRotated = orientation === 6 || orientation === 8;
-          const imgW = isRotated ? embeddedImg.height : embeddedImg.width;
-          const imgH = isRotated ? embeddedImg.width : embeddedImg.height;
-
-          const scale = Math.min(maxW / imgW, maxH / imgH);
-          const dW = embeddedImg.width * scale;
-          const dH = embeddedImg.height * scale;
-
-          const visW = isRotated ? dH : dW;
-          const visH = isRotated ? dW : dH;
-
-          // Centralizar imagem na área reservada da célula (245x120)
-          const imgX = cellX + (maxW - visW) / 2;
-          const imgY = (cellY + 50) + (maxH - visH) / 2;
-
-          // 5. Desenhar imagem com correção de rotação
-          if (orientation === 6) {
-            currentFotoPage.drawImage(embeddedImg, {
-              x: imgX,
-              y: imgY + dW,
-              width: dW,
-              height: dH,
-              rotate: degrees(270),
-            });
-          } else if (orientation === 8) {
-            currentFotoPage.drawImage(embeddedImg, {
-              x: imgX + dH,
-              y: imgY,
-              width: dW,
-              height: dH,
-              rotate: degrees(90),
-            });
-          } else if (orientation === 3) {
-            currentFotoPage.drawImage(embeddedImg, {
-              x: imgX + dW,
-              y: imgY + dH,
-              width: dW,
-              height: dH,
-              rotate: degrees(180),
-            });
-          } else {
-            currentFotoPage.drawImage(embeddedImg, {
-              x: imgX,
-              y: imgY,
-              width: dW,
-              height: dH,
-            });
-          }
-
-          // 6. Desenhar borda cinza fina ao redor da foto
-          currentFotoPage.drawRectangle({
-            x: imgX - 0.5,
-            y: imgY - 0.5,
-            width: visW + 1,
-            height: visH + 1,
-            borderColor: LUNARDELI_LIGHT_GRAY,
-            borderWidth: 0.5,
-          });
-
-          // 7. Link clicável
-          this.addLinkAnnotation(pdfDoc, currentFotoPage, img.urlS3, [
-            imgX,
-            imgY,
-            imgX + visW,
-            imgY + visH,
-          ]);
-
-          // 8. Desenhar legenda e metadados
-          const legendaText = img.nomeOriginal || 'Foto sem legenda';
-          const lines = wrapText(legendaText, colW - 6, 7, reg);
-          let textY = cellY + 40;
-          const linesToDraw = lines.slice(0, 3); // máximo 3 linhas
-          for (const line of linesToDraw) {
-            const textW = reg.widthOfTextAtSize(line, 7);
-            const textX = cellX + (colW - textW) / 2;
-            currentFotoPage.drawText(line, {
-              x: textX,
-              y: textY,
-              size: 7,
-              font: reg,
-              color: LUNARDELI_DARK,
-            });
-            textY -= 9;
-          }
-
-          const dataUpload = img.createdAt ? new Date(img.createdAt).toLocaleDateString('pt-BR') : '-';
-          const metaText = `Por: ${img.criador?.nome || '-'} em ${dataUpload}`;
-          const metaW = reg.widthOfTextAtSize(metaText, 6);
-          const metaX = cellX + (colW - metaW) / 2;
-          currentFotoPage.drawText(metaText, {
-            x: metaX,
-            y: cellY + 5,
-            size: 6,
-            font: reg,
-            color: GRAY,
-          });
-
-        } catch (err) {
-          console.error('[PdfService] Erro ao embutir foto em grade:', err);
-        }
-      }
+      await this.appendFotoAlbumPages(pdfDoc, anexos, bold, reg, m, wrapText);
     }
 
     // ── Numeração de páginas ─────────────────────────────────────────────────────
@@ -990,6 +828,263 @@ export class PdfService {
 
     const pdfBytes = await pdfDoc.save();
     return Buffer.from(pdfBytes);
+  }
+
+  /**
+   * Album impresso: 2 fotos por pagina A4, moldura e legenda.
+   * Carrega via loadImageBytes (R2/local) e embute so JPEG/PNG (magic bytes).
+   */
+  private async appendFotoAlbumPages(
+    pdfDoc: PDFDocument,
+    anexos: Array<{
+      mimeType?: string | null;
+      urlS3: string;
+      nomeOriginal?: string | null;
+      createdAt?: Date | null;
+      criador?: { nome?: string | null } | null;
+    }>,
+    bold: PDFFont,
+    reg: PDFFont,
+    m: { l: number; r: number; t: number; b: number },
+    wrapText: (
+      text: string,
+      maxWidth: number,
+      size: number,
+      font: PDFFont,
+    ) => string[],
+  ) {
+    const candidatas = anexos.filter((a) => {
+      const mime = (a.mimeType || '').toLowerCase();
+      if (mime.startsWith('image/')) return true;
+      const name = (a.nomeOriginal || a.urlS3 || '').toLowerCase();
+      return /\.(jpe?g|png|webp|heic|heif)$/i.test(name);
+    });
+
+    type EmbeddedSlot = {
+      embedded: Awaited<ReturnType<PDFDocument['embedJpg']>>;
+      orientation: number;
+      legenda: string;
+      meta: string;
+    };
+    const slots: EmbeddedSlot[] = [];
+
+    for (const img of candidatas) {
+      try {
+        const imgBytes = await this.loadImageBytes(img.urlS3);
+        if (!imgBytes || imgBytes.length < 4) {
+          console.warn(`[PdfService] Sem bytes para foto: ${img.urlS3}`);
+          continue;
+        }
+        const isJpg = imgBytes[0] === 0xff && imgBytes[1] === 0xd8;
+        const isPng =
+          imgBytes[0] === 0x89 &&
+          imgBytes[1] === 0x50 &&
+          imgBytes[2] === 0x4e &&
+          imgBytes[3] === 0x47;
+        if (!isJpg && !isPng) {
+          console.warn(
+            `[PdfService] Formato nao embutivel (use JPEG/PNG): ${img.nomeOriginal || img.urlS3}`,
+          );
+          continue;
+        }
+        const orientation = this.getExifOrientation(imgBytes);
+        const embedded = isJpg
+          ? await pdfDoc.embedJpg(imgBytes)
+          : await pdfDoc.embedPng(imgBytes);
+        const dataUpload = img.createdAt
+          ? new Date(img.createdAt).toLocaleDateString('pt-BR')
+          : '-';
+        slots.push({
+          embedded,
+          orientation,
+          legenda: img.nomeOriginal || 'Foto',
+          meta: `Por: ${img.criador?.nome || '-'} em ${dataUpload}`,
+        });
+      } catch (err) {
+        console.error('[PdfService] Falha ao preparar foto:', err);
+      }
+    }
+
+    if (slots.length === 0) {
+      if (candidatas.length > 0) {
+        const page = pdfDoc.addPage([595.28, 841.89]);
+        const FH = page.getHeight();
+        page.drawText('GALERIA DE FOTOS', {
+          x: m.l,
+          y: FH - m.t,
+          size: 12,
+          font: bold,
+          color: LUNARDELI_DARK,
+        });
+        page.drawText(
+          'Nao foi possivel embutir as fotos neste PDF (formato ou download).',
+          {
+            x: m.l,
+            y: FH - m.t - 28,
+            size: 9,
+            font: reg,
+            color: GRAY,
+          },
+        );
+        page.drawText(
+          'Prefira JPEG ou PNG. Os arquivos continuam na galeria do RDO.',
+          {
+            x: m.l,
+            y: FH - m.t - 44,
+            size: 8,
+            font: reg,
+            color: GRAY,
+          },
+        );
+      }
+      return;
+    }
+
+    const PAGE_W = 595.28;
+    const PAGE_H = 841.89;
+    const itemsPerPage = 2;
+    const contentTop = PAGE_H - m.t - 20;
+    const contentBottom = m.b + 24;
+    const usableH = contentTop - contentBottom;
+    const gapY = 18;
+    const slotH = (usableH - gapY) / 2;
+    const framePad = 8;
+    const captionH = 36;
+    const imgAreaH = slotH - captionH - framePad * 2;
+    const imgAreaW = PAGE_W - m.l - m.r - framePad * 2;
+
+    for (let idx = 0; idx < slots.length; idx++) {
+      const pageIdx = idx % itemsPerPage;
+      if (pageIdx === 0) {
+        const page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+        page.drawRectangle({
+          x: m.l,
+          y: PAGE_H - m.t - 2,
+          width: 5,
+          height: 12,
+          color: LUNARDELI_RED,
+        });
+        page.drawText('OBRA 10', {
+          x: m.l + 10,
+          y: PAGE_H - m.t,
+          size: 11,
+          font: bold,
+          color: LUNARDELI_DARK,
+        });
+        const pagNum = Math.floor(idx / itemsPerPage) + 1;
+        const totalPag = Math.ceil(slots.length / itemsPerPage);
+        const sub = `GALERIA DE FOTOS — ${pagNum}/${totalPag}`;
+        const subW = reg.widthOfTextAtSize(sub, 8);
+        page.drawText(sub, {
+          x: PAGE_W - m.r - subW,
+          y: PAGE_H - m.t,
+          size: 8,
+          font: reg,
+          color: GRAY,
+        });
+        page.drawLine({
+          start: { x: m.l, y: PAGE_H - m.t - 8 },
+          end: { x: PAGE_W - m.r, y: PAGE_H - m.t - 8 },
+          thickness: 0.5,
+          color: LUNARDELI_LIGHT_GRAY,
+        });
+      }
+
+      const pages = pdfDoc.getPages();
+      const currentFotoPage = pages[pages.length - 1];
+      const slot = slots[idx];
+      const row = pageIdx;
+      const frameY = contentTop - (row + 1) * slotH - row * gapY;
+      const frameX = m.l;
+      const frameW = PAGE_W - m.l - m.r;
+
+      currentFotoPage.drawRectangle({
+        x: frameX,
+        y: frameY,
+        width: frameW,
+        height: slotH,
+        color: LUNARDELI_GRAY,
+        borderColor: LUNARDELI_LIGHT_GRAY,
+        borderWidth: 0.8,
+      });
+
+      const orientation = slot.orientation;
+      const isRotated = orientation === 6 || orientation === 8;
+      const imgW = isRotated ? slot.embedded.height : slot.embedded.width;
+      const imgH = isRotated ? slot.embedded.width : slot.embedded.height;
+      const scale = Math.min(imgAreaW / imgW, imgAreaH / imgH, 1);
+      const dW = slot.embedded.width * scale;
+      const dH = slot.embedded.height * scale;
+      const visW = isRotated ? dH : dW;
+      const visH = isRotated ? dW : dH;
+
+      const imgBoxX = frameX + framePad + (imgAreaW - visW) / 2;
+      const imgBoxY = frameY + captionH + framePad + (imgAreaH - visH) / 2;
+
+      if (orientation === 6) {
+        currentFotoPage.drawImage(slot.embedded, {
+          x: imgBoxX,
+          y: imgBoxY + dW,
+          width: dW,
+          height: dH,
+          rotate: degrees(270),
+        });
+      } else if (orientation === 8) {
+        currentFotoPage.drawImage(slot.embedded, {
+          x: imgBoxX + dH,
+          y: imgBoxY,
+          width: dW,
+          height: dH,
+          rotate: degrees(90),
+        });
+      } else if (orientation === 3) {
+        currentFotoPage.drawImage(slot.embedded, {
+          x: imgBoxX + dW,
+          y: imgBoxY + dH,
+          width: dW,
+          height: dH,
+          rotate: degrees(180),
+        });
+      } else {
+        currentFotoPage.drawImage(slot.embedded, {
+          x: imgBoxX,
+          y: imgBoxY,
+          width: dW,
+          height: dH,
+        });
+      }
+
+      currentFotoPage.drawRectangle({
+        x: imgBoxX - 0.5,
+        y: imgBoxY - 0.5,
+        width: visW + 1,
+        height: visH + 1,
+        borderColor: LUNARDELI_LIGHT_GRAY,
+        borderWidth: 0.6,
+      });
+
+      const lines = wrapText(slot.legenda, frameW - 16, 8, reg).slice(0, 2);
+      let textY = frameY + captionH - 12;
+      for (const line of lines) {
+        const textW = reg.widthOfTextAtSize(line, 8);
+        currentFotoPage.drawText(line, {
+          x: frameX + (frameW - textW) / 2,
+          y: textY,
+          size: 8,
+          font: reg,
+          color: LUNARDELI_DARK,
+        });
+        textY -= 10;
+      }
+      const metaW = reg.widthOfTextAtSize(slot.meta, 7);
+      currentFotoPage.drawText(slot.meta, {
+        x: frameX + (frameW - metaW) / 2,
+        y: frameY + 8,
+        size: 7,
+        font: reg,
+        color: GRAY,
+      });
+    }
   }
 
   private addPage(pdfDoc: PDFDocument, bold: PDFFont, reg: PDFFont, m: { l: number; r: number; t: number; b: number }): DrawCtx {
