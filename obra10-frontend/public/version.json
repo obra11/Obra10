@@ -1,7 +1,7 @@
 {
-  "version": "2.9.18",
-  "buildId": "2.9.18-20260905",
-  "releasedAt": "2026-09-05",
+  "version": "2.9.19",
+  "buildId": "2.9.19-20260910",
+  "releasedAt": "2026-09-10",
   "channel": "production",
   "name": "Obra 10",
   "forceUpdate": false,
