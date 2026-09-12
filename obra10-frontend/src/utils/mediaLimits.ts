@@ -12,8 +12,6 @@ export const MAX_IMAGE_UPLOAD_BYTES = 15 * 1024 * 1024;
 /** Teto do endpoint único de upload RDO (deve cobrir o maior tipo). */
 export const MAX_RDO_MEDIA_BYTES = MAX_VIDEO_UPLOAD_BYTES;
 
-/** Acima disso, em online, não duplicamos o vídeo no IndexedDB (só memória + upload). */
-export const LARGE_VIDEO_SKIP_IDB_BYTES = 20 * 1024 * 1024;
 /** Lado maior da foto após compressão no aparelho. */
 export const IMAGE_COMPRESS_MAX_EDGE = 1920;
 /** Qualidade JPEG da compressão (0–1). */
@@ -50,12 +48,6 @@ export function checkMediaFileSize(
     };
   }
   return { ok: true };
-}
-
-/** true = gravar no IndexedDB; false = só manter em memória (upload direto). */
-export function shouldPersistVideoToIdb(file: File, online: boolean): boolean {
-  if (!online) return true;
-  return file.size <= LARGE_VIDEO_SKIP_IDB_BYTES;
 }
 
 export async function estimateIdbFreeBytes(): Promise<number | null> {

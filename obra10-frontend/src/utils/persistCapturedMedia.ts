@@ -56,12 +56,18 @@ function triggerDownload(file: File, filename: string) {
 
 export type PersistMediaResult = 'shared' | 'downloaded' | 'skipped' | 'failed';
 
+export type PersistMediaMode = 'gallery' | 'silent';
+
 /**
- * Salva no aparelho uma cópia do arquivo capturado pela câmera.
+ * Salva no aparelho uma cópia do arquivo (Galeria/Downloads/Arquivos),
+ * além do envio no RDO.
+ * - gallery: no iOS abre o compartilhar para “Salvar na Galeria”.
+ * - silent: só baixa a cópia, sem interromper o preenchimento.
  */
 export async function persistCapturedMediaToDevice(
   file: File,
   kind: 'image' | 'video',
+  mode: PersistMediaMode = 'gallery',
 ): Promise<PersistMediaResult> {
   if (!file || file.size === 0) return 'skipped';
 
@@ -71,7 +77,7 @@ export async function persistCapturedMediaToDevice(
   const named = new File([file], filename, { type: mime });
 
   // iOS: Share Sheet permite "Salvar Imagem/Vídeo" na Galeria (Photos).
-  if (isIOSDevice() && typeof navigator.share === 'function') {
+  if (mode === 'gallery' && isIOSDevice() && typeof navigator.share === 'function') {
     try {
       const canShareFiles =
         typeof navigator.canShare === 'function'
@@ -109,10 +115,11 @@ export async function persistCapturedMediaToDevice(
 export async function persistCapturedMediaList(
   files: File[],
   kind: 'image' | 'video',
+  mode: PersistMediaMode = 'gallery',
 ): Promise<PersistMediaResult> {
   let last: PersistMediaResult = 'skipped';
   for (const file of files) {
-    last = await persistCapturedMediaToDevice(file, kind);
+    last = await persistCapturedMediaToDevice(file, kind, mode);
   }
   return last;
 }

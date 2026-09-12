@@ -12,12 +12,11 @@ import { parseUTCDate } from '../utils/date';
 import { RdoShareBar } from '../components/RdoShareBar';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea';
 import { useAuth } from '../context/AuthContext';
-import { persistCapturedMediaList } from '../utils/persistCapturedMedia';
+import { persistCapturedMediaList, persistCapturedMediaToDevice } from '../utils/persistCapturedMedia';
 import {
   checkMediaFileSize,
   estimateIdbFreeBytes,
   formatBytes,
-  shouldPersistVideoToIdb,
   OFFLINE_ATTACHMENT_MAX_AGE_MS,
 } from '../utils/mediaLimits';
 import { compressImageFile } from '../utils/compressImage';
@@ -138,6 +137,10 @@ function moveItemInArray<T>(list: T[], from: number, direction: -1 | 1): T[] {
   const [item] = next.splice(from, 1);
   next.splice(to, 0, item);
   return next;
+}
+
+function mediaItemKey(kind: string, item: { offlineId?: string; file: File }) {
+  return item.offlineId || `${kind}:${item.file.name}:${item.file.size}:${item.file.lastModified}`;
 }
 
 type ItemSideActionsProps = {
@@ -340,6 +343,9 @@ export const DiarioDeObra: React.FC = () => {
   const [lastLocalSaveAt, setLastLocalSaveAt] = useState<string | null>(null);
   const autosaveReady = useRef(false);
   const syncingDraftRef = useRef(false);
+  const mediaUploadLockRef = useRef<Promise<void> | null>(null);
+  const autoUploadFnRef = useRef<() => Promise<void>>(async () => {});
+  const rdoIdAtualRef = useRef<string | null>(rdoId || null);
 
   const [status, setStatus] = useState<RdoStatus>('rascunho');
   const [toast, setToast] = useState<string | null>(null);
@@ -633,6 +639,13 @@ export const DiarioDeObra: React.FC = () => {
   const [videos, setVideos] = useState<VideoFile[]>([]);
   const [anexos, setAnexos] = useState<Anexo[]>([]);
   const [savedFiles, setSavedFiles] = useState<SavedFile[]>([]);
+  const fotosRef = useRef(fotos);
+  const videosRef = useRef(videos);
+  const anexosRef = useRef(anexos);
+  fotosRef.current = fotos;
+  videosRef.current = videos;
+  anexosRef.current = anexos;
+  rdoIdAtualRef.current = rdoIdAtual;
   const fotoCameraInputRef = useRef<HTMLInputElement>(null);
   const fotoGalleryInputRef = useRef<HTMLInputElement>(null);
   const fotoFilesInputRef = useRef<HTMLInputElement>(null);
@@ -904,9 +917,8 @@ export const DiarioDeObra: React.FC = () => {
   };
 
   /**
-   * Grava mídia no IndexedDB para não perder ao salvar sem rede.
-   * Vídeos grandes com rede: pula IDB (evita 2–3 cópias na memória do aparelho).
-   * Retorna null quando o arquivo só fica em memória (upload direto).
+   * Sempre grava foto/vídeo/anexo no IndexedDB — cópia de segurança no aparelho,
+   * mesmo com internet. Só deixa de gravar se o arquivo for inválido ou não houver espaço.
    */
   const persistMediaFileToIdb = async (
     file: File,
@@ -919,18 +931,12 @@ export const DiarioDeObra: React.FC = () => {
       throw new Error(sizeCheck.message);
     }
 
-    if (tipo === 'video' && !shouldPersistVideoToIdb(file, navigator.onLine)) {
-      showToast(
-        `🎥 Vídeo grande (${formatBytes(file.size)}): envio direto, sem cópia offline no aparelho.`,
-      );
-      return null;
-    }
-
     const free = await estimateIdbFreeBytes();
     if (free != null && file.size > free * 0.9) {
-      const msg = `Espaço insuficiente no aparelho (livre ~${formatBytes(free)}). Remova vídeos antigos do RDO ou libere armazenamento.`;
-      showToast(`⚠️ ${msg}`);
-      throw new Error(msg);
+      showToast(
+        `⚠️ Pouco espaço no aparelho (livre ~${formatBytes(free)}). A mídia entra no RDO, mas a cópia local do app pode falhar.`,
+      );
+      return null;
     }
 
     const offlineId = generateUUID();
@@ -960,7 +966,7 @@ export const DiarioDeObra: React.FC = () => {
 
   /** Garante que tudo que está só na memória também vá para o IndexedDB (antes de salvar offline). */
   const flushPendingMediaToIdb = async () => {
-    const nextFotos = [...fotos];
+    const nextFotos = [...fotosRef.current];
     for (let i = 0; i < nextFotos.length; i++) {
       if (nextFotos[i].offlineId) continue;
       try {
@@ -981,8 +987,9 @@ export const DiarioDeObra: React.FC = () => {
       }
     }
     setFotos(nextFotos);
+    fotosRef.current = nextFotos;
 
-    const nextVideos = [...videos];
+    const nextVideos = [...videosRef.current];
     for (let i = 0; i < nextVideos.length; i++) {
       if (nextVideos[i].offlineId) continue;
       try {
@@ -1003,8 +1010,9 @@ export const DiarioDeObra: React.FC = () => {
       }
     }
     setVideos(nextVideos);
+    videosRef.current = nextVideos;
 
-    const nextAnexos = [...anexos];
+    const nextAnexos = [...anexosRef.current];
     for (let i = 0; i < nextAnexos.length; i++) {
       if (nextAnexos[i].offlineId) continue;
       try {
@@ -1025,6 +1033,7 @@ export const DiarioDeObra: React.FC = () => {
       }
     }
     setAnexos(nextAnexos);
+    anexosRef.current = nextAnexos;
   };
 
   const hydratePendingMediaFromIdb = useCallback(async () => {
@@ -1045,6 +1054,8 @@ export const DiarioDeObra: React.FC = () => {
         seen.add(item.id);
         const blob = new Blob([item.dados], { type: item.mimeType });
         const file = new File([blob], item.nomeArquivo, { type: item.mimeType });
+        const failed = (item.tentativas || 0) >= 3;
+        const uploading = navigator.onLine && !failed;
         if (item.tipo === 'foto') {
           loadedFotos.push({
             file,
@@ -1052,7 +1063,8 @@ export const DiarioDeObra: React.FC = () => {
             legenda: item.legenda || '',
             offlineId: item.id,
             isOfflinePending: true,
-            uploadFalhou: (item.tentativas || 0) >= 3,
+            isUploading: uploading,
+            uploadFalhou: failed,
           });
         } else if (item.tipo === 'video') {
           loadedVideos.push({
@@ -1060,7 +1072,8 @@ export const DiarioDeObra: React.FC = () => {
             legenda: item.legenda || '',
             offlineId: item.id,
             isOfflinePending: true,
-            uploadFalhou: (item.tentativas || 0) >= 3,
+            isUploading: uploading,
+            uploadFalhou: failed,
           });
         } else {
           loadedAnexos.push({
@@ -1068,7 +1081,8 @@ export const DiarioDeObra: React.FC = () => {
             descricao: item.legenda || '',
             offlineId: item.id,
             isOfflinePending: true,
-            uploadFalhou: (item.tentativas || 0) >= 3,
+            isUploading: uploading,
+            uploadFalhou: failed,
           });
         }
       }
@@ -1094,9 +1108,13 @@ export const DiarioDeObra: React.FC = () => {
     }
   }, [rdoIdAtual, rdoId]);
 
-  const handleFotosDrop = async (files: File[]) => {
+  const handleFotosDrop = async (files: File[], opts?: { copyToDevice?: boolean }) => {
+    const copyToDevice = opts?.copyToDevice !== false;
     for (const raw of files) {
       try {
+        if (copyToDevice) {
+          await persistCapturedMediaToDevice(raw, 'image', 'silent').catch(() => 'failed');
+        }
         const file = await compressImageFile(raw);
         const sizeCheck = checkMediaFileSize(file, 'foto');
         if (!sizeCheck.ok) {
@@ -1105,6 +1123,7 @@ export const DiarioDeObra: React.FC = () => {
         }
         const preview = URL.createObjectURL(file);
         const offlineId = await persistMediaFileToIdb(file, 'foto');
+        const online = navigator.onLine;
         setFotos((prev) => [
           ...prev,
           {
@@ -1113,6 +1132,7 @@ export const DiarioDeObra: React.FC = () => {
             legenda: '',
             offlineId: offlineId || undefined,
             isOfflinePending: Boolean(offlineId),
+            isUploading: online,
             uploadFalhou: false,
           },
         ]);
@@ -1121,6 +1141,7 @@ export const DiarioDeObra: React.FC = () => {
         showToast('⚠️ Não foi possível guardar a foto no aparelho.');
       }
     }
+    persistDraftLocal({ pendingSync: !navigator.onLine }).catch(() => undefined);
   };
   const handleFotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []).filter(
@@ -1138,8 +1159,8 @@ export const DiarioDeObra: React.FC = () => {
     e.target.value = '';
     if (files.length === 0) return;
 
-    const result = await persistCapturedMediaList(files, 'image');
-    handleFotosDrop(files);
+    const result = await persistCapturedMediaList(files, 'image', 'gallery');
+    handleFotosDrop(files, { copyToDevice: false });
 
     if (result === 'shared') {
       showToast('📷 Use "Salvar Imagem" para guardar na Galeria.');
@@ -1150,9 +1171,13 @@ export const DiarioDeObra: React.FC = () => {
     }
   };
 
-  const handleVideosDrop = async (files: File[]) => {
+  const handleVideosDrop = async (files: File[], opts?: { copyToDevice?: boolean }) => {
+    const copyToDevice = opts?.copyToDevice !== false;
     for (const file of files) {
       try {
+        if (copyToDevice) {
+          await persistCapturedMediaToDevice(file, 'video', 'silent').catch(() => 'failed');
+        }
         const sizeCheck = checkMediaFileSize(file, 'video');
         if (!sizeCheck.ok) {
           showToast(`⚠️ ${sizeCheck.message}`);
@@ -1166,6 +1191,7 @@ export const DiarioDeObra: React.FC = () => {
           ? file
           : new File([file], nomeArquivo, { type: mimeType });
         const offlineId = await persistMediaFileToIdb(fileNorm, 'video');
+        const online = navigator.onLine;
         setVideos((prev) => [
           ...prev,
           {
@@ -1173,6 +1199,7 @@ export const DiarioDeObra: React.FC = () => {
             legenda: '',
             offlineId: offlineId || undefined,
             isOfflinePending: Boolean(offlineId),
+            isUploading: online,
             uploadFalhou: false,
           },
         ]);
@@ -1181,6 +1208,7 @@ export const DiarioDeObra: React.FC = () => {
         showToast('⚠️ Não foi possível guardar o vídeo no aparelho.');
       }
     }
+    persistDraftLocal({ pendingSync: !navigator.onLine }).catch(() => undefined);
   };
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []).filter(
@@ -1206,8 +1234,8 @@ export const DiarioDeObra: React.FC = () => {
     }
 
     // Sempre tenta guardar cópia na galeria/arquivos do celular
-    const result = await persistCapturedMediaList(files, 'video');
-    handleVideosDrop(files);
+    const result = await persistCapturedMediaList(files, 'video', 'gallery');
+    handleVideosDrop(files, { copyToDevice: false });
 
     if (result === 'shared') {
       showToast('🎥 Use "Salvar Vídeo" para guardar na Galeria.');
@@ -1227,6 +1255,7 @@ export const DiarioDeObra: React.FC = () => {
           continue;
         }
         const offlineId = await persistMediaFileToIdb(file, 'anexo');
+        const online = navigator.onLine;
         setAnexos((prev) => [
           ...prev,
           {
@@ -1234,6 +1263,7 @@ export const DiarioDeObra: React.FC = () => {
             descricao: '',
             offlineId: offlineId || undefined,
             isOfflinePending: Boolean(offlineId),
+            isUploading: online,
             uploadFalhou: false,
           },
         ]);
@@ -1242,6 +1272,7 @@ export const DiarioDeObra: React.FC = () => {
         showToast('⚠️ Não foi possível guardar o documento no aparelho.');
       }
     }
+    persistDraftLocal({ pendingSync: !navigator.onLine }).catch(() => undefined);
   };
   const handleAnexoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     handleAnexosDrop(Array.from(e.target.files || []));
@@ -1306,6 +1337,88 @@ export const DiarioDeObra: React.FC = () => {
     atividadesExecutadas, atividadesPendentes, observacoes,
   ]);
 
+  const ensureRdoIdOnServer = async (): Promise<string | null> => {
+    if (!obraId || !navigator.onLine) return null;
+    if (rdoIdAtualRef.current) return rdoIdAtualRef.current;
+    if (!tipoRelatorio) return null;
+    if (syncingDraftRef.current) return rdoIdAtualRef.current;
+
+    syncingDraftRef.current = true;
+    try {
+      const headers = { 'x-obra-id': obraId };
+      const dadosExtras = buildDadosExtras();
+      const res = await api.post(
+        '/rdos',
+        { dataReferencia: data, dadosExtras },
+        { headers },
+      );
+      const newId = res.data.id as string;
+      rdoIdAtualRef.current = newId;
+      setRdoIdAtual(newId);
+      await updateRdoId(tempRdoId.current, newId);
+      await deleteOfflineRdoDraft(offlineDraftKey(obraId, null));
+      await saveOfflineRdoDraft({
+        localKey: offlineDraftKey(obraId, newId),
+        obraId,
+        rdoId: newId,
+        tempId: tempRdoId.current,
+        dadosExtras,
+        aprovadorId: aprovadorIdSelecionado || undefined,
+        pendingSync: false,
+        updatedAt: new Date().toISOString(),
+        rdoNumberStr,
+        nomeObra,
+      });
+      setDraftPendingSync(false);
+      navigate(`/obras/${obraId}/rdos/${newId}`, { replace: true });
+      return newId;
+    } catch (err) {
+      console.warn('Não foi possível criar o rascunho no servidor para enviar mídias:', err);
+      return rdoIdAtualRef.current;
+    } finally {
+      syncingDraftRef.current = false;
+    }
+  };
+
+  const autoUploadPendingMedia = async () => {
+    if (!navigator.onLine || !obraId || isReadOnly) return;
+    if (status !== 'rascunho') return;
+    if (mediaUploadLockRef.current) {
+      await mediaUploadLockRef.current;
+    }
+    if (mediaUploadLockRef.current) return;
+
+    const pendingKeys = () =>
+      [
+        ...fotosRef.current.map((f) => mediaItemKey('foto', f)),
+        ...videosRef.current.map((v) => mediaItemKey('video', v)),
+        ...anexosRef.current.map((a) => mediaItemKey('anexo', a)),
+      ]
+        .sort()
+        .join('|');
+
+    const run = (async () => {
+      let lastKeys = '';
+      while (navigator.onLine && obraId && !isReadOnly) {
+        const keys = pendingKeys();
+        if (!keys || keys === lastKeys) break;
+        lastKeys = keys;
+        const rdoIdAlvo = await ensureRdoIdOnServer();
+        if (!rdoIdAlvo || !navigator.onLine) break;
+        await uploadMidas(rdoIdAlvo);
+        await syncOfflineFiles(rdoIdAlvo);
+      }
+    })();
+
+    mediaUploadLockRef.current = run;
+    try {
+      await run;
+    } finally {
+      if (mediaUploadLockRef.current === run) mediaUploadLockRef.current = null;
+    }
+  };
+  autoUploadFnRef.current = autoUploadPendingMedia;
+
   // Autosave contínuo no aparelho (protege perda sem sinal / fechamento acidental)
   useEffect(() => {
     if (!autosaveReady.current || !obraId || isReadOnly || status !== 'rascunho' || initLoading || !tipoRelatorio) return;
@@ -1322,7 +1435,14 @@ export const DiarioDeObra: React.FC = () => {
 
   // Monitorar conexão e sincronizar rascunhos pendentes
   useEffect(() => {
-    const onOnline = () => setIsOnline(true);
+    const onOnline = () => {
+      setIsOnline(true);
+      window.setTimeout(() => {
+        autoUploadFnRef.current().catch((err) =>
+          console.warn('Upload automático ao reconectar falhou:', err),
+        );
+      }, 300);
+    };
     const onOffline = () => {
       setIsOnline(false);
       // Ao perder rede, força gravar mídias ainda só em memória
@@ -1336,6 +1456,24 @@ export const DiarioDeObra: React.FC = () => {
     return () => {
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
+    };
+  }, [persistDraftLocal]);
+
+  // Fecha o app / troca de aba: guarda rascunho e mídias no aparelho
+  useEffect(() => {
+    const persistNow = () => {
+      flushPendingMediaToIdb().catch(() => undefined);
+      persistDraftLocal({ pendingSync: !navigator.onLine }).catch(() => undefined);
+    };
+    const onPageHide = () => persistNow();
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') persistNow();
+    };
+    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [persistDraftLocal]);
 
@@ -1427,17 +1565,42 @@ export const DiarioDeObra: React.FC = () => {
     };
   }, [initLoading, obraId, rdoIdAtual, rdoId, hydratePendingMediaFromIdb]);
 
+  // Com internet, envia foto/vídeo/anexo assim que entram no RDO — sem esperar o Salvar
+  useEffect(() => {
+    if (initLoading || !isOnline || !obraId || isReadOnly || status !== 'rascunho') return;
+    const pending = fotos.length + videos.length + anexos.length;
+    if (pending === 0) return;
+    const timer = window.setTimeout(() => {
+      autoUploadFnRef.current().catch((err) =>
+        console.warn('Upload automático de mídias falhou:', err),
+      );
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [
+    initLoading,
+    isOnline,
+    obraId,
+    isReadOnly,
+    status,
+    fotos.length,
+    videos.length,
+    anexos.length,
+  ]);
+
   const uploadMidas = async (rdoIdAlvo: string) => {
     if (!obraId) return;
+
+    const fotosSnap = fotosRef.current;
+    const videosSnap = videosRef.current;
+    const anexosSnap = anexosRef.current;
+    const totalFiles = fotosSnap.length + videosSnap.length + anexosSnap.length;
+    if (totalFiles === 0) return;
 
     let successCount = 0;
     let failCount = 0;
     const novosAnexos: SavedFile[] = [];
-    const totalFiles = fotos.length + videos.length + anexos.length;
-
-    const fotosRestantes: typeof fotos = [];
-    const videosRestantes: typeof videos = [];
-    const anexosRestantes: typeof anexos = [];
+    const uploadedKeys = new Set<string>();
+    const failedKeys = new Set<string>();
 
     const uploadTimeoutMs = 600000; // 10 min — vídeos até ~100 MB em 4G do canteiro
 
@@ -1447,15 +1610,23 @@ export const DiarioDeObra: React.FC = () => {
       | { kind: 'anexo'; item: (typeof anexos)[0] };
 
     const jobs: Job[] = [
-      ...fotos.map((item) => ({ kind: 'foto' as const, item })),
-      ...videos.map((item) => ({ kind: 'video' as const, item })),
-      ...anexos.map((item) => ({ kind: 'anexo' as const, item })),
+      ...fotosSnap.map((item) => ({ kind: 'foto' as const, item })),
+      ...videosSnap.map((item) => ({ kind: 'video' as const, item })),
+      ...anexosSnap.map((item) => ({ kind: 'anexo' as const, item })),
     ];
+
+    for (const job of jobs) {
+      if (job.item.offlineId) marcarEnviandoLocal(job.item.offlineId);
+    }
+    setFotos((prev) => prev.map((f) => ({ ...f, isUploading: true, uploadFalhou: false })));
+    setVideos((prev) => prev.map((v) => ({ ...v, isUploading: true, uploadFalhou: false })));
+    setAnexos((prev) => prev.map((a) => ({ ...a, isUploading: true, uploadFalhou: false })));
 
     await mapWithConcurrency(
       jobs,
       RDO_UPLOAD_CONCURRENCY,
       async (job) => {
+        const key = mediaItemKey(job.kind, job.item);
         const formData = new FormData();
         let offlineId: string | undefined;
 
@@ -1504,27 +1675,53 @@ export const DiarioDeObra: React.FC = () => {
               /* ignore */
             }
           }
+          uploadedKeys.add(key);
           successCount++;
         } catch (err: any) {
           console.error('Erro ao subir mídia:', err);
-          if (job.kind === 'foto') fotosRestantes.push(job.item);
-          else if (job.kind === 'video') videosRestantes.push(job.item);
-          else anexosRestantes.push(job.item);
+          failedKeys.add(key);
           failCount++;
         }
       },
       (done, total) => {
-        setToast(`⏳ Fazendo upload das mídias... (${done}/${total || totalFiles})`);
+        setToast(`⏳ Enviando arquivo(s)... (${done}/${total || totalFiles})`);
       },
     );
 
-    // Só remove da fila o que realmente subiu
-    setFotos(fotosRestantes);
-    setVideos(videosRestantes);
-    setAnexos(anexosRestantes);
+    // Remove só o que subiu; preserva arquivos inseridos no meio do envio
+    setFotos((prev) =>
+      prev
+        .filter((f) => !uploadedKeys.has(mediaItemKey('foto', f)))
+        .map((f) =>
+          failedKeys.has(mediaItemKey('foto', f))
+            ? { ...f, isUploading: false, uploadFalhou: true }
+            : f,
+        ),
+    );
+    setVideos((prev) =>
+      prev
+        .filter((v) => !uploadedKeys.has(mediaItemKey('video', v)))
+        .map((v) =>
+          failedKeys.has(mediaItemKey('video', v))
+            ? { ...v, isUploading: false, uploadFalhou: true }
+            : v,
+        ),
+    );
+    setAnexos((prev) =>
+      prev
+        .filter((a) => !uploadedKeys.has(mediaItemKey('anexo', a)))
+        .map((a) =>
+          failedKeys.has(mediaItemKey('anexo', a))
+            ? { ...a, isUploading: false, uploadFalhou: true }
+            : a,
+        ),
+    );
 
     if (novosAnexos.length > 0) {
-      setSavedFiles((prev) => [...prev, ...novosAnexos]);
+      setSavedFiles((prev) => {
+        const ids = new Set(prev.map((p) => p.id));
+        return [...prev, ...novosAnexos.filter((a) => !ids.has(a.id))];
+      });
     }
 
     if (successCount > 0) {
@@ -1537,7 +1734,7 @@ export const DiarioDeObra: React.FC = () => {
       setTimeout(
         () =>
           showToast(
-            `⚠️ ${failCount} arquivo(s) não foram enviados. Verifique a conexão e tente salvar de novo.`,
+            `⚠️ ${failCount} arquivo(s) não foram enviados. Assim que houver sinal, o envio tenta de novo — ou toque em Tentar.`,
           ),
         800,
       );
@@ -1567,7 +1764,11 @@ export const DiarioDeObra: React.FC = () => {
     if (!obraId) return;
     if (!validarPeriodo()) return;
     setSaving(true);
+    let releaseLock: (() => void) | undefined;
     try {
+      if (mediaUploadLockRef.current) {
+        await mediaUploadLockRef.current;
+      }
       // Sem sinal: grava no aparelho e marca para sync posterior
       if (!navigator.onLine) {
         await flushPendingMediaToIdb();
@@ -1582,6 +1783,18 @@ export const DiarioDeObra: React.FC = () => {
         return;
       }
 
+      {
+        let resolveLock = () => {};
+        const held = new Promise<void>((r) => {
+          resolveLock = r;
+        });
+        mediaUploadLockRef.current = held;
+        releaseLock = () => {
+          resolveLock();
+          if (mediaUploadLockRef.current === held) mediaUploadLockRef.current = null;
+        };
+      }
+
       const headers = { 'x-obra-id': obraId };
       const dadosExtras = buildDadosExtras();
 
@@ -1589,6 +1802,7 @@ export const DiarioDeObra: React.FC = () => {
         // Criar RDO novo
         const res = await api.post('/rdos', { dataReferencia: data, dadosExtras }, { headers });
         const newId = res.data.id;
+        rdoIdAtualRef.current = newId;
         setRdoIdAtual(newId);
         await updateRdoId(tempRdoId.current, newId);
         await uploadMidas(newId);
@@ -1641,6 +1855,7 @@ export const DiarioDeObra: React.FC = () => {
         showToast(`❌ Erro ao salvar: ${err?.response?.data?.message || 'tente novamente'}`);
       }
     } finally {
+      releaseLock?.();
       setSaving(false);
     }
   };
@@ -1658,7 +1873,22 @@ export const DiarioDeObra: React.FC = () => {
       return;
     }
     setSaving(true);
+    let releaseLock: (() => void) | undefined;
     try {
+      if (mediaUploadLockRef.current) {
+        await mediaUploadLockRef.current;
+      }
+      {
+        let resolveLock = () => {};
+        const held = new Promise<void>((r) => {
+          resolveLock = r;
+        });
+        mediaUploadLockRef.current = held;
+        releaseLock = () => {
+          resolveLock();
+          if (mediaUploadLockRef.current === held) mediaUploadLockRef.current = null;
+        };
+      }
       const headers = { 'x-obra-id': obraId };
       let idParaSubmeter = rdoIdAtual;
 
@@ -1666,6 +1896,7 @@ export const DiarioDeObra: React.FC = () => {
       if (!idParaSubmeter) {
         const res = await api.post('/rdos', { dataReferencia: data, dadosExtras: buildDadosExtras() }, { headers });
         idParaSubmeter = res.data.id;
+        rdoIdAtualRef.current = idParaSubmeter;
         setRdoIdAtual(idParaSubmeter);
         await updateRdoId(tempRdoId.current, idParaSubmeter!);
         await deleteOfflineRdoDraft(offlineDraftKey(obraId, null));
@@ -1693,6 +1924,7 @@ export const DiarioDeObra: React.FC = () => {
         showToast(`❌ ${err?.response?.data?.message || 'Erro ao enviar'}`);
       }
     } finally {
+      releaseLock?.();
       setSaving(false);
     }
   };
@@ -1828,8 +2060,16 @@ export const DiarioDeObra: React.FC = () => {
               </span>
             )}
             {(fotos.length + videos.length + anexos.length) > 0 && status === 'rascunho' && (
-              <span className="px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border whitespace-nowrap bg-violet-50 text-violet-800 border-violet-200">
-                {fotos.length + videos.length + anexos.length} MÍDIA(S) NO APARELHO
+              <span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border whitespace-nowrap ${
+                fotos.some((f) => f.isUploading) || videos.some((v) => v.isUploading) || anexos.some((a) => a.isUploading)
+                  ? 'bg-blue-50 text-blue-800 border-blue-200'
+                  : 'bg-violet-50 text-violet-800 border-violet-200'
+              }`}>
+                {fotos.some((f) => f.isUploading) || videos.some((v) => v.isUploading) || anexos.some((a) => a.isUploading)
+                  ? `ENVIANDO ${fotos.length + videos.length + anexos.length} ARQUIVO(S)`
+                  : isOnline
+                    ? `${fotos.length + videos.length + anexos.length} ARQUIVO(S) NA FILA`
+                    : `${fotos.length + videos.length + anexos.length} MÍDIA(S) NO APARELHO`}
               </span>
             )}
             {isOnline && lastLocalSaveAt && !draftPendingSync && status === 'rascunho' && (
@@ -2445,12 +2685,12 @@ export const DiarioDeObra: React.FC = () => {
                         <div key={f.offlineId || i} className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col relative">
                            <img src={f.preview} alt="" className="w-full h-24 object-cover" />
                            {/* Offline badge overlay */}
-                           {f.isOfflinePending && (
+                           {(f.isOfflinePending || f.isUploading || f.uploadFalhou) && (
                               <div className="absolute top-1 left-1 right-1 flex flex-col gap-1 z-10">
                                  {!f.isUploading && !f.uploadFalhou && (
                                     <div className="flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-amber-600">
                                        <span>☁️</span>
-                                       <span>Offline</span>
+                                       <span>{isOnline ? 'Na fila' : 'Offline'}</span>
                                     </div>
                                  )}
                                  {f.isUploading && (
@@ -2466,7 +2706,7 @@ export const DiarioDeObra: React.FC = () => {
                                           <span>Falha</span>
                                        </div>
                                        <button
-                                          onClick={(e) => { e.preventDefault(); syncOfflineFiles(rdoIdAtual || tempRdoId.current); }}
+                                          onClick={(e) => { e.preventDefault(); autoUploadFnRef.current(); }}
                                           className="mt-0.5 bg-white text-red-600 px-2 py-0.5 rounded text-[8px] font-black hover:bg-gray-100 transition-colors shadow-sm"
                                        >
                                           Tentar
@@ -2600,11 +2840,11 @@ export const DiarioDeObra: React.FC = () => {
                               <button onClick={() => handleDeletePendingVideo(i, v.offlineId)} className="text-red-500 p-1 disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
                            </div>
                            {/* Offline badge */}
-                           {v.isOfflinePending && (
+                           {(v.isOfflinePending || v.isUploading || v.uploadFalhou) && (
                               <div className="w-full flex items-center justify-between gap-2 border-t border-gray-100 pt-1.5">
                                  {!v.isUploading && !v.uploadFalhou && (
                                     <div className="w-full flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-amber-600">
-                                       <span>☁️ Offline</span>
+                                       <span>{isOnline ? '☁️ Na fila' : '☁️ Offline'}</span>
                                     </div>
                                  )}
                                  {v.isUploading && (
@@ -2619,7 +2859,7 @@ export const DiarioDeObra: React.FC = () => {
                                           <span>⚠️ Falha</span>
                                        </div>
                                        <button
-                                          onClick={(e) => { e.preventDefault(); syncOfflineFiles(rdoIdAtual || tempRdoId.current); }}
+                                          onClick={(e) => { e.preventDefault(); autoUploadFnRef.current(); }}
                                           className="bg-white text-red-600 px-2 py-0.5 rounded text-[8px] font-black hover:bg-gray-100 transition-colors shadow-sm"
                                        >
                                           Tentar
@@ -2705,11 +2945,11 @@ export const DiarioDeObra: React.FC = () => {
                               <button onClick={() => handleDeletePendingAnexo(i, a.offlineId)} className="text-red-500 p-1 disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
                            </div>
                            {/* Offline badge */}
-                           {a.isOfflinePending && (
+                           {(a.isOfflinePending || a.isUploading || a.uploadFalhou) && (
                               <div className="w-full flex items-center justify-between gap-2 border-t border-gray-100 pt-1.5">
                                  {!a.isUploading && !a.uploadFalhou && (
                                     <div className="w-full flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-amber-600">
-                                       <span>☁️ Offline</span>
+                                       <span>{isOnline ? '☁️ Na fila' : '☁️ Offline'}</span>
                                     </div>
                                  )}
                                  {a.isUploading && (
@@ -2724,7 +2964,7 @@ export const DiarioDeObra: React.FC = () => {
                                           <span>⚠️ Falha</span>
                                        </div>
                                        <button
-                                          onClick={(e) => { e.preventDefault(); syncOfflineFiles(rdoIdAtual || tempRdoId.current); }}
+                                          onClick={(e) => { e.preventDefault(); autoUploadFnRef.current(); }}
                                           className="bg-white text-red-600 px-2 py-0.5 rounded text-[8px] font-black hover:bg-gray-100 transition-colors shadow-sm"
                                        >
                                           Tentar
