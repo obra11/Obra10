@@ -32,7 +32,7 @@ export default function LunaWidget() {
     {
       role: 'assistant',
       content:
-        'Oi! Sou a Luna. Posso olhar os diários da obra (chuva, efetivo, atividades…) ou te ajudar com uma dúvida técnica em fonte aberta. O que você precisa?',
+        'Oi! Sou a Luna, sua assessora no Obra 10. Posso olhar qualquer obra da empresa, diários, catálogo, equipe e te explicar como usar o sistema. O que você precisa?',
     },
   ]);
   const [input, setInput] = useState('');
@@ -63,21 +63,94 @@ export default function LunaWidget() {
     setMessages(newMessages);
     setInput('');
     setLoading(true);
-    try {
-      const history = newMessages.slice(0, -1);
-      const { data } = await api.post('/ai/chat', { message: text, history });
-      setMessages([...newMessages, { role: 'assistant', content: data.reply }]);
-    } catch {
-      setMessages([
-        ...newMessages,
-        {
-          role: 'assistant',
-          content:
-            'Não consegui consultar os diários agora. Tente novamente em instantes.',
-        },
-      ]);
-    } finally {
+    const history = newMessages.slice(0, -1);
+
+    const finishWith = (content: string) => {
+      setMessages([...newMessages, { role: 'assistant', content }]);
       setLoading(false);
+    };
+
+    try {
+      const base = (api.defaults.baseURL as string) || '';
+      const xsrf =
+        document.cookie
+          .split('; ')
+          .find((c) => c.startsWith('XSRF-TOKEN='))
+          ?.split('=')[1] || localStorage.getItem('obra10_csrf_token') || '';
+      let obraId = '';
+      try {
+        const raw = localStorage.getItem('obra10_obraAtiva');
+        if (raw && raw !== 'undefined') obraId = JSON.parse(raw)?.id || '';
+      } catch { /* ignore */ }
+
+      const res = await fetch(`${base}/ai/chat/stream`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-xsrf-token': xsrf,
+          ...(obraId ? { 'x-obra-id': obraId } : {}),
+        },
+        body: JSON.stringify({ message: text, history }),
+        signal: AbortSignal.timeout(120000),
+      });
+
+      if (!res.ok || !res.body) {
+        const { data } = await api.post(
+          '/ai/chat',
+          { message: text, history },
+          { timeout: 120000 },
+        );
+        finishWith(data.reply || 'Não consegui responder agora.');
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let acc = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          let ev: any;
+          try {
+            ev = JSON.parse(trimmed.slice(5).trim());
+          } catch {
+            continue;
+          }
+          if (ev.type === 'delta' && ev.text) {
+            acc += ev.text;
+            setLoading(false);
+            setMessages([...newMessages, { role: 'assistant', content: acc }]);
+          }
+          if (ev.type === 'done' || ev.type === 'error') {
+            acc = ev.reply || acc;
+          }
+        }
+      }
+      finishWith(
+        acc ||
+          'Não consegui montar a resposta. Tente de novo em instantes.',
+      );
+    } catch {
+      try {
+        const { data } = await api.post(
+          '/ai/chat',
+          { message: text, history },
+          { timeout: 120000 },
+        );
+        finishWith(data.reply || 'Não consegui consultar agora.');
+      } catch {
+        finishWith(
+          'Não consegui consultar o Obra 10 agora. Tente novamente em instantes.',
+        );
+      }
     }
   };
 
@@ -190,7 +263,7 @@ export default function LunaWidget() {
             <img src="/luna-avatar.png?v=3" alt="Luna" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.5)' }} />
             <div style={{ flex: 1 }}>
               <div style={{ color: 'white', fontWeight: 700, fontSize: 16 }}>Luna</div>
-              <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>Assistente Obra 10</div>
+              <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>Assessora Obra 10</div>
             </div>
             <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'white', fontSize: 20, cursor: 'pointer', padding: '4px' }}>✕</button>
           </div>

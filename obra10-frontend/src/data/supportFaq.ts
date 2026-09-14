@@ -53,7 +53,14 @@ export const SUPPORT_FAQ: FaqItem[] = [
     id: 'luna',
     pergunta: 'O que a Luna (assistente) consegue fazer?',
     resposta:
-      'A Luna responde sobre diários da obra (chuva, efetivo, atividades) e dúvidas técnicas em fontes abertas. Ela não substitui o suporte humano para cobrança, acesso ou bugs — use esta Central ou o WhatsApp.',
+      'A Luna é a assessora do Obra 10: consulta todas as suas obras (não só a tela aberta), diários, painel, catálogo, equipe (se você gerencia) e explica como usar o sistema (criar RDO, PDF com fotos, Relatórios, etc.). Ela não cria nem aprova no seu lugar. Para cobrança, acesso ou bugs, use esta Central.',
+    categoria: 'Técnico',
+  },
+  {
+    id: 'mcp',
+    pergunta: 'Como ligo o Obra 10 no ChatGPT, Claude ou Gemini?',
+    resposta:
+      'Use o MCP remoto: POST https://obra10.app.br/mcp com Authorization Bearer. Gere o token em POST /auth/token com o mesmo e-mail e senha do Obra 10 (válido 7 dias). No ChatGPT, ative o Developer Mode e adicione a URL do conector. A Luna no app já usa as mesmas consultas.',
     categoria: 'Técnico',
   },
   {

@@ -155,6 +155,39 @@ export class AuthService {
     };
   }
 
+  /** Token Bearer de 7 dias para MCP / APIs (sem cookie). */
+  async emitirTokenMcp(email: string, senhaPlana: string, empresaId: string) {
+    const login = await this.login(email, senhaPlana, empresaId);
+    const user = await this.prisma.usuario.findFirst({
+      where: { id: login.usuario.id },
+      select: { jwtVersion: true },
+    });
+    const access_token = await this.jwtService.signAsync(
+      {
+        sub: login.usuario.id,
+        email: login.usuario.email,
+        empresaId: login.usuario.empresaId,
+        perfilGlobal: login.usuario.perfilGlobal,
+        jwtVersion: user?.jwtVersion,
+        scope: 'mcp',
+      },
+      { expiresIn: '7d' },
+    );
+    return {
+      access_token,
+      token_type: 'Bearer',
+      expires_in: 7 * 24 * 3600,
+      usuario: {
+        nome: login.usuario.nome,
+        email: login.usuario.email,
+      },
+      mcp: {
+        url: 'https://obra10.app.br/mcp',
+        method: 'POST',
+      },
+    };
+  }
+
   async getMe(userId: string) {
     const user = await this.prisma.usuario.findUnique({
       where: { id: userId, ativo: true, deletedAt: null },

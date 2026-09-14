@@ -114,11 +114,14 @@ export class AppModule implements NestModule {
       .apply(CsrfMiddleware)
       .exclude(
         { path: 'auth/login', method: RequestMethod.POST },
+        { path: 'auth/token', method: RequestMethod.POST },
         { path: 'auth/esqueci-senha', method: RequestMethod.POST },
         { path: 'auth/redefinir-senha', method: RequestMethod.POST },
         { path: 'tenants/register', method: RequestMethod.POST },
         { path: 'tenants/reenviar-verificacao', method: RequestMethod.POST },
         { path: 'cobrancas/webhook/asaas', method: RequestMethod.POST },
+        { path: 'mcp', method: RequestMethod.POST },
+        { path: 'mcp', method: RequestMethod.GET },
       )
       .forRoutes('*');
 

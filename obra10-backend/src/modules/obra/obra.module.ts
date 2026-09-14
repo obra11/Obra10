@@ -7,5 +7,6 @@ import { EmailModule } from '../email/email.module';
   imports: [EmailModule],
   controllers: [ObraController],
   providers: [ObraService],
+  exports: [ObraService],
 })
 export class ObraModule {}

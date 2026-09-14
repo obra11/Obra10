@@ -78,6 +78,48 @@ export class AuthController {
     return userData;
   }
 
+  /**
+   * POST /auth/token — JWT Bearer para MCP (ChatGPT, Claude, Gemini).
+   * Mesma autenticação do login; o token vai no header Authorization, sem cookie.
+   */
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Post('token')
+  async emitirToken(@Body() dto: LoginDto) {
+    const email = String(dto.email || '').trim().toLowerCase();
+    const senha = String(dto.senha || '');
+    let empresaId = dto.empresaId;
+    if (!empresaId) {
+      const candidatos = await this.prisma.usuario.findMany({
+        where: {
+          email: { equals: email, mode: 'insensitive' },
+          ativo: true,
+          deletedAt: null,
+        },
+        select: { id: true, empresaId: true, senhaHash: true },
+      });
+      if (!candidatos.length) {
+        throw new UnauthorizedException('Credenciais inválidas.');
+      }
+      if (candidatos.length === 1) {
+        empresaId = candidatos[0].empresaId;
+      } else {
+        const bcrypt = await import('bcrypt');
+        let matched: (typeof candidatos)[number] | null = null;
+        for (const c of candidatos) {
+          if (await bcrypt.compare(senha, c.senhaHash)) {
+            matched = c;
+            break;
+          }
+        }
+        if (!matched) {
+          throw new UnauthorizedException('Credenciais inválidas.');
+        }
+        empresaId = matched.empresaId;
+      }
+    }
+    return this.authService.emitirTokenMcp(email, senha, empresaId);
+  }
+
   @Post('logout')
   async logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie('obra10_token', {
