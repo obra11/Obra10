@@ -217,6 +217,35 @@ export function normalizeCapabilities(
   });
 }
 
+/**
+ * Junta permissões gravadas na obra com a função da empresa.
+ * VIEW na obra não anula "Criar e editar RDO" do papel (era o default ao marcar o módulo).
+ * VIEW_APPROVED / VIEW_PARTIAL_APPROVED continuam restringindo.
+ */
+export function mergePermissoesObra(
+  obraPerms: Record<string, string> | null | undefined,
+  caps?: { criarEditarRdo?: boolean; modulosPadrao?: Record<string, string> } | null,
+): Record<string, string> {
+  const base: Record<string, string> = { ...(obraPerms || {}) };
+  const padrao = caps?.modulosPadrao || {};
+  for (const [slug, nivel] of Object.entries(padrao)) {
+    if (!base[slug]) base[slug] = nivel;
+  }
+
+  const obraRdo = base.RDO || base.rdo;
+  if (
+    obraRdo !== 'VIEW_APPROVED' &&
+    obraRdo !== 'VIEW_PARTIAL_APPROVED'
+  ) {
+    if (caps?.criarEditarRdo || padrao.RDO === 'EDIT' || obraRdo === 'EDIT') {
+      base.RDO = 'EDIT';
+    } else if (!obraRdo && padrao.RDO) {
+      base.RDO = padrao.RDO;
+    }
+  }
+  return base;
+}
+
 function boolOr(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CapabilitiesService } from '../capabilities/capabilities.service';
+import { mergePermissoesObra } from '../capabilities/role-capabilities';
 
 @Injectable()
 export class ObraContextGuard implements CanActivate {
@@ -71,7 +72,14 @@ export class ObraContextGuard implements CanActivate {
         },
       });
       if (role) {
-        role = { ...role, capabilities: caps };
+        role = {
+          ...role,
+          capabilities: caps,
+          permissoes: mergePermissoesObra(
+            (role.permissoes || {}) as Record<string, string>,
+            caps,
+          ),
+        };
       }
     }
 

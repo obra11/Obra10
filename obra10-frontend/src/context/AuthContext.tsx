@@ -101,6 +101,14 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       setEmpresa(data.empresa);
       setObras(data.obrasPermitidas);
       setIsAuthenticated(true);
+      const ativa = loadObraAtiva();
+      if (ativa?.id) {
+        const fresh = (data.obrasPermitidas || []).find((o: Obra) => o.id === ativa.id);
+        if (fresh) {
+          setObraAtivaState(fresh);
+          localStorage.setItem('obra10_obraAtiva', JSON.stringify(fresh));
+        }
+      }
     } catch (err) {
       setIsAuthenticated(false);
       setUser(null);

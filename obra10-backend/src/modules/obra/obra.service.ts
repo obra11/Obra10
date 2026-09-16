@@ -2,6 +2,8 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { perfilGlobalToObraNomeInterno } from '../../core/capabilities/obra-perfil';
+import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
+import { mergePermissoesObra } from '../../core/capabilities/role-capabilities';
 
 const JANELA_DIAS_PROBLEMAS = 30;
 const MAX_PROBLEMAS_PAINEL = 8;
@@ -153,6 +155,7 @@ export class ObraService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly capabilities: CapabilitiesService,
   ) {}
 
   /** Garante um registro em `perfis` pelo nomeInterno (cria se não existir). */
@@ -330,6 +333,7 @@ export class ObraService {
             nome: true,
             email: true,
             perfilGlobal: true,
+            capabilities: true,
           },
         },
         perfil: true,
@@ -350,7 +354,24 @@ export class ObraService {
       role.perfil = perfil;
     }
 
-    return roles;
+    const result: any[] = [];
+    for (const role of roles) {
+      const caps = await this.capabilities.resolveForUser({
+        empresaId,
+        perfilGlobal: role.usuario.perfilGlobal,
+        capabilitiesOverride: role.usuario.capabilities,
+      });
+      const { capabilities: _capsJson, ...usuario } = role.usuario as any;
+      result.push({
+        ...role,
+        usuario,
+        permissoes: mergePermissoesObra(
+          (role.permissoes || {}) as Record<string, string>,
+          caps,
+        ),
+      });
+    }
+    return result;
   }
 
   async adicionarColaborador(
@@ -370,13 +391,28 @@ export class ObraService {
 
     const usuario = await this.prisma.usuario.findFirst({
       where: { id: data.usuarioId, empresaId, deletedAt: null },
-      select: { nome: true, email: true, perfilGlobal: true },
+      select: {
+        nome: true,
+        email: true,
+        perfilGlobal: true,
+        capabilities: true,
+      },
     });
     if (!usuario) {
       throw new BadRequestException(
         'Usuário não encontrado nesta empresa.',
       );
     }
+
+    const caps = await this.capabilities.resolveForUser({
+      empresaId,
+      perfilGlobal: usuario.perfilGlobal,
+      capabilitiesOverride: usuario.capabilities,
+    });
+    const permissoes = mergePermissoesObra(
+      (data.permissoes || {}) as Record<string, string>,
+      caps,
+    );
 
     let finalPerfilId = data.perfilId;
     if (!finalPerfilId) {
@@ -387,12 +423,12 @@ export class ObraService {
 
     const role = await this.prisma.userObraRole.upsert({
       where: { usuarioId_obraId: { usuarioId: data.usuarioId, obraId } },
-      update: { perfilId: finalPerfilId, permissoes: data.permissoes || {} },
+      update: { perfilId: finalPerfilId, permissoes },
       create: {
         obraId,
         usuarioId: data.usuarioId,
         perfilId: finalPerfilId,
-        permissoes: data.permissoes || {},
+        permissoes,
       },
     });
 
@@ -425,14 +461,32 @@ export class ObraService {
   ) {
     const role = await this.prisma.userObraRole.findFirst({
       where: { obraId, usuarioId, obra: { empresaId } },
+      include: {
+        usuario: {
+          select: { perfilGlobal: true, capabilities: true },
+        },
+      },
     });
     if (!role) throw new Error('Vínculo não encontrado');
+
+    let permissoes = data.permissoes;
+    if (permissoes !== undefined) {
+      const caps = await this.capabilities.resolveForUser({
+        empresaId,
+        perfilGlobal: role.usuario.perfilGlobal,
+        capabilitiesOverride: role.usuario.capabilities,
+      });
+      permissoes = mergePermissoesObra(
+        permissoes as Record<string, string>,
+        caps,
+      );
+    }
 
     return this.prisma.userObraRole.update({
       where: { id: role.id },
       data: {
         ...(data.perfilId && { perfilId: data.perfilId }),
-        ...(data.permissoes !== undefined && { permissoes: data.permissoes }),
+        ...(permissoes !== undefined && { permissoes }),
       },
     });
   }

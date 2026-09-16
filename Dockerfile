@@ -1,12 +1,12 @@
 ﻿# ============================================
 # Obra 10 â€” Production Dockerfile
-# Force rebuild: 2026-09-14-luna-mcp-2.9.21
+# Force rebuild: 2026-09-16-rdo-perms-2.9.22
 # ============================================
 
 # --- Build stage ---
 FROM node:22-alpine AS builder
 
-ARG OBRA10_BUILD_ID=2.9.21-20260914
+ARG OBRA10_BUILD_ID=2.9.22-20260916
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 
 # Install build tools for native modules (bcrypt)
@@ -35,7 +35,7 @@ ENV PRISMA_BUILD_PLACEHOLDER=
 # --- Production stage ---
 FROM node:22-alpine
 
-ARG OBRA10_BUILD_ID=2.9.21-20260914
+ARG OBRA10_BUILD_ID=2.9.22-20260916
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 ENV NODE_ENV=production
 

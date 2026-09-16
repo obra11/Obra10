@@ -307,7 +307,7 @@ export const UserManagement: React.FC = () => {
     if (novasPermissoes[slug]) {
        delete novasPermissoes[slug];
     } else {
-       novasPermissoes[slug] = 'VIEW';
+       novasPermissoes[slug] = slug === 'RDO' ? 'EDIT' : 'VIEW';
     }
 
     try {

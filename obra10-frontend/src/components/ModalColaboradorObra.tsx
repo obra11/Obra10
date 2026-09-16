@@ -27,7 +27,6 @@ export const ModalColaboradorObra: React.FC<ModalColaboradorObraProps> = ({ obra
   ];
 
   useEffect(() => {
-    // Carregar usuários da empresa para o select
     const fetchUsuarios = async () => {
       try {
         const res = await api.get('/usuarios');
@@ -46,13 +45,23 @@ export const ModalColaboradorObra: React.FC<ModalColaboradorObraProps> = ({ obra
     }
   }, [colaboradorEdit]);
 
+  const preencherDoPapel = (usuarioId: string, lista: any[]) => {
+    const u = lista.find((x) => x.id === usuarioId);
+    const caps = u?.capabilitiesEfetivas || u?.capabilities;
+    const padrao = { ...(caps?.modulosPadrao || {}) };
+    if (caps?.criarEditarRdo && padrao.RDO !== 'VIEW_APPROVED' && padrao.RDO !== 'VIEW_PARTIAL_APPROVED') {
+      padrao.RDO = 'EDIT';
+    }
+    setPermissoes(padrao);
+  };
+
   const handleToggleModulo = (slug: string) => {
     setPermissoes(prev => {
       const next = { ...prev };
       if (next[slug]) {
-        delete next[slug]; // Remove acesso
+        delete next[slug];
       } else {
-        next[slug] = 'VIEW'; // Valor padrão ao habilitar
+        next[slug] = slug === 'RDO' ? 'EDIT' : 'VIEW';
       }
       return next;
     });
@@ -114,7 +123,11 @@ export const ModalColaboradorObra: React.FC<ModalColaboradorObraProps> = ({ obra
             ) : (
               <select 
                 value={selectedUserId} 
-                onChange={(e) => setSelectedUserId(e.target.value)}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setSelectedUserId(id);
+                  if (id) preencherDoPapel(id, usuarios);
+                }}
                 disabled={loadingUsers}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-red-500 focus:border-red-500 outline-none bg-white font-medium text-gray-700"
               >

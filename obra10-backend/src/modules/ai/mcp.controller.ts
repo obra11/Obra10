@@ -12,7 +12,7 @@ import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { LunaToolsService, LUNA_TOOL_DEFS } from './luna-tools.service';
 
 const PROTOCOL = '2025-03-26';
-const SERVER_INFO = { name: 'obra10', version: '2.9.21' };
+const SERVER_INFO = { name: 'obra10', version: '2.9.22' };
 
 /**
  * MCP Streamable HTTP (JSON-RPC) — ChatGPT / Claude / Gemini.

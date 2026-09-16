@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
+import { mergePermissoesObra } from '../../core/capabilities/role-capabilities';
 import { RdoStatus, StatusExecucaoTarefa, TipoRelatorioRdo } from '@prisma/client';
 
 /**
@@ -229,10 +230,10 @@ export class RdoService {
       obras = list.map((o) => ({
         id: o.id,
         nome: o.nome,
-        permissoes: (o.userObraRole[0]?.permissoes || {}) as Record<
-          string,
-          string
-        >,
+        permissoes: mergePermissoesObra(
+          (o.userObraRole[0]?.permissoes || {}) as Record<string, string>,
+          caps,
+        ),
       }));
     }
 

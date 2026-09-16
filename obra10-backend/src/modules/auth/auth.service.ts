@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
+import { mergePermissoesObra } from '../../core/capabilities/role-capabilities';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -291,7 +292,9 @@ export class AuthService {
         minhasPermissoes: isPrivilegiado
           ? ['SUPER']
           : Object.keys(permissoesObj),
-        permissoes: isPrivilegiado ? privilegiadoPerms : permissoesObj,
+        permissoes: isPrivilegiado
+          ? privilegiadoPerms
+          : mergePermissoesObra(permissoesObj, caps),
       };
     });
   }
