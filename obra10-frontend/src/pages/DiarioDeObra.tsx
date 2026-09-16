@@ -5,11 +5,12 @@ import {
   ClipboardList, CloudSun, Users, Hammer, Drill,
   CheckSquare, FileSpreadsheet, Paperclip, MessageSquare, ShieldCheck,
   Plus, Trash2, Video, FileText, Image as ImageIcon, Save, Send, RotateCcw, ArrowLeft,
-  ChevronDown, ChevronUp, Maximize2, Minimize2, Camera, FolderOpen, Images, Calendar
+  ChevronDown, ChevronUp, Maximize2, Minimize2,   Camera, FolderOpen, Images, Calendar, Pencil
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { parseUTCDate } from '../utils/date';
 import { RdoShareBar } from '../components/RdoShareBar';
+import { PhotoAnnotateModal } from '../components/PhotoAnnotateModal';
 import { AutoResizeTextarea } from '../components/AutoResizeTextarea';
 import { useAuth } from '../context/AuthContext';
 import { persistCapturedMediaList, persistCapturedMediaToDevice } from '../utils/persistCapturedMedia';
@@ -29,6 +30,7 @@ import {
   updateRdoId,
   incrementarTentativa,
   updateOfflineAttachmentLegenda,
+  updateOfflineAttachmentFile,
   saveOfflineRdoDraft,
   getOfflineRdoDraft,
   deleteOfflineRdoDraft,
@@ -654,6 +656,8 @@ export const DiarioDeObra: React.FC = () => {
   const videoFilesInputRef = useRef<HTMLInputElement>(null);
   const anexoInputRef = useRef<HTMLInputElement>(null);
   const [mediaPicker, setMediaPicker] = useState<null | 'foto' | 'video'>(null);
+  const [annotateQueue, setAnnotateQueue] = useState<{ files: File[]; index: number } | null>(null);
+  const [reeditFotoIndex, setReeditFotoIndex] = useState<number | null>(null);
 
   // ── Clonagem/Cópia de RDO Anterior ──
   const [previousRdos, setPreviousRdos] = useState<any[]>([]);
@@ -1108,8 +1112,47 @@ export const DiarioDeObra: React.FC = () => {
     }
   }, [rdoIdAtual, rdoId]);
 
+  const commitFotoFile = async (file: File) => {
+    try {
+      const sizeCheck = checkMediaFileSize(file, 'foto');
+      if (!sizeCheck.ok) {
+        showToast(`⚠️ ${sizeCheck.message}`);
+        return;
+      }
+      const preview = URL.createObjectURL(file);
+      const offlineId = await persistMediaFileToIdb(file, 'foto');
+      const online = navigator.onLine;
+      setFotos((prev) => [
+        ...prev,
+        {
+          file,
+          preview,
+          legenda: '',
+          offlineId: offlineId || undefined,
+          isOfflinePending: Boolean(offlineId),
+          isUploading: online,
+          uploadFalhou: false,
+        },
+      ]);
+    } catch (err) {
+      console.error('Erro ao guardar foto no aparelho:', err);
+      showToast('⚠️ Não foi possível guardar a foto no aparelho.');
+    }
+  };
+
+  const finishAnnotateCurrent = async (file: File) => {
+    await commitFotoFile(file);
+    setAnnotateQueue((q) => {
+      if (!q) return null;
+      const next = q.index + 1;
+      return next >= q.files.length ? null : { files: q.files, index: next };
+    });
+    persistDraftLocal({ pendingSync: !navigator.onLine }).catch(() => undefined);
+  };
+
   const handleFotosDrop = async (files: File[], opts?: { copyToDevice?: boolean }) => {
     const copyToDevice = opts?.copyToDevice !== false;
+    const compressed: File[] = [];
     for (const raw of files) {
       try {
         if (copyToDevice) {
@@ -1121,28 +1164,39 @@ export const DiarioDeObra: React.FC = () => {
           showToast(`⚠️ ${sizeCheck.message}`);
           continue;
         }
-        const preview = URL.createObjectURL(file);
-        const offlineId = await persistMediaFileToIdb(file, 'foto');
-        const online = navigator.onLine;
-        setFotos((prev) => [
-          ...prev,
-          {
-            file,
-            preview,
-            legenda: '',
-            offlineId: offlineId || undefined,
-            isOfflinePending: Boolean(offlineId),
-            isUploading: online,
-            uploadFalhou: false,
-          },
-        ]);
+        compressed.push(file);
       } catch (err) {
         console.error('Erro ao guardar foto no aparelho:', err);
         showToast('⚠️ Não foi possível guardar a foto no aparelho.');
       }
     }
+    if (compressed.length === 0) return;
+    setAnnotateQueue((q) =>
+      q ? { files: [...q.files, ...compressed], index: q.index } : { files: compressed, index: 0 },
+    );
+  };
+
+  const handleReeditFotoSave = async (file: File) => {
+    const idx = reeditFotoIndex;
+    setReeditFotoIndex(null);
+    if (idx == null) return;
+    const current = fotos[idx];
+    if (!current) return;
+    try {
+      URL.revokeObjectURL(current.preview);
+    } catch { /* ignore */ }
+    const preview = URL.createObjectURL(file);
+    setFotos((prev) => prev.map((item, i) => (i === idx ? { ...item, file, preview } : item)));
+    if (current.offlineId) {
+      try {
+        await updateOfflineAttachmentFile(current.offlineId, file);
+      } catch (err) {
+        console.error('Falha ao atualizar foto local marcada:', err);
+      }
+    }
     persistDraftLocal({ pendingSync: !navigator.onLine }).catch(() => undefined);
   };
+
   const handleFotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []).filter(
       (f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|gif|bmp)$/i.test(f.name),
@@ -2723,6 +2777,15 @@ export const DiarioDeObra: React.FC = () => {
                                      await updateOfflineAttachmentLegenda(f.offlineId, newVal);
                                   }
                                }} disabled={isReadOnly} />
+                              <button
+                                type="button"
+                                onClick={() => setReeditFotoIndex(i)}
+                                className="text-lunardeli-red p-1 disabled:opacity-50"
+                                title="Marcar foto"
+                                disabled={isReadOnly || f.isUploading}
+                              >
+                                <Pencil size={14}/>
+                              </button>
                               <button onClick={() => handleDeletePendingFoto(i, f.offlineId)} className="text-red-500 p-1 disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
                            </div>
                         </div>
@@ -3217,6 +3280,30 @@ export const DiarioDeObra: React.FC = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {annotateQueue && annotateQueue.files[annotateQueue.index] && (
+        <PhotoAnnotateModal
+          key={`capture-${annotateQueue.index}-${annotateQueue.files[annotateQueue.index].name}`}
+          file={annotateQueue.files[annotateQueue.index]}
+          index={annotateQueue.index}
+          total={annotateQueue.files.length}
+          onSkip={() => finishAnnotateCurrent(annotateQueue.files[annotateQueue.index])}
+          onSave={finishAnnotateCurrent}
+        />
+      )}
+
+      {reeditFotoIndex != null && fotos[reeditFotoIndex] && !annotateQueue && (
+        <PhotoAnnotateModal
+          key={`reedit-${fotos[reeditFotoIndex].offlineId || reeditFotoIndex}`}
+          file={fotos[reeditFotoIndex].file}
+          index={0}
+          total={1}
+          skipLabel="Cancelar"
+          saveLabel="Salvar marcações"
+          onSkip={() => setReeditFotoIndex(null)}
+          onSave={handleReeditFotoSave}
+        />
       )}
     </div>
   );

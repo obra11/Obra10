@@ -213,6 +213,31 @@ export async function updateOfflineAttachmentLegenda(id: string, legenda: string
   });
 }
 
+export async function updateOfflineAttachmentFile(id: string, file: File): Promise<void> {
+  const dados = await file.arrayBuffer();
+  const db = await initOfflineDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.get(id);
+    request.onsuccess = () => {
+      const item = request.result as OfflineAttachment;
+      if (item) {
+        if (item.previewUrl) {
+          try { URL.revokeObjectURL(item.previewUrl); } catch { /* ignore */ }
+        }
+        item.dados = dados;
+        item.mimeType = file.type || 'image/jpeg';
+        item.nomeArquivo = file.name || item.nomeArquivo;
+        item.previewUrl = undefined;
+        store.put(item);
+      }
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
 // ── Rascunhos do formulário RDO ───────────────────────────────────────────────
 
 export async function saveOfflineRdoDraft(draft: OfflineRdoDraft): Promise<void> {
