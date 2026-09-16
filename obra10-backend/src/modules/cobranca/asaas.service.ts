@@ -19,6 +19,14 @@ export type AsaasInvoiceInfo = {
 
 const WEBHOOK_EVENTS = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'] as const;
 
+/** Railway trata `$aact_...` como interpolação; a chave pode chegar com `$$`, espaço ou sem `$`. */
+function sanitizeAsaasApiKey(raw: string): string {
+  let key = String(raw || '').trim().replace(/[\s\r\n]+/g, '');
+  while (key.startsWith('$$')) key = key.slice(1);
+  if (/^aact_(prod|hmlg)_/i.test(key)) key = `$${key}`;
+  return key;
+}
+
 @Injectable()
 export class AsaasService implements OnModuleInit {
   private readonly logger = new Logger(AsaasService.name);
@@ -32,10 +40,15 @@ export class AsaasService implements OnModuleInit {
       env === 'production'
         ? 'https://api.asaas.com/v3'
         : 'https://sandbox.asaas.com/api/v3';
-    this.apiKey = process.env.ASAAS_API_KEY || '';
+    this.apiKey = sanitizeAsaasApiKey(process.env.ASAAS_API_KEY || '');
     this.mockMode = !this.apiKey;
     if (this.mockMode) {
       this.logger.warn('ASAAS_API_KEY não configurada — operando em modo MOCK');
+    } else {
+      const prefix = this.apiKey.slice(0, 12);
+      this.logger.log(
+        `Asaas ${env} chave ${prefix}… len=${this.apiKey.length}`,
+      );
     }
   }
 
@@ -63,7 +76,11 @@ export class AsaasService implements OnModuleInit {
   }
 
   private get headers() {
-    return { access_token: this.apiKey, 'Content-Type': 'application/json' };
+    return {
+      access_token: this.apiKey,
+      'Content-Type': 'application/json',
+      'User-Agent': 'Obra10/2.9.26 (https://obra10.app.br)',
+    };
   }
 
   get nfEnabled(): boolean {

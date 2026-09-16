@@ -424,7 +424,7 @@ export class CobrancaService {
 
     let atualizados = 0;
     for (const c of items) {
-      if (!c.idAsaas) continue;
+      if (!c.idAsaas || c.idAsaas.startsWith('mock-')) continue;
       try {
         await this.enriquecerCobrancaAsaas(c.id, c.idAsaas);
         if (c.idNotaAsaas && !c.notaPdfUrl) {
