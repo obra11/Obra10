@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
 
 export type AsaasPaymentInfo = {
@@ -17,8 +17,10 @@ export type AsaasInvoiceInfo = {
   payment?: string | null;
 };
 
+const WEBHOOK_EVENTS = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'] as const;
+
 @Injectable()
-export class AsaasService {
+export class AsaasService implements OnModuleInit {
   private readonly logger = new Logger(AsaasService.name);
   private readonly baseUrl: string;
   private readonly apiKey: string;
@@ -35,6 +37,29 @@ export class AsaasService {
     if (this.mockMode) {
       this.logger.warn('ASAAS_API_KEY não configurada — operando em modo MOCK');
     }
+  }
+
+  get configured(): boolean {
+    return !this.mockMode;
+  }
+
+  get environment(): string {
+    return process.env.ASAAS_ENVIRONMENT || 'sandbox';
+  }
+
+  webhookUrl(): string {
+    const explicit = (process.env.ASAAS_WEBHOOK_URL || '').trim();
+    if (explicit) return explicit.replace(/\/$/, '');
+    const origin = (
+      process.env.APP_URL ||
+      process.env.FRONTEND_URL ||
+      'https://obra10.app.br'
+    ).replace(/\/$/, '');
+    return `${origin}/cobrancas/webhook/asaas`;
+  }
+
+  async onModuleInit() {
+    await this.ensureWebhook();
   }
 
   private get headers() {
@@ -272,6 +297,89 @@ export class AsaasService {
     } catch (err: any) {
       this.logger.warn(`Falha ao buscar invoice ${idNota}: ${err?.message}`);
       return null;
+    }
+  }
+
+  /**
+   * Cadastra ou atualiza o webhook de pagamento na conta Asaas
+   * (PAYMENT_RECEIVED / PAYMENT_CONFIRMED → POST /cobrancas/webhook/asaas).
+   */
+  async ensureWebhook(): Promise<{ ok: boolean; action: string; url: string; id?: string; error?: string }> {
+    const url = this.webhookUrl();
+    const token = (process.env.ASAAS_WEBHOOK_TOKEN || '').trim();
+    if (this.mockMode) {
+      return { ok: false, action: 'skipped_mock', url, error: 'ASAAS_API_KEY ausente' };
+    }
+    if (token.length < 32) {
+      this.logger.warn(
+        'ASAAS_WEBHOOK_TOKEN ausente ou com menos de 32 caracteres — webhook não cadastrado.',
+      );
+      return { ok: false, action: 'skipped_token', url, error: 'ASAAS_WEBHOOK_TOKEN curto ou vazio' };
+    }
+
+    const payload = {
+      name: 'Obra 10 financeiro',
+      url,
+      enabled: true,
+      interrupted: false,
+      authToken: token,
+      sendType: 'SEQUENTIALLY' as const,
+      events: [...WEBHOOK_EVENTS],
+    };
+
+    try {
+      const { data } = await axios.get(`${this.baseUrl}/webhooks`, {
+        headers: this.headers,
+      });
+      const list: any[] = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+      const existing = list.find(
+        (w) => String(w?.url || '').replace(/\/$/, '') === url,
+      );
+      if (existing?.id) {
+        await axios.put(`${this.baseUrl}/webhooks/${existing.id}`, payload, {
+          headers: this.headers,
+        });
+        this.logger.log(`Webhook Asaas atualizado (${existing.id}) → ${url}`);
+        return { ok: true, action: 'updated', url, id: existing.id };
+      }
+      const created = await axios.post(`${this.baseUrl}/webhooks`, payload, {
+        headers: this.headers,
+      });
+      this.logger.log(`Webhook Asaas criado (${created.data?.id}) → ${url}`);
+      return { ok: true, action: 'created', url, id: created.data?.id };
+    } catch (err: any) {
+      const detail =
+        err?.response?.data?.errors ||
+        err?.response?.data ||
+        err?.message ||
+        err;
+      this.logger.error(`Falha ao garantir webhook Asaas: ${JSON.stringify(detail)}`);
+      return {
+        ok: false,
+        action: 'error',
+        url,
+        error: typeof detail === 'string' ? detail : JSON.stringify(detail),
+      };
+    }
+  }
+
+  async pingConta(): Promise<{ ok: boolean; name?: string; email?: string; error?: string }> {
+    if (this.mockMode) return { ok: false, error: 'ASAAS_API_KEY ausente (MOCK)' };
+    try {
+      const { data } = await axios.get(`${this.baseUrl}/myAccount`, {
+        headers: this.headers,
+      });
+      return {
+        ok: true,
+        name: data?.name || data?.person?.name,
+        email: data?.email || data?.loginEmail,
+      };
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.errors?.[0]?.description ||
+        err?.response?.status ||
+        err?.message;
+      return { ok: false, error: String(msg) };
     }
   }
 }

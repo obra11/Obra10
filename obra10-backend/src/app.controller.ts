@@ -57,6 +57,12 @@ export class AppController {
           hasEncryptionKey: process.env.ENCRYPTION_KEY
             ? `defined_len_${process.env.ENCRYPTION_KEY.length}`
             : 'undefined',
+          asaas: {
+            configured: Boolean(process.env.ASAAS_API_KEY?.trim()),
+            environment: process.env.ASAAS_ENVIRONMENT || 'sandbox',
+            nfEnabled: (process.env.ASAAS_NF_ENABLED || '').toLowerCase() === 'true',
+            webhookToken: Boolean(process.env.ASAAS_WEBHOOK_TOKEN?.trim()),
+          },
         },
       };
     } catch {
@@ -70,6 +76,12 @@ export class AppController {
           hasEncryptionKey: process.env.ENCRYPTION_KEY
             ? `defined_len_${process.env.ENCRYPTION_KEY.length}`
             : 'undefined',
+          asaas: {
+            configured: Boolean(process.env.ASAAS_API_KEY?.trim()),
+            environment: process.env.ASAAS_ENVIRONMENT || 'sandbox',
+            nfEnabled: (process.env.ASAAS_NF_ENABLED || '').toLowerCase() === 'true',
+            webhookToken: Boolean(process.env.ASAAS_WEBHOOK_TOKEN?.trim()),
+          },
         },
       };
     }

@@ -78,6 +78,12 @@ export const AdminFinanceiro: React.FC = () => {
   const [showDespesa, setShowDespesa] = useState(false);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [asaasStatus, setAsaasStatus] = useState<{
+    configured?: boolean;
+    environment?: string;
+    conta?: { ok?: boolean; name?: string; error?: string };
+    webhook?: { ok?: boolean; action?: string };
+  } | null>(null);
   const [form, setForm] = useState({
     descricao: '',
     valor: '',
@@ -214,6 +220,12 @@ export const AdminFinanceiro: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    api.get('/admin/financeiro/asaas-status')
+      .then((res) => setAsaasStatus(res.data))
+      .catch(() => setAsaasStatus({ configured: false }));
+  }, []);
+
   const tabs: { id: Tab; label: string }[] = [
     { id: 'resumo', label: 'Resumo' },
     { id: 'recebimentos', label: 'Recebimentos' },
@@ -235,19 +247,36 @@ export const AdminFinanceiro: React.FC = () => {
             Recebimentos, fluxo de caixa, Asaas e notas fiscais da plataforma
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleSyncAsaas}
-          disabled={syncing}
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold border border-gray-200 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-60"
-        >
-          {syncing ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <RefreshCw size={16} />
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {asaasStatus && (
+            <span
+              className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                asaasStatus.configured && asaasStatus.conta?.ok
+                  ? 'bg-green-50 text-green-700 border-green-200'
+                  : 'bg-amber-50 text-amber-800 border-amber-200'
+              }`}
+            >
+              {asaasStatus.configured && asaasStatus.conta?.ok
+                ? `Asaas ${asaasStatus.environment || ''} ligado${asaasStatus.conta.name ? ` · ${asaasStatus.conta.name}` : ''}`
+                : asaasStatus.configured
+                  ? `Asaas ${asaasStatus.environment}: ${asaasStatus.conta?.error || 'chave não validou'}`
+                  : 'Asaas em MOCK — falta ASAAS_API_KEY'}
+            </span>
           )}
-          Sincronizar Asaas
-        </button>
+          <button
+            type="button"
+            onClick={handleSyncAsaas}
+            disabled={syncing}
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold border border-gray-200 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-60"
+          >
+            {syncing ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <RefreshCw size={16} />
+            )}
+            Sincronizar Asaas
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1">

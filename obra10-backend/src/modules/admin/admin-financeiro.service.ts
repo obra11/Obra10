@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CobrancaService } from '../cobranca/cobranca.service';
+import { AsaasService } from '../cobranca/asaas.service';
 import {
   AtualizarDespesaFinanceiraDto,
   CriarDespesaFinanceiraDto,
@@ -64,7 +65,23 @@ export class AdminFinanceiroService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cobrancaService: CobrancaService,
+    private readonly asaas: AsaasService,
   ) {}
+
+  async getAsaasStatus() {
+    const ping = await this.asaas.pingConta();
+    const webhook = this.asaas.configured
+      ? await this.asaas.ensureWebhook()
+      : { ok: false, action: 'skipped_mock', url: this.asaas.webhookUrl() };
+    return {
+      configured: this.asaas.configured,
+      environment: this.asaas.environment,
+      nfEnabled: this.asaas.nfEnabled,
+      webhookUrl: this.asaas.webhookUrl(),
+      webhook,
+      conta: ping,
+    };
+  }
 
   async getResumo(inicioStr?: string, fimStr?: string) {
     const agora = new Date();

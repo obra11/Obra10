@@ -70,6 +70,11 @@ export class AdminFinanceiroController {
     return this.financeiro.listarDespesas(inicio, fim);
   }
 
+  @Get('asaas-status')
+  asaasStatus() {
+    return this.financeiro.getAsaasStatus();
+  }
+
   @Post('sincronizar-asaas')
   sincronizarAsaas() {
     return this.financeiro.sincronizarAsaas();
