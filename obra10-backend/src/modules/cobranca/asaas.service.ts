@@ -334,9 +334,17 @@ export class AsaasService implements OnModuleInit {
       return { ok: false, action: 'skipped_token', url, error: 'ASAAS_WEBHOOK_TOKEN curto ou vazio' };
     }
 
+    const ping = await this.pingConta();
+    const email = (
+      process.env.ASAAS_WEBHOOK_EMAIL ||
+      ping.email ||
+      'contato@obra10.com.br'
+    ).trim();
+
     const payload = {
       name: 'Obra 10 financeiro',
       url,
+      email,
       enabled: true,
       interrupted: false,
       authToken: token,
