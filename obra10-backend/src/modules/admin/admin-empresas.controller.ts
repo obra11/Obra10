@@ -107,6 +107,7 @@ export class AdminEmpresasController {
           plano: dto.plano || 'BASICO',
           telefone: dto.telefone,
           email: dto.email,
+          emailVerificado: true,
           ativo: true,
         }
       });
@@ -227,6 +228,21 @@ export class AdminEmpresasController {
     if (!empresa) throw new NotFoundException('Empresa não encontrada');
 
     const data: Record<string, any> = { ...dto };
+    for (const key of ['cnpj', 'cpfCnpj', 'email', 'telefone', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'estado', 'nomeFantasia', 'razaoSocial']) {
+      if (typeof data[key] === 'string' && data[key].trim() === '') data[key] = null;
+    }
+
+    if ('cnpj' in data) {
+      const next = this.encryptDocumentoSeMudou(empresa.cnpj, data.cnpj);
+      if (next === undefined) delete data.cnpj;
+      else data.cnpj = next;
+    }
+    if ('cpfCnpj' in data) {
+      const next = this.encryptDocumentoSeMudou(empresa.cpfCnpj, data.cpfCnpj);
+      if (next === undefined) delete data.cpfCnpj;
+      else data.cpfCnpj = next;
+    }
+
     if (dto.plano) {
       const plano = resolvePlano(dto.plano);
       const pacote = pacoteDoPlano(plano);
@@ -236,10 +252,31 @@ export class AdminEmpresasController {
       data.limiteObras = limiteObrasDoPacote(pacote);
     }
 
-    return this.prisma.empresa.update({
-      where: { id },
-      data,
-    });
+    if (typeof data.email === 'string' && data.email.includes('@') && !empresa.emailVerificado) {
+      data.emailVerificado = true;
+    }
+
+    try {
+      return await this.prisma.empresa.update({
+        where: { id },
+        data,
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        const alvo = String(err?.meta?.constraint || err?.meta?.target || '');
+        if (alvo.includes('email')) {
+          throw new ConflictException('Este e-mail já está em uso por outra empresa.');
+        }
+        if (alvo.includes('cpf_cnpj') || alvo.includes('cpfCnpj')) {
+          throw new ConflictException('Este CPF/CNPJ já está em uso por outra empresa.');
+        }
+        if (alvo.includes('cnpj')) {
+          throw new ConflictException('Este CNPJ já está em uso por outra empresa.');
+        }
+        throw new ConflictException('Já existe um cadastro com estes dados.');
+      }
+      throw err;
+    }
   }
 
   @Post(':id/modulos')
@@ -464,5 +501,27 @@ export class AdminEmpresasController {
       adminUser.sub,
       dto.tipoConfirmacao === 'BONIFICACAO' ? 'BONIFICACAO' : 'PAGAMENTO',
     );
+  }
+
+  private decryptDoc(value?: string | null): string {
+    if (!value) return '';
+    try {
+      return this.cryptoService.decrypt(value) || '';
+    } catch {
+      return value;
+    }
+  }
+
+  /** Regrava o documento só se o número mudou (IV aleatório). Vazio vira null. */
+  private encryptDocumentoSeMudou(
+    atualCifrado: string | null | undefined,
+    incoming: string | null,
+  ): string | null | undefined {
+    if (!incoming) return null;
+    const limpo = String(incoming).replace(/\D/g, '');
+    if (!limpo) return null;
+    const atual = this.decryptDoc(atualCifrado).replace(/\D/g, '');
+    if (limpo === atual) return undefined;
+    return this.cryptoService.encrypt(limpo);
   }
 }

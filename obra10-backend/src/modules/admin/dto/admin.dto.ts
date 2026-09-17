@@ -80,6 +80,10 @@ export class AtualizarEmpresaAdminDto {
   @IsString()
   @IsOptional()
   estado?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  emailVerificado?: boolean;
 }
 
 export class ModulosEmpresaAdminDto {
