@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import {
-  Package, Loader2, CheckCircle, CreditCard, QrCode, ChevronRight, ChevronDown, Tag, X
+  Package, Loader2, CheckCircle, CreditCard, QrCode, ChevronRight, ChevronDown, Tag, X, LogOut
 } from 'lucide-react';
 import {
   PLANOS,
@@ -54,6 +55,7 @@ const GRUPO_COLORS: Record<string, string> = {
 
 export const Contratacao: React.FC = () => {
   const navigate = useNavigate();
+  const { logout, empresa } = useAuth();
   const [searchParams] = useSearchParams();
   const [modulos, setModulos] = useState<Modulo[]>([]);
   const [selecionados, setSelecionados] = useState<string[]>([]);
@@ -183,6 +185,24 @@ export const Contratacao: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-3xl mx-auto">
+        <div className="flex justify-end gap-3 mb-4">
+          {(empresa?.modulos?.length ?? 0) > 0 && (
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              className="text-sm font-semibold text-gray-600 underline"
+            >
+              Ir ao painel
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => logout()}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-600"
+          >
+            <LogOut size={16} /> Sair
+          </button>
+        </div>
         <div className="text-center mb-8">
           <Package size={48} className="mx-auto mb-4 text-red-600" />
           <h1 className="text-3xl font-bold text-gray-900">Escolha seus módulos</h1>

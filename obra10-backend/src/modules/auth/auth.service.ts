@@ -141,17 +141,7 @@ export class AuthService {
         fotoUrl: user.fotoUrl,
         capabilities: caps,
       },
-      empresa: {
-        ...user.empresa,
-        modulos: (user.empresa?.tenantModulos || []).map((tm) => ({
-          slug: tm.modulo.slug,
-          nome: tm.modulo.nome,
-          sigla: tm.modulo.sigla,
-          grupo: tm.modulo.grupo,
-        })),
-        cupons: user.empresa?.cupons || [],
-        cobrancasCount: user.empresa?._count?.cobrancas ?? 0,
-      },
+      empresa: this.mapEmpresaAuth(user.empresa),
       obrasPermitidas,
     };
   }
@@ -237,18 +227,25 @@ export class AuthService {
         fotoUrl: user.fotoUrl,
         capabilities: caps,
       },
-      empresa: {
-        ...user.empresa,
-        modulos: (user.empresa?.tenantModulos || []).map((tm) => ({
-          slug: tm.modulo.slug,
-          nome: tm.modulo.nome,
-          sigla: tm.modulo.sigla,
-          grupo: tm.modulo.grupo,
-        })),
-        cupons: user.empresa?.cupons || [],
-        cobrancasCount: user.empresa?._count?.cobrancas ?? 0,
-      },
+      empresa: this.mapEmpresaAuth(user.empresa),
       obrasPermitidas,
+    };
+  }
+
+  private mapEmpresaAuth(empresa: any) {
+    const cobrancasCount = empresa?._count?.cobrancas ?? 0;
+    const tenantModulos = empresa?.tenantModulos || [];
+    return {
+      ...empresa,
+      modulos: tenantModulos.map((tm: any) => ({
+        slug: tm.modulo.slug,
+        nome: tm.modulo.nome,
+        sigla: tm.modulo.sigla,
+        grupo: tm.modulo.grupo,
+      })),
+      cupons: empresa?.cupons || [],
+      cobrancasCount,
+      planoAtivo: cobrancasCount > 0 || tenantModulos.length > 0,
     };
   }
 

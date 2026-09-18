@@ -22,8 +22,12 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ childr
     return <Navigate to="/admin/dashboard" replace />;
   }
 
+  const temModuloAtivo = (empresa?.modulos?.length ?? 0) > 0;
   const precisaContratar =
-    empresa && empresa.cobrancasCount === 0 && empresa.planoAtivo !== true;
+    empresa &&
+    empresa.cobrancasCount === 0 &&
+    empresa.planoAtivo !== true &&
+    !temModuloAtivo;
 
   const rotasIsentas = [
     '/contratacao',
