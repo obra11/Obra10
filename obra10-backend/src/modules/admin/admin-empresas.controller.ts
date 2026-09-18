@@ -16,6 +16,7 @@ import {
   limiteObrasDoPacote,
   pacoteDoPlano,
   PLAN_LIMITS,
+  resolvePacoteObras,
   resolvePlano,
 } from '../cobranca/pacotes-obras';
 
@@ -207,6 +208,39 @@ export class AdminEmpresasController {
     return this.prisma.cobranca.findMany({
       where: { empresaId: id },
       orderBy: { dataVencimento: 'desc' }
+    });
+  }
+
+  /** Gera PIX na Asaas para um módulo ainda não cobrado — teste de pagamento. */
+  @Post(':id/gerar-pix')
+  async gerarPixTeste(@Param('id') id: string) {
+    const empresa = await this.prisma.empresa.findUnique({ where: { id } });
+    if (!empresa) throw new NotFoundException('Empresa não encontrada');
+
+    const [catalogo, vinculos] = await Promise.all([
+      this.prisma.modulo.findMany({
+        where: { ativo: true, slug: { notIn: ['IA', 'CONCRETO'] } },
+        orderBy: { ordemExibicao: 'asc' },
+      }),
+      this.prisma.tenantModulo.findMany({
+        where: { empresaId: id, ativo: true },
+        include: { modulo: { select: { slug: true } } },
+      }),
+    ]);
+    const ativos = new Set(vinculos.map((v) => v.modulo.slug));
+    const alvo =
+      catalogo.find((m) => !ativos.has(m.slug) && Number(m.preco || 0) > 0) ||
+      catalogo.find((m) => Number(m.preco || 0) > 0);
+    if (!alvo) {
+      throw new BadRequestException('Não há módulo pago no catálogo para gerar PIX.');
+    }
+
+    return this.cobrancaService.contratarModulos({
+      empresaId: id,
+      modulosSelecionados: [alvo.slug],
+      formaPagamento: 'PIX',
+      periodicidade: 'MENSAL',
+      pacoteObras: resolvePacoteObras((empresa as any).pacoteObras),
     });
   }
 

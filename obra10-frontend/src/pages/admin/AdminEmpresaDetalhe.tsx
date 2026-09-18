@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { 
   Building, Users, Key, AlertTriangle, ArrowLeft, Loader2, Ban, PlayCircle, ShieldIcon, 
-  Receipt, ClipboardList, Package, DollarSign, Save, Bell, CheckCircle2, Trash2, Mail
+  Receipt, ClipboardList, Package, DollarSign, Save, Bell, CheckCircle2, Trash2, Mail, QrCode
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -37,6 +37,7 @@ export const AdminEmpresaDetalhe: React.FC = () => {
   const [loadingCupom, setLoadingCupom] = useState(false);
   const [loadingModulo, setLoadingModulo] = useState<string | null>(null);
   const [reenviandoVerificacao, setReenviandoVerificacao] = useState(false);
+  const [gerandoPix, setGerandoPix] = useState(false);
   
   // States for Dados Cadastrais Form
   const [formData, setFormData] = useState({
@@ -275,6 +276,39 @@ export const AdminEmpresaDetalhe: React.FC = () => {
       alert(e.response?.data?.message || 'Erro ao vincular cupom');
     } finally {
       setLoadingCupom(false);
+    }
+  };
+
+  const handleGerarPix = async () => {
+    if (
+      !window.confirm(
+        'Gerar uma cobrança PIX na Asaas para um módulo ainda não ativo desta empresa?',
+      )
+    ) {
+      return;
+    }
+    setGerandoPix(true);
+    try {
+      const res = await api.post(`/admin/empresas/${id}/gerar-pix`);
+      await fetchCobrancas();
+      const link = res.data?.linkPagamento;
+      if (res.data?.status === 'PAGO' || res.data?.valor === 0) {
+        alert(res.data?.mensagem || 'Cobrança zerada (cupom). Nada a pagar.');
+        return;
+      }
+      if (link) {
+        const abrir = window.confirm(
+          `PIX gerado (R$ ${Number(res.data.valor || 0).toFixed(2)}).\n\nAbrir o link de pagamento agora?`,
+        );
+        if (abrir) window.open(link, '_blank', 'noopener,noreferrer');
+      } else {
+        alert(res.data?.mensagem || 'PIX gerado. Atualize o faturamento.');
+      }
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || 'Erro ao gerar PIX.';
+      alert(Array.isArray(msg) ? msg.join('\n') : msg);
+    } finally {
+      setGerandoPix(false);
     }
   };
 
@@ -688,8 +722,18 @@ export const AdminEmpresaDetalhe: React.FC = () => {
       {/* TAB 3: FATURAMENTO */}
       {activeTab === 'faturamento' && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="bg-gray-50 px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div className="bg-gray-50 px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
             <h3 className="font-bold text-gray-900 flex items-center gap-2"><DollarSign strokeWidth={2.5} size={18} className="text-gray-400"/> Faturas & Assinatura (Asaas)</h3>
+            <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleGerarPix}
+              disabled={gerandoPix}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg font-semibold text-sm hover:bg-red-700 transition-colors shadow-sm disabled:opacity-60"
+            >
+              {gerandoPix ? <Loader2 size={16} className="animate-spin" /> : <QrCode size={16} />}
+              Gerar cobrança PIX
+            </button>
             {cobrancas.some((c: any) => ['PENDENTE', 'VENCIDO', 'OVERDUE'].includes(c.status)) && (
               <button
                 onClick={async () => {
@@ -707,6 +751,7 @@ export const AdminEmpresaDetalhe: React.FC = () => {
                 <Bell size={16} /> Avisar Gestor
               </button>
             )}
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
