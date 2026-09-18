@@ -126,7 +126,7 @@ export class AsaasService implements OnModuleInit {
     }
     if (!documentoFiscalValido(empresa.cpfCnpj)) {
       throw new BadRequestException(
-        'A empresa precisa de um CPF ou CNPJ verdadeiro para gerar PIX. Documento de teste (111.111.111-11 / 11.111.111/1111-11) a Asaas recusa.',
+        'Cadastre um CPF ou CNPJ válido em Meu Perfil (ou no cadastro da empresa). A Asaas não gera PIX sem documento verdadeiro.',
       );
     }
     try {

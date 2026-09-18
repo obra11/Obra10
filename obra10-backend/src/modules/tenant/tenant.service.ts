@@ -389,6 +389,38 @@ export class TenantService {
       updates.pacoteObras = pacote;
       updates.limiteObras = limiteObrasDoPacote(pacote);
     }
+    if (updates.cpfCnpj !== undefined) {
+      const limpo = String(updates.cpfCnpj || '').replace(/\D/g, '');
+      let atual = '';
+      try {
+        atual = empresa.cpfCnpj
+          ? this.cryptoService.decrypt(empresa.cpfCnpj).replace(/\D/g, '')
+          : '';
+      } catch {
+        atual = '';
+      }
+      if (!limpo) {
+        updates.cpfCnpj = null;
+      } else if (limpo.length === 11) {
+        if (!validarCPF(limpo)) throw new BadRequestException('CPF inválido.');
+        updates.tipoPessoa = 'FISICA';
+        if (limpo === atual) delete updates.cpfCnpj;
+        else {
+          updates.cpfCnpj = this.cryptoService.encrypt(limpo);
+          updates.idAsaas = null;
+        }
+      } else if (limpo.length === 14) {
+        if (!validarCNPJ(limpo)) throw new BadRequestException('CNPJ inválido.');
+        updates.tipoPessoa = 'JURIDICA';
+        if (limpo === atual) delete updates.cpfCnpj;
+        else {
+          updates.cpfCnpj = this.cryptoService.encrypt(limpo);
+          updates.idAsaas = null;
+        }
+      } else {
+        throw new BadRequestException('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.');
+      }
+    }
     return this.prisma.empresa.update({
       where: { id: empresaId },
       data: updates,

@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
+import { CryptoService } from '../../core/services/crypto.service';
 import { mergePermissoesObra } from '../../core/capabilities/role-capabilities';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -24,6 +25,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
     private readonly capabilities: CapabilitiesService,
+    private readonly cryptoService: CryptoService,
   ) {}
 
   async login(email: string, senhaPlana: string, empresaId: string) {
@@ -232,11 +234,22 @@ export class AuthService {
     };
   }
 
+  private decryptDoc(value?: string | null): string | null {
+    if (!value) return null;
+    try {
+      return this.cryptoService.decrypt(value) || null;
+    } catch {
+      return null;
+    }
+  }
+
   private mapEmpresaAuth(empresa: any) {
     const cobrancasCount = empresa?._count?.cobrancas ?? 0;
     const tenantModulos = empresa?.tenantModulos || [];
     return {
       ...empresa,
+      cpfCnpj: this.decryptDoc(empresa?.cpfCnpj),
+      cnpj: this.decryptDoc(empresa?.cnpj),
       modulos: tenantModulos.map((tm: any) => ({
         slug: tm.modulo.slug,
         nome: tm.modulo.nome,

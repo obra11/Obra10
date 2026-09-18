@@ -56,6 +56,7 @@ export const CompanyDashboard: React.FC = () => {
   const [showEditEmpresaModal, setShowEditEmpresaModal] = useState(false);
   const [empresaEdit, setEmpresaEdit] = useState({ 
     nomeFantasia: empresa?.nomeFantasia || empresa?.razaoSocial || '',
+    cpfCnpj: empresa?.cpfCnpj || empresa?.cnpj || '',
     telefone: empresa?.telefone || '',
     email: empresa?.email || '',
     cep: empresa?.cep || '',
@@ -207,6 +208,7 @@ export const CompanyDashboard: React.FC = () => {
                   <button onClick={() => { 
                     setEmpresaEdit({ 
                       nomeFantasia: empresa?.nomeFantasia || empresa?.razaoSocial || '',
+                      cpfCnpj: empresa?.cpfCnpj || empresa?.cnpj || '',
                       telefone: empresa?.telefone || '',
                       email: empresa?.email || '',
                       cep: empresa?.cep || '',
@@ -635,8 +637,13 @@ export const CompanyDashboard: React.FC = () => {
                   <input value={empresa?.razaoSocial || ''} disabled className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Documento Principal (Somente Leitura)</label>
-                  <input value={empresa?.cpfCnpj || empresa?.cnpj || ''} disabled className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed outline-none" />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">CPF ou CNPJ (PIX)</label>
+                  <input
+                    value={empresaEdit.cpfCnpj}
+                    onChange={(e) => setEmpresaEdit({ ...empresaEdit, cpfCnpj: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    placeholder="000.000.000-00"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Nome Fantasia *</label>

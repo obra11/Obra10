@@ -61,6 +61,10 @@ export class UpdateMinhaEmpresaDto {
   @IsString()
   @IsOptional()
   email?: string;
+
+  @IsString()
+  @IsOptional()
+  cpfCnpj?: string;
 }
 
 export class AdminUpdateTenantDto {

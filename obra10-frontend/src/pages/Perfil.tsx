@@ -71,6 +71,7 @@ export const Perfil: React.FC = () => {
 
   const [nome, setNome] = useState(user?.nome || '');
   const [telefone, setTelefone] = useState('');
+  const [cpfCnpj, setCpfCnpj] = useState(empresa?.cpfCnpj || empresa?.cnpj || '');
 
   const [senhaAtual, setSenhaAtual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
@@ -83,6 +84,9 @@ export const Perfil: React.FC = () => {
 
   const perfil = user?.perfilGlobal || '';
   const caps = user?.capabilities || {};
+  const podeEditarDocumento =
+    perfil === 'GESTOR' ||
+    Boolean(caps.gerenciarEmpresa || caps.gerenciarFinanceiro);
 
   const permissoesPorGrupo = useMemo(() => {
     const groups: Record<string, { key: string; label: string; ativo: boolean }[]> = {};
@@ -99,6 +103,10 @@ export const Perfil: React.FC = () => {
 
   const modulosPadrao = caps.modulosPadrao || {};
   const temModulos = Object.keys(modulosPadrao).length > 0;
+
+  useEffect(() => {
+    setCpfCnpj(empresa?.cpfCnpj || empresa?.cnpj || '');
+  }, [empresa?.cpfCnpj, empresa?.cnpj]);
 
   useEffect(() => {
     if (user) {
@@ -151,6 +159,11 @@ export const Perfil: React.FC = () => {
       }
 
       await api.patch('/usuarios/perfil', payload);
+      if (podeEditarDocumento) {
+        await api.patch('/tenants/minha-empresa', {
+          cpfCnpj: cpfCnpj.trim(),
+        });
+      }
       await fetchSession();
 
       setSenhaAtual('');
@@ -311,6 +324,28 @@ export const Perfil: React.FC = () => {
                     placeholder="Seu nome"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  CPF ou CNPJ (cobrança PIX)
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={cpfCnpj}
+                  onChange={(e) => setCpfCnpj(e.target.value)}
+                  disabled={!podeEditarDocumento}
+                  className={`w-full px-3 py-2 border rounded-lg outline-none ${
+                    podeEditarDocumento
+                      ? 'border-gray-200 focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red'
+                      : 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                  }`}
+                  placeholder="000.000.000-00"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  A Asaas usa este documento para gerar o PIX da assinatura.
+                </p>
               </div>
 
               <div>
