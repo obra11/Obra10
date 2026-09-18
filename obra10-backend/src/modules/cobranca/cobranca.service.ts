@@ -124,6 +124,7 @@ export class CobrancaService {
 
     // Ensure client exists in Asaas (decrypting document first to send plaintext to Asaas API)
     let idAsaasCliente: string = empresa.idAsaas || '';
+    if (idAsaasCliente.startsWith('mock-')) idAsaasCliente = '';
     if (!idAsaasCliente && !pularAsaas) {
       const decCpfCnpj = empresa.cpfCnpj ? this.cryptoService.decrypt(empresa.cpfCnpj) : '';
       const decCnpj = empresa.cnpj ? this.cryptoService.decrypt(empresa.cnpj) : '';

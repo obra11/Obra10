@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
 
 export type AsaasPaymentInfo = {
@@ -18,6 +18,28 @@ export type AsaasInvoiceInfo = {
 };
 
 const WEBHOOK_EVENTS = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'] as const;
+
+function asaasApiMessage(err: any): string {
+  const errors = err?.response?.data?.errors;
+  if (Array.isArray(errors) && errors.length) {
+    return errors
+      .map((e: any) => e?.description || e?.code)
+      .filter(Boolean)
+      .join(' ');
+  }
+  return (
+    err?.response?.data?.message ||
+    err?.message ||
+    'Falha ao falar com a Asaas.'
+  );
+}
+
+function documentoFiscalValido(raw: string): boolean {
+  const d = String(raw || '').replace(/\D/g, '');
+  if (d.length !== 11 && d.length !== 14) return false;
+  if (/^(\d)\1+$/.test(d)) return false;
+  return true;
+}
 
 /** Railway trata `$aact_...` como interpolação; a chave pode chegar com `$$`, espaço ou sem `$`. */
 function sanitizeAsaasApiKey(raw: string): string {
@@ -79,7 +101,7 @@ export class AsaasService implements OnModuleInit {
     return {
       access_token: this.apiKey,
       'Content-Type': 'application/json',
-      'User-Agent': 'Obra10/2.9.26 (https://obra10.app.br)',
+      'User-Agent': 'Obra10/2.9.28 (https://obra10.app.br)',
     };
   }
 
@@ -102,17 +124,27 @@ export class AsaasService implements OnModuleInit {
       this.logger.log(`[MOCK ASAAS] criarClienteAsaas → ${mock}`);
       return mock;
     }
-    const { data } = await axios.post(
-      `${this.baseUrl}/customers`,
-      {
-        name: empresa.razaoSocial || empresa.nomeCompleto,
-        cpfCnpj: empresa.cpfCnpj,
-        email: empresa.email,
-        phone: empresa.telefone,
-      },
-      { headers: this.headers },
-    );
-    return data.id;
+    if (!documentoFiscalValido(empresa.cpfCnpj)) {
+      throw new BadRequestException(
+        'A empresa precisa de um CPF ou CNPJ verdadeiro para gerar PIX. Documento de teste (111.111.111-11 / 11.111.111/1111-11) a Asaas recusa.',
+      );
+    }
+    try {
+      const { data } = await axios.post(
+        `${this.baseUrl}/customers`,
+        {
+          name: empresa.razaoSocial || empresa.nomeCompleto,
+          cpfCnpj: empresa.cpfCnpj.replace(/\D/g, ''),
+          email: empresa.email,
+          phone: empresa.telefone,
+        },
+        { headers: this.headers },
+      );
+      return data.id;
+    } catch (err: any) {
+      this.logger.warn(`Asaas criar cliente: ${asaasApiMessage(err)}`);
+      throw new BadRequestException(asaasApiMessage(err));
+    }
   }
 
   async gerarCobrancaPix(dto: {
@@ -140,28 +172,33 @@ export class AsaasService implements OnModuleInit {
       );
       return mock;
     }
-    const { data } = await axios.post(
-      `${this.baseUrl}/payments`,
-      {
-        customer: dto.idAsaasCliente,
-        billingType: 'PIX',
-        value: dto.valor,
-        dueDate: dto.vencimento,
-        description: dto.descricao || 'OBRA 10 — Módulos contratados',
-      },
-      { headers: this.headers },
-    );
+    try {
+      const { data } = await axios.post(
+        `${this.baseUrl}/payments`,
+        {
+          customer: dto.idAsaasCliente,
+          billingType: 'PIX',
+          value: dto.valor,
+          dueDate: dto.vencimento,
+          description: dto.descricao || 'OBRA 10 — Módulos contratados',
+        },
+        { headers: this.headers },
+      );
 
-    const { data: pixData } = await axios.get(
-      `${this.baseUrl}/payments/${data.id}/pixQrCode`,
-      { headers: this.headers },
-    );
-    return {
-      id: data.id,
-      linkPagamento: data.invoiceUrl,
-      qrCode: pixData.payload,
-      qrCodeBase64: pixData.encodedImage,
-    };
+      const { data: pixData } = await axios.get(
+        `${this.baseUrl}/payments/${data.id}/pixQrCode`,
+        { headers: this.headers },
+      );
+      return {
+        id: data.id,
+        linkPagamento: data.invoiceUrl,
+        qrCode: pixData.payload,
+        qrCodeBase64: pixData.encodedImage,
+      };
+    } catch (err: any) {
+      this.logger.warn(`Asaas gerar PIX: ${asaasApiMessage(err)}`);
+      throw new BadRequestException(asaasApiMessage(err));
+    }
   }
 
   async cobrarCartaoRecorrente(dto: {
