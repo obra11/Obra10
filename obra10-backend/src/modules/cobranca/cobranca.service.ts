@@ -18,7 +18,11 @@ import {
   resolvePacoteObras,
   type PacoteObras,
 } from './pacotes-obras';
-import { erroAsaasSemDocumento } from '../../core/utils/documento-fiscal';
+import {
+  apenasDigitos,
+  erroAsaasSemDocumento,
+  normalizarDocumentoFiscal,
+} from '../../core/utils/documento-fiscal';
 
 const PLANO_PRECOS: Record<string, number> = {};
 
@@ -543,14 +547,30 @@ export class CobrancaService {
     },
     opts?: { forceNew?: boolean },
   ): Promise<string> {
+    const bruto = this.resolverDocumentoEmpresa(empresa);
+    const documento = normalizarDocumentoFiscal(bruto);
+    if (documento && documento !== apenasDigitos(bruto)) {
+      await this.prisma.empresa.update({
+        where: { id: empresa.id },
+        data: {
+          cpfCnpj: this.cryptoService.encrypt(documento),
+          tipoPessoa: documento.length === 11 ? 'FISICA' : 'JURIDICA',
+          idAsaas: null,
+        },
+      });
+      empresa.cpfCnpj = this.cryptoService.encrypt(documento);
+      empresa.idAsaas = null;
+    }
+
     const id = await this.asaas.garantirClienteAsaas(
       opts?.forceNew ? '' : empresa.idAsaas,
       {
-        cpfCnpj: this.resolverDocumentoEmpresa(empresa),
+        cpfCnpj: documento,
         razaoSocial: empresa.razaoSocial || undefined,
         nomeCompleto: empresa.nomeCompleto || undefined,
         email: empresa.email || '',
         telefone: empresa.telefone || undefined,
+        empresaId: empresa.id,
       },
     );
     if (id !== (empresa.idAsaas || '')) {

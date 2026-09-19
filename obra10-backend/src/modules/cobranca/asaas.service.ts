@@ -127,15 +127,8 @@ export class AsaasService implements OnModuleInit {
       throw new BadRequestException(mensagemDocumentoAusenteAsaas());
     }
     try {
-      const { data } = await axios.post(
-        `${this.baseUrl}/customers`,
-        {
-          name: empresa.razaoSocial || empresa.nomeCompleto,
-          cpfCnpj: documento,
-          email: empresa.email,
-          phone: empresa.telefone,
-        },
-        { headers: this.headers },
+      const data = await this.criarClienteRaw(
+        this.payloadCliente(empresa, documento),
       );
       return data.id;
     } catch (err: any) {
@@ -145,9 +138,9 @@ export class AsaasService implements OnModuleInit {
   }
 
   /**
-   * Garante que o cliente Asaas existe e tem o CPF/CNPJ atual.
-   * Reusa o id salvo quando possível; se o cliente estiver sem documento
-   * (ou em outra conta/ambiente), atualiza ou cria de novo.
+   * Garante que o cliente Asaas existe e TEM o CPF/CNPJ gravado.
+   * PUT 200 sem documento ainda quebra o PIX — por isso buscamos,
+   * atualizamos e só reutilizamos o id depois de confirmar o campo.
    */
   async garantirClienteAsaas(
     idAsaas: string | null | undefined,
@@ -157,6 +150,7 @@ export class AsaasService implements OnModuleInit {
       nomeCompleto?: string;
       email: string;
       telefone?: string;
+      empresaId?: string;
     },
   ): Promise<string> {
     const documento = normalizarDocumentoFiscal(empresa.cpfCnpj);
@@ -164,12 +158,7 @@ export class AsaasService implements OnModuleInit {
       throw new BadRequestException(mensagemDocumentoAusenteAsaas());
     }
 
-    const dados = {
-      name: empresa.razaoSocial || empresa.nomeCompleto,
-      cpfCnpj: documento,
-      email: empresa.email,
-      phone: empresa.telefone,
-    };
+    const dados = this.payloadCliente(empresa, documento);
 
     if (this.mockMode) {
       if (idAsaas?.startsWith('mock-')) return idAsaas;
@@ -178,22 +167,112 @@ export class AsaasService implements OnModuleInit {
       return mock;
     }
 
-    const id = idAsaas && !idAsaas.startsWith('mock-') ? idAsaas : '';
-    if (id) {
-      try {
-        await axios.put(`${this.baseUrl}/customers/${id}`, dados, {
-          headers: this.headers,
-        });
-        this.logger.log(`Asaas cliente atualizado ${id} com documento`);
-        return id;
-      } catch (err: any) {
-        this.logger.warn(
-          `Asaas atualizar cliente ${id}: ${asaasApiMessage(err)} — criando outro`,
-        );
+    const porDocumento = await this.buscarClientePorDocumento(documento);
+    if (this.clienteTemDocumento(porDocumento, documento)) {
+      return porDocumento.id;
+    }
+
+    const idSalvo = idAsaas && !idAsaas.startsWith('mock-') ? idAsaas : '';
+    if (idSalvo) {
+      const atual = await this.buscarClientePorId(idSalvo);
+      if (this.clienteTemDocumento(atual, documento)) return idSalvo;
+      if (atual) {
+        const updated = await this.atualizarCliente(idSalvo, dados);
+        if (this.clienteTemDocumento(updated, documento)) return idSalvo;
       }
     }
 
-    return this.criarClienteAsaas({ ...empresa, cpfCnpj: documento });
+    if (porDocumento?.id) {
+      const updated = await this.atualizarCliente(porDocumento.id, dados);
+      if (this.clienteTemDocumento(updated, documento)) return porDocumento.id;
+    }
+
+    const criado = await this.criarClienteRaw(dados);
+    if (!this.clienteTemDocumento(criado, documento)) {
+      throw new BadRequestException(
+        'A Asaas não gravou o CPF/CNPJ no cliente. Confira o documento em Configurações da Empresa e tente de novo.',
+      );
+    }
+    return criado.id;
+  }
+
+  private payloadCliente(
+    empresa: {
+      razaoSocial?: string;
+      nomeCompleto?: string;
+      email: string;
+      telefone?: string;
+      empresaId?: string;
+    },
+    documento: string,
+  ) {
+    const phone = String(empresa.telefone || '').replace(/\D/g, '');
+    const dados: Record<string, string> = {
+      name: empresa.razaoSocial || empresa.nomeCompleto || 'Cliente Obra 10',
+      cpfCnpj: documento,
+      email: empresa.email,
+    };
+    if (phone) {
+      dados.phone = phone;
+      if (phone.length >= 10) dados.mobilePhone = phone;
+    }
+    if (empresa.empresaId) dados.externalReference = empresa.empresaId;
+    return dados;
+  }
+
+  private clienteTemDocumento(customer: any, documento: string): boolean {
+    if (!customer?.id) return false;
+    return normalizarDocumentoFiscal(customer.cpfCnpj) === documento;
+  }
+
+  private async buscarClientePorId(id: string): Promise<any | null> {
+    try {
+      const { data } = await axios.get(`${this.baseUrl}/customers/${id}`, {
+        headers: this.headers,
+      });
+      return data?.deleted ? null : data;
+    } catch (err: any) {
+      this.logger.warn(`Asaas GET cliente ${id}: ${asaasApiMessage(err)}`);
+      return null;
+    }
+  }
+
+  private async buscarClientePorDocumento(documento: string): Promise<any | null> {
+    try {
+      const { data } = await axios.get(`${this.baseUrl}/customers`, {
+        headers: this.headers,
+        params: { cpfCnpj: documento, limit: 10 },
+      });
+      const list: any[] = Array.isArray(data?.data) ? data.data : [];
+      return list.find((c) => this.clienteTemDocumento(c, documento)) || list[0] || null;
+    } catch (err: any) {
+      this.logger.warn(`Asaas listar cliente ${documento}: ${asaasApiMessage(err)}`);
+      return null;
+    }
+  }
+
+  private async atualizarCliente(
+    id: string,
+    dados: Record<string, string>,
+  ): Promise<any | null> {
+    try {
+      const { data } = await axios.put(
+        `${this.baseUrl}/customers/${id}`,
+        dados,
+        { headers: this.headers },
+      );
+      return data;
+    } catch (err: any) {
+      this.logger.warn(`Asaas PUT cliente ${id}: ${asaasApiMessage(err)}`);
+      return null;
+    }
+  }
+
+  private async criarClienteRaw(dados: Record<string, string>): Promise<any> {
+    const { data } = await axios.post(`${this.baseUrl}/customers`, dados, {
+      headers: this.headers,
+    });
+    return data;
   }
 
   async gerarCobrancaPix(dto: {

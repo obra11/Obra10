@@ -17,7 +17,10 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { documentoFiscalValido } from '../utils/documentoFiscal';
+import {
+  documentoFiscalValido,
+  normalizarDocumentoFiscal,
+} from '../utils/documentoFiscal';
 import {
   labelPlano,
   PLANOS,
@@ -197,6 +200,16 @@ export const Assinatura: React.FC = () => {
     setUpgrading(true);
     setUpgradeError('');
     try {
+      if (modulosNovos.length > 0 && documentoOk) {
+        try {
+          await api.patch('/tenants/minha-empresa', {
+            cpfCnpj: normalizarDocumentoFiscal(empresa?.cpfCnpj || empresa?.cnpj || ''),
+          });
+        } catch {
+          // A cobrança ainda tenta sincronizar o documento na Asaas.
+        }
+      }
+
       if (mudouPlano) {
         await api.post('/tenants/meu-plano/upgrade', { plano: planoSelecionado });
       }
