@@ -19,6 +19,7 @@ import {
   resolvePacoteObras,
   resolvePlano,
 } from '../cobranca/pacotes-obras';
+import { normalizarDocumentoFiscal } from '../../core/utils/documento-fiscal';
 
 @Controller('admin/empresas')
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
@@ -70,15 +71,19 @@ export class AdminEmpresasController {
   @Post()
   async criarEmpresa(@Body() dto: CriarEmpresaAdminDto) {
     // Verificar se documento já existe
-    const docLimpo = dto.documento.replace(/\D/g, '');
+    const docLimpo = normalizarDocumentoFiscal(dto.documento);
     
     // Verificar duplicidade de documento (decrypted comparison in-memory since columns are encrypted using random IVs)
     const todasEmpresas = await this.prisma.empresa.findMany({
       select: { id: true, cpfCnpj: true, cnpj: true }
     });
     const docExiste = todasEmpresas.some(emp => {
-      const decCpfCnpj = emp.cpfCnpj ? this.cryptoService.decrypt(emp.cpfCnpj) : null;
-      const decCnpj = emp.cnpj ? this.cryptoService.decrypt(emp.cnpj) : null;
+      const decCpfCnpj = emp.cpfCnpj
+        ? normalizarDocumentoFiscal(this.cryptoService.decrypt(emp.cpfCnpj))
+        : null;
+      const decCnpj = emp.cnpj
+        ? normalizarDocumentoFiscal(this.cryptoService.decrypt(emp.cnpj))
+        : null;
       return decCpfCnpj === docLimpo || decCnpj === docLimpo;
     });
     if (docExiste) {
@@ -274,7 +279,10 @@ export class AdminEmpresasController {
     if ('cpfCnpj' in data) {
       const next = this.encryptDocumentoSeMudou(empresa.cpfCnpj, data.cpfCnpj);
       if (next === undefined) delete data.cpfCnpj;
-      else data.cpfCnpj = next;
+      else {
+        data.cpfCnpj = next;
+        data.idAsaas = null;
+      }
     }
 
     if (dto.plano) {
@@ -552,9 +560,9 @@ export class AdminEmpresasController {
     incoming: string | null,
   ): string | null | undefined {
     if (!incoming) return null;
-    const limpo = String(incoming).replace(/\D/g, '');
+    const limpo = normalizarDocumentoFiscal(incoming);
     if (!limpo) return null;
-    const atual = this.decryptDoc(atualCifrado).replace(/\D/g, '');
+    const atual = normalizarDocumentoFiscal(this.decryptDoc(atualCifrado));
     if (limpo === atual) return undefined;
     return this.cryptoService.encrypt(limpo);
   }

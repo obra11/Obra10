@@ -7,6 +7,11 @@ import {
 } from 'lucide-react';
 import { AppVersionBadge } from '../components/AppVersionBadge';
 import api from '../services/api';
+import {
+  formatarDocumentoFiscal,
+  mascaraDocumentoFiscal,
+  normalizarDocumentoFiscal,
+} from '../utils/documentoFiscal';
 
 const PERFIL_LABELS: Record<string, string> = {
   SUPER_ADMIN: 'Super Administrador',
@@ -71,7 +76,9 @@ export const Perfil: React.FC = () => {
 
   const [nome, setNome] = useState(user?.nome || '');
   const [telefone, setTelefone] = useState('');
-  const [cpfCnpj, setCpfCnpj] = useState(empresa?.cpfCnpj || empresa?.cnpj || '');
+  const [cpfCnpj, setCpfCnpj] = useState(
+    formatarDocumentoFiscal(empresa?.cpfCnpj || empresa?.cnpj || ''),
+  );
 
   const [senhaAtual, setSenhaAtual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
@@ -105,7 +112,7 @@ export const Perfil: React.FC = () => {
   const temModulos = Object.keys(modulosPadrao).length > 0;
 
   useEffect(() => {
-    setCpfCnpj(empresa?.cpfCnpj || empresa?.cnpj || '');
+    setCpfCnpj(formatarDocumentoFiscal(empresa?.cpfCnpj || empresa?.cnpj || ''));
   }, [empresa?.cpfCnpj, empresa?.cnpj]);
 
   useEffect(() => {
@@ -161,7 +168,7 @@ export const Perfil: React.FC = () => {
       await api.patch('/usuarios/perfil', payload);
       if (podeEditarDocumento) {
         await api.patch('/tenants/minha-empresa', {
-          cpfCnpj: cpfCnpj.trim(),
+          cpfCnpj: normalizarDocumentoFiscal(cpfCnpj),
         });
       }
       await fetchSession();
@@ -334,7 +341,8 @@ export const Perfil: React.FC = () => {
                   type="text"
                   inputMode="numeric"
                   value={cpfCnpj}
-                  onChange={(e) => setCpfCnpj(e.target.value)}
+                  onChange={(e) => setCpfCnpj(mascaraDocumentoFiscal(e.target.value))}
+                  onBlur={() => setCpfCnpj(formatarDocumentoFiscal(cpfCnpj))}
                   disabled={!podeEditarDocumento}
                   className={`w-full px-3 py-2 border rounded-lg outline-none ${
                     podeEditarDocumento

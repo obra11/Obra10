@@ -1,5 +1,10 @@
 import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
+import {
+  documentoFiscalValido,
+  mensagemDocumentoAusenteAsaas,
+  normalizarDocumentoFiscal,
+} from '../../core/utils/documento-fiscal';
 
 export type AsaasPaymentInfo = {
   id: string;
@@ -32,13 +37,6 @@ function asaasApiMessage(err: any): string {
     err?.message ||
     'Falha ao falar com a Asaas.'
   );
-}
-
-function documentoFiscalValido(raw: string): boolean {
-  const d = String(raw || '').replace(/\D/g, '');
-  if (d.length !== 11 && d.length !== 14) return false;
-  if (/^(\d)\1+$/.test(d)) return false;
-  return true;
 }
 
 /** Railway trata `$aact_...` como interpolação; a chave pode chegar com `$$`, espaço ou sem `$`. */
@@ -124,17 +122,16 @@ export class AsaasService implements OnModuleInit {
       this.logger.log(`[MOCK ASAAS] criarClienteAsaas → ${mock}`);
       return mock;
     }
-    if (!documentoFiscalValido(empresa.cpfCnpj)) {
-      throw new BadRequestException(
-        'Cadastre um CPF ou CNPJ válido em Meu Perfil (ou no cadastro da empresa). A Asaas não gera PIX sem documento verdadeiro.',
-      );
+    const documento = normalizarDocumentoFiscal(empresa.cpfCnpj);
+    if (!documentoFiscalValido(documento)) {
+      throw new BadRequestException(mensagemDocumentoAusenteAsaas());
     }
     try {
       const { data } = await axios.post(
         `${this.baseUrl}/customers`,
         {
           name: empresa.razaoSocial || empresa.nomeCompleto,
-          cpfCnpj: empresa.cpfCnpj.replace(/\D/g, ''),
+          cpfCnpj: documento,
           email: empresa.email,
           phone: empresa.telefone,
         },
@@ -145,6 +142,58 @@ export class AsaasService implements OnModuleInit {
       this.logger.warn(`Asaas criar cliente: ${asaasApiMessage(err)}`);
       throw new BadRequestException(asaasApiMessage(err));
     }
+  }
+
+  /**
+   * Garante que o cliente Asaas existe e tem o CPF/CNPJ atual.
+   * Reusa o id salvo quando possível; se o cliente estiver sem documento
+   * (ou em outra conta/ambiente), atualiza ou cria de novo.
+   */
+  async garantirClienteAsaas(
+    idAsaas: string | null | undefined,
+    empresa: {
+      cpfCnpj: string;
+      razaoSocial?: string;
+      nomeCompleto?: string;
+      email: string;
+      telefone?: string;
+    },
+  ): Promise<string> {
+    const documento = normalizarDocumentoFiscal(empresa.cpfCnpj);
+    if (!documentoFiscalValido(documento)) {
+      throw new BadRequestException(mensagemDocumentoAusenteAsaas());
+    }
+
+    const dados = {
+      name: empresa.razaoSocial || empresa.nomeCompleto,
+      cpfCnpj: documento,
+      email: empresa.email,
+      phone: empresa.telefone,
+    };
+
+    if (this.mockMode) {
+      if (idAsaas?.startsWith('mock-')) return idAsaas;
+      const mock = `mock-customer-${Date.now()}`;
+      this.logger.log(`[MOCK ASAAS] garantirClienteAsaas → ${mock}`);
+      return mock;
+    }
+
+    const id = idAsaas && !idAsaas.startsWith('mock-') ? idAsaas : '';
+    if (id) {
+      try {
+        await axios.put(`${this.baseUrl}/customers/${id}`, dados, {
+          headers: this.headers,
+        });
+        this.logger.log(`Asaas cliente atualizado ${id} com documento`);
+        return id;
+      } catch (err: any) {
+        this.logger.warn(
+          `Asaas atualizar cliente ${id}: ${asaasApiMessage(err)} — criando outro`,
+        );
+      }
+    }
+
+    return this.criarClienteAsaas({ ...empresa, cpfCnpj: documento });
   }
 
   async gerarCobrancaPix(dto: {

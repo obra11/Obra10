@@ -14,8 +14,10 @@ import {
   QrCode,
 } from 'lucide-react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { documentoFiscalValido } from '../utils/documentoFiscal';
 import {
   labelPlano,
   PLANOS,
@@ -44,6 +46,8 @@ interface ModuloCatalogo {
 
 export const Assinatura: React.FC = () => {
   const navigate = useNavigate();
+  const { empresa } = useAuth();
+  const documentoOk = documentoFiscalValido(empresa?.cpfCnpj || empresa?.cnpj || '');
   const [dados, setDados] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -180,6 +184,13 @@ export const Assinatura: React.FC = () => {
     const mudouPlano = planoSelecionado !== dados?.plano;
     if (!mudouPlano && modulosNovos.length === 0) {
       setUpgradeError('Selecione outro plano ou adicione pelo menos um módulo novo.');
+      return;
+    }
+
+    if (modulosNovos.length > 0 && !documentoOk) {
+      setUpgradeError(
+        'Cadastre um CPF ou CNPJ válido em Configurações da Empresa (ou Meu Perfil) antes de gerar o PIX.',
+      );
       return;
     }
 
@@ -758,6 +769,20 @@ export const Assinatura: React.FC = () => {
                   </span>
                 </div>
               </>
+            )}
+
+            {modulosNovos.length > 0 && !documentoOk && (
+              <div className="mb-4 p-3 bg-amber-50 text-amber-800 text-sm rounded-lg border-l-4 border-amber-500">
+                Para gerar o PIX, cadastre o CPF ou CNPJ em{' '}
+                <button
+                  type="button"
+                  onClick={() => navigate('/dashboard')}
+                  className="font-bold underline"
+                >
+                  Configurações da Empresa
+                </button>
+                {' '}ou em Meu Perfil.
+              </div>
             )}
 
             {upgradeError && (

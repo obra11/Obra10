@@ -18,6 +18,7 @@ import {
   resolvePacoteObras,
   type PacoteObras,
 } from './pacotes-obras';
+import { erroAsaasSemDocumento } from '../../core/utils/documento-fiscal';
 
 const PLANO_PRECOS: Record<string, number> = {};
 
@@ -122,23 +123,11 @@ export class CobrancaService {
           : 'Cobrança para este mês já gerada.',
       );
 
-    // Ensure client exists in Asaas (decrypting document first to send plaintext to Asaas API)
-    let idAsaasCliente: string = empresa.idAsaas || '';
-    if (idAsaasCliente.startsWith('mock-')) idAsaasCliente = '';
-    if (!idAsaasCliente && !pularAsaas) {
-      const decCpfCnpj = empresa.cpfCnpj ? this.cryptoService.decrypt(empresa.cpfCnpj) : '';
-      const decCnpj = empresa.cnpj ? this.cryptoService.decrypt(empresa.cnpj) : '';
-      idAsaasCliente = await this.asaas.criarClienteAsaas({
-        cpfCnpj: decCpfCnpj || decCnpj || '',
-        razaoSocial: empresa.razaoSocial || undefined,
-        nomeCompleto: empresa.nomeCompleto || undefined,
-        email: empresa.email || '',
-        telefone: empresa.telefone || undefined,
-      });
-      await this.prisma.empresa.update({
-        where: { id: dto.empresaId },
-        data: { idAsaas: idAsaasCliente },
-      });
+    // Sempre sincroniza o CPF/CNPJ no cliente Asaas. Reusar só o id salvo
+    // deixava a cobrança falhar quando o cliente existia sem documento.
+    let idAsaasCliente = '';
+    if (!pularAsaas && valor > 0) {
+      idAsaasCliente = await this.resolverClienteAsaas(empresa);
     }
 
     let cobranca: any;
@@ -177,8 +166,7 @@ export class CobrancaService {
     }
 
     if (dto.formaPagamento === 'PIX' || !dto.tokenCartao) {
-      const pix = await this.asaas.gerarCobrancaPix({
-        idAsaasCliente,
+      const pix = await this.gerarPixComDocumento(empresa, idAsaasCliente, {
         valor: Math.max(valor, 0.01),
         vencimento: vencimento.toISOString().split('T')[0],
         descricao: `OBRA 10 ${pacoteObras} ${periodicidade} — ${modulos.map((m) => m.slug).join(', ')}`,
@@ -522,6 +510,96 @@ export class CobrancaService {
     this.logger.log(
       `✅ Pagamento confirmado para empresa ${cobranca.empresaId}`,
     );
+  }
+
+  private decryptSafe(value?: string | null): string {
+    if (!value) return '';
+    try {
+      return this.cryptoService.decrypt(value) || '';
+    } catch {
+      return '';
+    }
+  }
+
+  resolverDocumentoEmpresa(empresa: {
+    cpfCnpj?: string | null;
+    cnpj?: string | null;
+  }): string {
+    const decCpf = this.decryptSafe(empresa.cpfCnpj);
+    const decCnpj = this.decryptSafe(empresa.cnpj);
+    return decCpf || decCnpj || '';
+  }
+
+  async resolverClienteAsaas(
+    empresa: {
+      id: string;
+      idAsaas?: string | null;
+      cpfCnpj?: string | null;
+      cnpj?: string | null;
+      razaoSocial?: string | null;
+      nomeCompleto?: string | null;
+      email?: string | null;
+      telefone?: string | null;
+    },
+    opts?: { forceNew?: boolean },
+  ): Promise<string> {
+    const id = await this.asaas.garantirClienteAsaas(
+      opts?.forceNew ? '' : empresa.idAsaas,
+      {
+        cpfCnpj: this.resolverDocumentoEmpresa(empresa),
+        razaoSocial: empresa.razaoSocial || undefined,
+        nomeCompleto: empresa.nomeCompleto || undefined,
+        email: empresa.email || '',
+        telefone: empresa.telefone || undefined,
+      },
+    );
+    if (id !== (empresa.idAsaas || '')) {
+      await this.prisma.empresa.update({
+        where: { id: empresa.id },
+        data: { idAsaas: id },
+      });
+    }
+    return id;
+  }
+
+  private async gerarPixComDocumento(
+    empresa: {
+      id: string;
+      idAsaas?: string | null;
+      cpfCnpj?: string | null;
+      cnpj?: string | null;
+      razaoSocial?: string | null;
+      nomeCompleto?: string | null;
+      email?: string | null;
+      telefone?: string | null;
+    },
+    idAsaasCliente: string,
+    dto: { valor: number; vencimento: string; descricao?: string },
+  ) {
+    try {
+      const pix = await this.asaas.gerarCobrancaPix({
+        idAsaasCliente,
+        ...dto,
+      });
+      return { ...pix, idAsaasCliente };
+    } catch (err: any) {
+      const raw =
+        typeof err?.getResponse === 'function' ? err.getResponse() : err?.response?.data;
+      const msg = Array.isArray(raw?.message)
+        ? raw.message.join(' ')
+        : String(raw?.message || raw || err?.message || '');
+      if (!erroAsaasSemDocumento(msg)) throw err;
+
+      this.logger.warn(
+        `Asaas cobrou sem documento no cliente ${idAsaasCliente} — recriando`,
+      );
+      const novoId = await this.resolverClienteAsaas(empresa, { forceNew: true });
+      const pix = await this.asaas.gerarCobrancaPix({
+        idAsaasCliente: novoId,
+        ...dto,
+      });
+      return { ...pix, idAsaasCliente: novoId };
+    }
   }
 
   // ===================== ATIVAR MÓDULOS =====================

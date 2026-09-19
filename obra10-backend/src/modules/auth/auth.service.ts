@@ -10,6 +10,7 @@ import { EmailService } from '../email/email.service';
 import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 import { CryptoService } from '../../core/services/crypto.service';
 import { mergePermissoesObra } from '../../core/capabilities/role-capabilities';
+import { normalizarDocumentoFiscal } from '../../core/utils/documento-fiscal';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -246,10 +247,12 @@ export class AuthService {
   private mapEmpresaAuth(empresa: any) {
     const cobrancasCount = empresa?._count?.cobrancas ?? 0;
     const tenantModulos = empresa?.tenantModulos || [];
+    const cpfCnpj = this.decryptDoc(empresa?.cpfCnpj);
+    const cnpj = this.decryptDoc(empresa?.cnpj);
     return {
       ...empresa,
-      cpfCnpj: this.decryptDoc(empresa?.cpfCnpj),
-      cnpj: this.decryptDoc(empresa?.cnpj),
+      cpfCnpj: cpfCnpj ? normalizarDocumentoFiscal(cpfCnpj) : null,
+      cnpj: cnpj ? normalizarDocumentoFiscal(cnpj) : null,
       modulos: tenantModulos.map((tm: any) => ({
         slug: tm.modulo.slug,
         nome: tm.modulo.nome,
