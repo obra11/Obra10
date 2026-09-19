@@ -5,7 +5,6 @@ import { CobrancaService } from './cobranca.service';
 import { AsaasService } from './asaas.service';
 import { EmailService } from '../email/email.service';
 import { CupomService } from '../cupom/cupom.service';
-import { CryptoService } from '../../core/services/crypto.service';
 import {
   precoModuloPorPacote,
   resolvePacoteObras,
@@ -21,7 +20,6 @@ export class CobrancaCron {
     private readonly asaas: AsaasService,
     private readonly email: EmailService,
     private readonly cupomService: CupomService,
-    private readonly cryptoService: CryptoService,
   ) {}
 
   // Day 1 at 08:00 — generate monthly charges
@@ -156,21 +154,8 @@ export class CobrancaCron {
           continue;
         }
 
-        let idAsaasCliente = empresa.idAsaas;
-        if (!idAsaasCliente) {
-          const decCpfCnpj = empresa.cpfCnpj ? this.cryptoService.decrypt(empresa.cpfCnpj) : '';
-          const decCnpj = empresa.cnpj ? this.cryptoService.decrypt(empresa.cnpj) : '';
-          idAsaasCliente = await this.asaas.criarClienteAsaas({
-            cpfCnpj: decCpfCnpj || decCnpj || '',
-            razaoSocial: empresa.razaoSocial || undefined,
-            nomeCompleto: empresa.nomeCompleto || undefined,
-            email: empresa.email || '',
-          });
-          await this.prisma.empresa.update({
-            where: { id: empresa.id },
-            data: { idAsaas: idAsaasCliente },
-          });
-        }
+        const idAsaasCliente =
+          await this.cobrancaService.resolverClienteAsaas(empresa);
 
         if (empresa.cartaoSalvo) {
           // Charge card automatically

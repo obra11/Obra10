@@ -24,39 +24,11 @@ import {
   resolvePacoteObras,
   resolvePlano,
 } from '../cobranca/pacotes-obras';
-
-// ===================== VALIDATORS =====================
-function validarCPF(cpf: string): boolean {
-  const d = cpf.replace(/\D/g, '');
-  if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
-  let sum = 0;
-  for (let i = 0; i < 9; i++) sum += +d[i] * (10 - i);
-  let r = (sum * 10) % 11;
-  if (r === 10 || r === 11) r = 0;
-  if (r !== +d[9]) return false;
-  sum = 0;
-  for (let i = 0; i < 10; i++) sum += +d[i] * (11 - i);
-  r = (sum * 10) % 11;
-  if (r === 10 || r === 11) r = 0;
-  return r === +d[10];
-}
-
-function validarCNPJ(cnpj: string): boolean {
-  const d = cnpj.replace(/\D/g, '');
-  if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false;
-  const calc = (n: string, weights: number[]) =>
-    11 -
-    (n
-      .split('')
-      .slice(0, weights.length)
-      .reduce((s, c, i) => s + +c * weights[i], 0) %
-      11);
-  const w1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-  const w2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-  const d1 = calc(d, w1) >= 10 ? 0 : calc(d, w1);
-  const d2 = calc(d, w2) >= 10 ? 0 : calc(d, w2);
-  return +d[12] === d1 && +d[13] === d2;
-}
+import {
+  normalizarDocumentoFiscal,
+  validarCNPJ,
+  validarCPF,
+} from '../../core/utils/documento-fiscal';
 
 async function buscarCEP(cep: string): Promise<any> {
   try {
@@ -96,7 +68,7 @@ export class TenantService {
     nome: string; // gestor's name
     senha: string;
   }) {
-    const cpfCnpjLimpo = dto.cpfCnpj.replace(/\D/g, '');
+    const cpfCnpjLimpo = normalizarDocumentoFiscal(dto.cpfCnpj);
 
     // Validate document
     if (dto.tipoPessoa === 'FISICA') {
@@ -114,10 +86,10 @@ export class TenantService {
     const existe = todasEmpresas.some((emp) => {
       if (emp.email === dto.email) return true;
       const decCpfCnpj = emp.cpfCnpj
-        ? this.cryptoService.decrypt(emp.cpfCnpj)
+        ? normalizarDocumentoFiscal(this.cryptoService.decrypt(emp.cpfCnpj))
         : null;
       const decCnpj = emp.cnpj
-        ? this.cryptoService.decrypt(emp.cnpj)
+        ? normalizarDocumentoFiscal(this.cryptoService.decrypt(emp.cnpj))
         : null;
       return decCpfCnpj === cpfCnpjLimpo || decCnpj === cpfCnpjLimpo;
     });
@@ -390,11 +362,13 @@ export class TenantService {
       updates.limiteObras = limiteObrasDoPacote(pacote);
     }
     if (updates.cpfCnpj !== undefined) {
-      const limpo = String(updates.cpfCnpj || '').replace(/\D/g, '');
+      const limpo = normalizarDocumentoFiscal(updates.cpfCnpj);
       let atual = '';
       try {
         atual = empresa.cpfCnpj
-          ? this.cryptoService.decrypt(empresa.cpfCnpj).replace(/\D/g, '')
+          ? normalizarDocumentoFiscal(
+              this.cryptoService.decrypt(empresa.cpfCnpj),
+            )
           : '';
       } catch {
         atual = '';

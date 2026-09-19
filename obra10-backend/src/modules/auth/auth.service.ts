@@ -10,6 +10,10 @@ import { EmailService } from '../email/email.service';
 import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 import { CryptoService } from '../../core/services/crypto.service';
 import { mergePermissoesObra } from '../../core/capabilities/role-capabilities';
+import {
+  apenasDigitos,
+  normalizarDocumentoFiscal,
+} from '../../core/utils/documento-fiscal';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -143,7 +147,7 @@ export class AuthService {
         fotoUrl: user.fotoUrl,
         capabilities: caps,
       },
-      empresa: this.mapEmpresaAuth(user.empresa),
+      empresa: this.mapEmpresaAuth(await this.persistDocumentoNormalizado(user.empresa)),
       obrasPermitidas,
     };
   }
@@ -229,9 +233,38 @@ export class AuthService {
         fotoUrl: user.fotoUrl,
         capabilities: caps,
       },
-      empresa: this.mapEmpresaAuth(user.empresa),
+      empresa: this.mapEmpresaAuth(await this.persistDocumentoNormalizado(user.empresa)),
       obrasPermitidas,
     };
+  }
+
+  private async persistDocumentoNormalizado(empresa: any) {
+    if (!empresa?.id) return empresa;
+    const raw = this.decryptDoc(empresa.cpfCnpj) || this.decryptDoc(empresa.cnpj);
+    if (!raw) return empresa;
+    const norm = normalizarDocumentoFiscal(raw);
+    if (!norm || norm === apenasDigitos(raw)) return empresa;
+    try {
+      await this.prisma.empresa.update({
+        where: { id: empresa.id },
+        data: {
+          cpfCnpj: this.cryptoService.encrypt(norm),
+          tipoPessoa: norm.length === 11 ? 'FISICA' : 'JURIDICA',
+          idAsaas: null,
+        },
+      });
+      this.logger.log(`CPF/CNPJ da empresa ${empresa.id} normalizado (${raw.length}→${norm.length} dígitos)`);
+      return {
+        ...empresa,
+        cpfCnpj: this.cryptoService.encrypt(norm),
+        idAsaas: null,
+      };
+    } catch (err: any) {
+      this.logger.warn(
+        `Falha ao normalizar CPF da empresa ${empresa.id}: ${err?.message || err}`,
+      );
+      return empresa;
+    }
   }
 
   private decryptDoc(value?: string | null): string | null {
@@ -246,10 +279,12 @@ export class AuthService {
   private mapEmpresaAuth(empresa: any) {
     const cobrancasCount = empresa?._count?.cobrancas ?? 0;
     const tenantModulos = empresa?.tenantModulos || [];
+    const cpfCnpj = this.decryptDoc(empresa?.cpfCnpj);
+    const cnpj = this.decryptDoc(empresa?.cnpj);
     return {
       ...empresa,
-      cpfCnpj: this.decryptDoc(empresa?.cpfCnpj),
-      cnpj: this.decryptDoc(empresa?.cnpj),
+      cpfCnpj: cpfCnpj ? normalizarDocumentoFiscal(cpfCnpj) : null,
+      cnpj: cnpj ? normalizarDocumentoFiscal(cnpj) : null,
       modulos: tenantModulos.map((tm: any) => ({
         slug: tm.modulo.slug,
         nome: tm.modulo.nome,

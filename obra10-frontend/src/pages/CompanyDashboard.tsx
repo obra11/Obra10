@@ -4,6 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List, Headphones, FileText } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
+import {
+  formatarDocumentoFiscal,
+  mascaraDocumentoFiscal,
+  normalizarDocumentoFiscal,
+} from '../utils/documentoFiscal';
 
 export const CompanyDashboard: React.FC = () => {
   const { user, empresa, obras, logout, setObraAtiva, updateEmpresaLogo, updateUserPhoto } = useAuth();
@@ -56,7 +61,7 @@ export const CompanyDashboard: React.FC = () => {
   const [showEditEmpresaModal, setShowEditEmpresaModal] = useState(false);
   const [empresaEdit, setEmpresaEdit] = useState({ 
     nomeFantasia: empresa?.nomeFantasia || empresa?.razaoSocial || '',
-    cpfCnpj: empresa?.cpfCnpj || empresa?.cnpj || '',
+    cpfCnpj: formatarDocumentoFiscal(empresa?.cpfCnpj || empresa?.cnpj || ''),
     telefone: empresa?.telefone || '',
     email: empresa?.email || '',
     cep: empresa?.cep || '',
@@ -94,7 +99,10 @@ export const CompanyDashboard: React.FC = () => {
     if (!empresaEdit.nomeFantasia.trim()) return;
     setLoadingEditEmpresa(true);
     try {
-      await api.patch('/tenants/minha-empresa', empresaEdit);
+      await api.patch('/tenants/minha-empresa', {
+        ...empresaEdit,
+        cpfCnpj: normalizarDocumentoFiscal(empresaEdit.cpfCnpj),
+      });
       window.location.reload();
     } catch(e: any) {
       alert('Erro ao editar empresa: ' + (e?.response?.data?.message || e.message));
@@ -208,7 +216,7 @@ export const CompanyDashboard: React.FC = () => {
                   <button onClick={() => { 
                     setEmpresaEdit({ 
                       nomeFantasia: empresa?.nomeFantasia || empresa?.razaoSocial || '',
-                      cpfCnpj: empresa?.cpfCnpj || empresa?.cnpj || '',
+                      cpfCnpj: formatarDocumentoFiscal(empresa?.cpfCnpj || empresa?.cnpj || ''),
                       telefone: empresa?.telefone || '',
                       email: empresa?.email || '',
                       cep: empresa?.cep || '',
@@ -640,10 +648,25 @@ export const CompanyDashboard: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">CPF ou CNPJ (PIX)</label>
                   <input
                     value={empresaEdit.cpfCnpj}
-                    onChange={(e) => setEmpresaEdit({ ...empresaEdit, cpfCnpj: e.target.value })}
+                    onChange={(e) =>
+                      setEmpresaEdit({
+                        ...empresaEdit,
+                        cpfCnpj: mascaraDocumentoFiscal(e.target.value),
+                      })
+                    }
+                    onBlur={() =>
+                      setEmpresaEdit((prev) => ({
+                        ...prev,
+                        cpfCnpj: formatarDocumentoFiscal(prev.cpfCnpj),
+                      }))
+                    }
+                    inputMode="numeric"
                     className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500 outline-none"
                     placeholder="000.000.000-00"
                   />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Usado pela Asaas para gerar o PIX da assinatura.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Nome Fantasia *</label>

@@ -14,8 +14,13 @@ import {
   QrCode,
 } from 'lucide-react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import {
+  documentoFiscalValido,
+  normalizarDocumentoFiscal,
+} from '../utils/documentoFiscal';
 import {
   labelPlano,
   PLANOS,
@@ -44,6 +49,8 @@ interface ModuloCatalogo {
 
 export const Assinatura: React.FC = () => {
   const navigate = useNavigate();
+  const { empresa } = useAuth();
+  const documentoOk = documentoFiscalValido(empresa?.cpfCnpj || empresa?.cnpj || '');
   const [dados, setDados] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -183,9 +190,26 @@ export const Assinatura: React.FC = () => {
       return;
     }
 
+    if (modulosNovos.length > 0 && !documentoOk) {
+      setUpgradeError(
+        'Cadastre um CPF ou CNPJ válido em Configurações da Empresa (ou Meu Perfil) antes de gerar o PIX.',
+      );
+      return;
+    }
+
     setUpgrading(true);
     setUpgradeError('');
     try {
+      if (modulosNovos.length > 0 && documentoOk) {
+        try {
+          await api.patch('/tenants/minha-empresa', {
+            cpfCnpj: normalizarDocumentoFiscal(empresa?.cpfCnpj || empresa?.cnpj || ''),
+          });
+        } catch {
+          // A cobrança ainda tenta sincronizar o documento na Asaas.
+        }
+      }
+
       if (mudouPlano) {
         await api.post('/tenants/meu-plano/upgrade', { plano: planoSelecionado });
       }
@@ -758,6 +782,20 @@ export const Assinatura: React.FC = () => {
                   </span>
                 </div>
               </>
+            )}
+
+            {modulosNovos.length > 0 && !documentoOk && (
+              <div className="mb-4 p-3 bg-amber-50 text-amber-800 text-sm rounded-lg border-l-4 border-amber-500">
+                Para gerar o PIX, cadastre o CPF ou CNPJ em{' '}
+                <button
+                  type="button"
+                  onClick={() => navigate('/dashboard')}
+                  className="font-bold underline"
+                >
+                  Configurações da Empresa
+                </button>
+                {' '}ou em Meu Perfil.
+              </div>
             )}
 
             {upgradeError && (
