@@ -51,8 +51,8 @@ export class AuthService {
               include: { cupom: true },
             },
             _count: {
-              select: { cobrancas: true }
-            }
+              select: { cobrancas: { where: { status: 'PAGO' } } },
+            },
           },
         },
       },
@@ -147,7 +147,11 @@ export class AuthService {
         fotoUrl: user.fotoUrl,
         capabilities: caps,
       },
-      empresa: this.mapEmpresaAuth(await this.persistDocumentoNormalizado(user.empresa)),
+      empresa: this.mapEmpresaAuth(
+        await this.persistDocumentoNormalizado(
+          await this.encerrarRdoCortesia(user.empresa),
+        ),
+      ),
       obrasPermitidas,
     };
   }
@@ -200,8 +204,8 @@ export class AuthService {
               include: { cupom: true },
             },
             _count: {
-              select: { cobrancas: true }
-            }
+              select: { cobrancas: { where: { status: 'PAGO' } } },
+            },
           },
         },
       },
@@ -233,9 +237,37 @@ export class AuthService {
         fotoUrl: user.fotoUrl,
         capabilities: caps,
       },
-      empresa: this.mapEmpresaAuth(await this.persistDocumentoNormalizado(user.empresa)),
+      empresa: this.mapEmpresaAuth(
+        await this.persistDocumentoNormalizado(
+          await this.encerrarRdoCortesia(user.empresa),
+        ),
+      ),
       obrasPermitidas,
     };
+  }
+
+  /** RDO liberado no e-mail, sem cobrança paga, não conta como plano ativo. */
+  private async encerrarRdoCortesia(empresa: any) {
+    if (!empresa?.id) return empresa;
+    const pagas = empresa?._count?.cobrancas ?? 0;
+    const slugs = (empresa.tenantModulos || [])
+      .map((tm: any) => tm.modulo?.slug)
+      .filter(Boolean);
+    if (pagas > 0 || slugs.length === 0 || !slugs.every((s: string) => s === 'RDO')) {
+      return empresa;
+    }
+    try {
+      await this.prisma.tenantModulo.updateMany({
+        where: { empresaId: empresa.id, modulo: { slug: 'RDO' } },
+        data: { ativo: false },
+      });
+      return { ...empresa, tenantModulos: [] };
+    } catch (err: any) {
+      this.logger.warn(
+        `Falha ao encerrar RDO cortesia da empresa ${empresa.id}: ${err?.message || err}`,
+      );
+      return empresa;
+    }
   }
 
   private async persistDocumentoNormalizado(empresa: any) {
@@ -277,8 +309,13 @@ export class AuthService {
   }
 
   private mapEmpresaAuth(empresa: any) {
-    const cobrancasCount = empresa?._count?.cobrancas ?? 0;
+    const cobrancasPagas = empresa?._count?.cobrancas ?? 0;
     const tenantModulos = empresa?.tenantModulos || [];
+    const slugsAtivos = tenantModulos.map((tm: any) => tm.modulo?.slug).filter(Boolean);
+    const soRdoSemPagamento =
+      cobrancasPagas === 0 &&
+      slugsAtivos.length > 0 &&
+      slugsAtivos.every((s: string) => s === 'RDO');
     const cpfCnpj = this.decryptDoc(empresa?.cpfCnpj);
     const cnpj = this.decryptDoc(empresa?.cnpj);
     return {
@@ -292,8 +329,8 @@ export class AuthService {
         grupo: tm.modulo.grupo,
       })),
       cupons: empresa?.cupons || [],
-      cobrancasCount,
-      planoAtivo: cobrancasCount > 0 || tenantModulos.length > 0,
+      cobrancasCount: cobrancasPagas,
+      planoAtivo: cobrancasPagas > 0 || (slugsAtivos.length > 0 && !soRdoSemPagamento),
     };
   }
 
