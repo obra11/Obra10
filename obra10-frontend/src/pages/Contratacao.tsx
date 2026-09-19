@@ -84,6 +84,9 @@ export const Contratacao: React.FC = () => {
     api.get('/modulos').then(r => {
       const filtered = (r.data as Modulo[]).filter(m => m.slug !== 'IA' && m.slug !== 'CONCRETO');
       setModulos(filtered);
+      if (filtered.some((m) => m.slug === 'RDO')) {
+        setSelecionados(['RDO']);
+      }
       setLoading(false);
     });
   }, []);
@@ -186,7 +189,7 @@ export const Contratacao: React.FC = () => {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-3xl mx-auto">
         <div className="flex justify-end gap-3 mb-4">
-          {(empresa?.modulos?.length ?? 0) > 0 && (
+          {empresa?.planoAtivo === true && (
             <button
               type="button"
               onClick={() => navigate('/dashboard')}
@@ -205,9 +208,9 @@ export const Contratacao: React.FC = () => {
         </div>
         <div className="text-center mb-8">
           <Package size={48} className="mx-auto mb-4 text-red-600" />
-          <h1 className="text-3xl font-bold text-gray-900">Escolha seus módulos</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Contrate para começar</h1>
           <p className="text-gray-500 mt-2">
-            Escolha o plano (Básico, Pro ou Enterprise) e os módulos. O Pro usa os preços de tabela.
+            Escolha o plano e os módulos e pague com PIX ou cartão agora. O acesso só libera após o pagamento — sem mês grátis.
           </p>
         </div>
 

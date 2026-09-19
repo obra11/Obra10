@@ -69,7 +69,7 @@ export class EmailService {
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#dc2626">Conta verificada com sucesso!</h2>
         <p>Olá, <strong>${nomeEmpresa}</strong>!</p>
-        <p>Seu e-mail foi verificado. Agora escolha os módulos que deseja contratar e comece a usar o OBRA 10.</p>
+        <p>Seu e-mail foi verificado. Escolha os módulos e pague com PIX ou cartão para liberar o acesso — não há mês grátis.</p>
         <a href="${this.appUrl}/contratacao" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
           Escolher Módulos
         </a>

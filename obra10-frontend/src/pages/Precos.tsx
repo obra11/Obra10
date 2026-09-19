@@ -129,11 +129,6 @@ export const Precos: React.FC = () => {
                         <h2 className="font-display text-xl font-bold text-lunardeli-dark">
                           {m.nome}
                         </h2>
-                        {m.slug === 'RDO' && (
-                          <span className="text-[10px] font-bold uppercase tracking-wider bg-green-100 text-green-800 px-2 py-0.5 rounded">
-                            1º mês grátis
-                          </span>
-                        )}
                       </div>
                       <p className="text-sm text-gray-600 leading-relaxed max-w-2xl">
                         {m.descricao}

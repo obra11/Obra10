@@ -169,13 +169,7 @@ export class TenantService {
         });
       }
 
-      // RDO liberado só após confirmação do e-mail
-      const moduloRdo = await tx.modulo.findUnique({ where: { slug: 'RDO' } });
-      if (moduloRdo) {
-        await tx.tenantModulo.create({
-          data: { empresaId: empresa.id, moduloId: moduloRdo.id, ativo: false },
-        });
-      }
+      // Módulos só ativam depois do pagamento (PIX/cartão) na contratação.
 
       return { empresa, gestor };
     });
@@ -228,38 +222,15 @@ export class TenantService {
       );
     }
 
-    // Activate email + activate RDO module
-    await this.prisma.$transaction([
-      this.prisma.empresa.update({
-        where: { id: empresa.id },
-        data: {
-          emailVerificado: true,
-          tokenVerificacao: null,
-          tokenVerificacaoExp: null,
-        },
-      }),
-      this.prisma.tenantModulo.updateMany({
-        where: { empresaId: empresa.id },
-        data: { ativo: true },
-      }),
-    ]);
-
-    // Grant RDO to gestor
-    const gestor = await this.prisma.usuario.findFirst({
-      where: { empresaId: empresa.id, perfilGlobal: 'GESTOR', deletedAt: null },
+    // Só confirma o e-mail. Módulos e acesso ao painel liberam após o pagamento.
+    await this.prisma.empresa.update({
+      where: { id: empresa.id },
+      data: {
+        emailVerificado: true,
+        tokenVerificacao: null,
+        tokenVerificacaoExp: null,
+      },
     });
-    const moduloRdo = await this.prisma.modulo.findUnique({
-      where: { slug: 'RDO' },
-    });
-    if (gestor && moduloRdo) {
-      await this.prisma.usuarioModulo.upsert({
-        where: {
-          usuarioId_moduloId: { usuarioId: gestor.id, moduloId: moduloRdo.id },
-        },
-        update: {},
-        create: { usuarioId: gestor.id, moduloId: moduloRdo.id },
-      });
-    }
 
     // Send welcome email
     const nome = empresa.razaoSocial || empresa.nomeCompleto || 'Empresa';

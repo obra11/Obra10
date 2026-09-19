@@ -34,6 +34,8 @@ export const Login: React.FC = () => {
       login(data);
       if (data.usuario?.perfilGlobal === 'SUPER_ADMIN') {
         navigate('/admin/dashboard');
+      } else if (data.empresa?.planoAtivo !== true) {
+        navigate('/contratacao');
       } else {
         navigate('/dashboard');
       }
