@@ -309,6 +309,8 @@ export class AsaasService implements OnModuleInit {
           value: dto.valor,
           dueDate: dto.vencimento,
           description: dto.descricao || 'OBRA 10 — Módulos contratados',
+          notificationDisabled: true,
+          postalService: false,
         },
         { headers: this.headers },
       );
@@ -357,6 +359,8 @@ export class AsaasService implements OnModuleInit {
           value: dto.valor,
           dueDate: dto.vencimento,
           description: dto.descricao || 'OBRA 10 — Pagamento com cartão',
+          notificationDisabled: true,
+          postalService: false,
         },
         { headers: this.headers },
       );
@@ -389,7 +393,7 @@ export class AsaasService implements OnModuleInit {
     try {
       const { data } = await axios.put(
         `${this.baseUrl}/payments/${idAsaas}`,
-        { billingType: 'UNDEFINED' },
+        { billingType: 'CREDIT_CARD', notificationDisabled: true, postalService: false },
         { headers: this.headers },
       );
       return {
@@ -425,6 +429,8 @@ export class AsaasService implements OnModuleInit {
         dueDate: new Date().toISOString().split('T')[0],
         description: dto.descricao || 'OBRA 10 — Cobrança mensal',
         creditCardToken: dto.tokenCartao,
+        notificationDisabled: true,
+        postalService: false,
       },
       { headers: this.headers },
     );
