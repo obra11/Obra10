@@ -101,7 +101,12 @@ export class CobrancaService {
     const now = new Date();
     const mesRef = new Date(now.getFullYear(), now.getMonth(), 1);
     const vencimento = new Date(now.getFullYear(), now.getMonth() + 1, 5);
-    const idempotencyKey = `${dto.empresaId}-${pacoteObras}-${periodicidade}-${mesRef.toISOString().slice(0, 7)}`;
+    const slugsKey = [...dto.modulosSelecionados]
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .sort()
+      .join('+');
+    const idempotencyKey = `${dto.empresaId}-${pacoteObras}-${periodicidade}-${mesRef.toISOString().slice(0, 7)}-${slugsKey}`;
     const modulosSlugs = dto.modulosSelecionados;
 
     // Persist package + plano (Básico/Pro/Enterprise) on empresa at contract time
@@ -116,16 +121,35 @@ export class CobrancaService {
       },
     });
 
-    // Idempotency check
     const existente = await this.prisma.cobranca.findUnique({
       where: { idempotencyKey },
     });
-    if (existente)
-      throw new BadRequestException(
-        periodicidade === 'ANUAL'
-          ? 'Cobrança anual para este período já gerada.'
-          : 'Cobrança para este mês já gerada.',
-      );
+    if (existente) {
+      if (existente.status === 'PAGO') {
+        await this.ativarModulos(dto.empresaId, modulosSlugs, periodicidade);
+        return {
+          cobrancaId: existente.id,
+          formaPagamento: existente.formaPagamento,
+          valor: Number(existente.valor || 0),
+          status: 'PAGO',
+          periodicidade,
+          pacoteObras,
+          mensagem: 'Estes módulos já foram pagos neste período.',
+        };
+      }
+      return {
+        cobrancaId: existente.id,
+        formaPagamento: existente.formaPagamento || 'PIX',
+        valor: Number(existente.valor || 0),
+        status: existente.status,
+        periodicidade,
+        pacoteObras,
+        qrCode: existente.qrCode,
+        qrCodeBase64: existente.qrCodeBase64,
+        linkPagamento: existente.linkPagamento,
+        mensagem: 'Há um PIX em aberto para estes módulos. Conclua o pagamento.',
+      };
+    }
 
     // Sempre sincroniza o CPF/CNPJ no cliente Asaas. Reusar só o id salvo
     // deixava a cobrança falhar quando o cliente existia sem documento.
