@@ -2,7 +2,6 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { CheckCircle, Loader2, Copy, ExternalLink, CreditCard } from 'lucide-react';
-import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 
 export const AguardandoPagamento: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -11,11 +10,16 @@ export const AguardandoPagamento: React.FC = () => {
 
   const [status, setStatus] = useState<'pending' | 'paid'>('pending');
   const [copied, setCopied] = useState(false);
-  const [method, setMethod] = useState<'pix' | 'paypal'>(state?.method === 'paypal' ? 'paypal' : 'pix');
+  const [method, setMethod] = useState<'pix' | 'cartao'>(
+    state?.method === 'paypal' || state?.method === 'cartao' ? 'cartao' : 'pix',
+  );
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [cobranca, setCobranca] = useState<any>(null);
   const [loadingCobranca, setLoadingCobranca] = useState(!state);
+  const [cardLink, setCardLink] = useState(state?.linkPagamento || '');
+  const [cardLoading, setCardLoading] = useState(false);
+  const [cardError, setCardError] = useState('');
 
   useEffect(() => {
     if (!state && id) {
@@ -25,6 +29,8 @@ export const AguardandoPagamento: React.FC = () => {
           if (res.data.status === 'PAGO') {
             setStatus('paid');
           }
+          if (res.data.linkPagamento) setCardLink(res.data.linkPagamento);
+          if (res.data.formaPagamento === 'CARTAO') setMethod('cartao');
           setLoadingCobranca(false);
         })
         .catch(err => {
@@ -36,7 +42,7 @@ export const AguardandoPagamento: React.FC = () => {
 
   const qrCode = state?.qrCode || cobranca?.qrCode || '';
   const qrBase64 = state?.qrCodeBase64 || cobranca?.qrCodeBase64 || '';
-  const link = state?.linkPagamento || cobranca?.linkPagamento || '';
+  const link = cardLink || state?.linkPagamento || cobranca?.linkPagamento || '';
   const valor = state?.valor || cobranca?.valor || 0;
 
   useEffect(() => {
@@ -58,6 +64,28 @@ export const AguardandoPagamento: React.FC = () => {
     navigator.clipboard.writeText(qrCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const abrirCheckoutCartao = async () => {
+    if (!id) return;
+    setCardError('');
+    setCardLoading(true);
+    try {
+      const res = await api.post(`/cobrancas/${id}/link-cartao`);
+      const url = res.data.linkPagamento;
+      setCardLink(url);
+      if (!url) {
+        setCardError('Não foi possível abrir o checkout de cartão. Tente de novo.');
+        return;
+      }
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err: any) {
+      setCardError(
+        err?.response?.data?.message || 'Não foi possível gerar o pagamento no cartão.',
+      );
+    } finally {
+      setCardLoading(false);
+    }
   };
 
   if (loadingCobranca) {
@@ -91,17 +119,16 @@ export const AguardandoPagamento: React.FC = () => {
           <p className="text-gray-500 text-sm mt-1">R$ {Number(valor).toFixed(2)} — verificando a cada 5 segundos</p>
         </div>
 
-        {/* Gateway Toggle */}
         <div className="flex rounded-xl bg-gray-100 p-1 mb-6">
-          <button 
+          <button
             onClick={() => setMethod('pix')}
             className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${method === 'pix' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
             <span className="flex items-center justify-center gap-2">PIX</span>
           </button>
-          <button 
-            onClick={() => setMethod('paypal')}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${method === 'paypal' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
-            <span className="flex items-center justify-center gap-2"><CreditCard size={16}/> Cartão (PayPal)</span>
+          <button
+            onClick={() => setMethod('cartao')}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${method === 'cartao' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+            <span className="flex items-center justify-center gap-2"><CreditCard size={16}/> Cartão</span>
           </button>
         </div>
 
@@ -138,49 +165,29 @@ export const AguardandoPagamento: React.FC = () => {
           </div>
         )}
 
-        {method === 'paypal' && (
-          <div className="animate-in fade-in zoom-in duration-300">
-            <PayPalScriptProvider options={{ 
-              clientId: import.meta.env.VITE_PAYPAL_CLIENT_ID || "test",
-              currency: "BRL",
-              intent: "capture"
-            }}>
-              <PayPalButtons 
-                style={{ layout: "vertical", shape: "rect", color: "gold" }}
-                createOrder={async () => {
-                  try {
-                    const res = await api.post(`/cobrancas/${id}/paypal/create-order`);
-                    return res.data.orderId;
-                  } catch (err: any) {
-                    alert('Erro ao criar pedido no PayPal: ' + (err.response?.data?.message || err.message));
-                    return "";
-                  }
-                }}
-                onApprove={async (data) => {
-                  try {
-                    await api.post(`/cobrancas/${id}/paypal/capture-order`, { orderId: data.orderID });
-                    setStatus('paid');
-                    setTimeout(() => { window.location.href = '/dashboard'; }, 3000);
-                  } catch (err: any) {
-                    alert('Erro ao capturar pagamento: ' + (err.response?.data?.message || err.message));
-                  }
-                }}
-                onError={(err) => {
-                  console.error('PayPal Error:', err);
-                  // Ignore se for erro de Mock Mode (client=test)
-                  if (!import.meta.env.VITE_PAYPAL_CLIENT_ID) {
-                    setStatus('paid');
-                    setTimeout(() => { window.location.href = '/dashboard'; }, 3000);
-                  }
-                }}
-              />
-            </PayPalScriptProvider>
-            
-            {!import.meta.env.VITE_PAYPAL_CLIENT_ID && (
-              <p className="text-xs text-yellow-600 mt-2 bg-yellow-50 p-2 rounded">
-                Simulação: Ao tentar pagar (e dar erro por ser ambiente de teste), o sistema fingirá que pagou!
-              </p>
+        {method === 'cartao' && (
+          <div className="animate-in fade-in zoom-in duration-300 space-y-3">
+            <p className="text-sm text-gray-600">
+              O pagamento com cartão é processado pela Asaas. Você preenche os dados na página segura deles — o Obra 10 não vê o número do cartão.
+            </p>
+            <button
+              type="button"
+              onClick={abrirCheckoutCartao}
+              disabled={cardLoading}
+              className="w-full py-3 bg-lunardeli-red text-white font-semibold rounded-xl hover:bg-red-700 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+            >
+              {cardLoading ? (
+                <><Loader2 size={16} className="animate-spin" />Preparando checkout...</>
+              ) : (
+                <><CreditCard size={16} />Pagar com cartão na Asaas</>
+              )}
+            </button>
+            {cardError && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{cardError}</p>
             )}
+            <p className="text-xs text-gray-400">
+              Depois de pagar, volte a esta tela. Confirmamos automaticamente em alguns segundos.
+            </p>
           </div>
         )}
 

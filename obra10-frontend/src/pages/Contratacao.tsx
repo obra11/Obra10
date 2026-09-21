@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { TrocarEmpresa } from '../components/TrocarEmpresa';
 import {
   Package, Loader2, CheckCircle, CreditCard, QrCode, ChevronRight, ChevronDown, Tag, X, LogOut
 } from 'lucide-react';
@@ -175,7 +176,7 @@ export const Contratacao: React.FC = () => {
           qrCodeBase64: res.data.qrCodeBase64,
           linkPagamento: res.data.linkPagamento,
           valor: res.data.valor,
-          method: formaPagamento === 'CARTAO' ? 'paypal' : 'pix',
+          method: formaPagamento === 'CARTAO' ? 'cartao' : 'pix',
         },
       });
     } catch (err: any) {
@@ -188,7 +189,7 @@ export const Contratacao: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-3xl mx-auto">
-        <div className="flex justify-end gap-3 mb-4">
+        <div className="flex justify-end items-center gap-4 mb-4">
           {empresa?.planoAtivo === true && (
             <button
               type="button"
@@ -198,6 +199,7 @@ export const Contratacao: React.FC = () => {
               Ir ao painel
             </button>
           )}
+          <TrocarEmpresa variant="inline" />
           <button
             type="button"
             onClick={() => logout()}

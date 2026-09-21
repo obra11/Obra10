@@ -236,7 +236,7 @@ export const Assinatura: React.FC = () => {
             qrCodeBase64: res.data.qrCodeBase64,
             linkPagamento: res.data.linkPagamento,
             valor: res.data.valor,
-            method: formaPagamento === 'CARTAO' ? 'paypal' : 'pix',
+            method: formaPagamento === 'CARTAO' ? 'cartao' : 'pix',
           },
         });
         return;

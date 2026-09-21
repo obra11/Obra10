@@ -87,6 +87,14 @@ export class CobrancaController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('cobrancas/:id/link-cartao')
+  async linkCartao(@Param('id') id: string, @Req() req: any) {
+    const empresaId = req.user?.empresaId;
+    if (!empresaId) throw new ForbiddenException('Tenant não identificado.');
+    return this.cobrancaService.garantirLinkCartao(id, empresaId);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('cobrancas/:id')
   async obterCobranca(@Param('id') id: string, @Req() req: any) {
     const empresaId = req.user?.empresaId;

@@ -5,7 +5,8 @@ import api from '../../services/api';
 import { getImageUrl } from '../../utils/image';
 import { ModuloToggle } from '../../components/ModuloToggle';
 import {
-  Users, Plus, Trash2, Loader2, User, Mail, Lock, X, ArrowLeft, Settings, Shield
+  Users, Plus, Trash2, Loader2, User, Mail, Lock, X, ArrowLeft, Settings, Shield,
+  ChevronDown, ChevronUp, Maximize2, Minimize2,
 } from 'lucide-react';
 
 interface Modulo { slug: string; nome: string; }
@@ -134,6 +135,13 @@ export const UserManagement: React.FC = () => {
   const [personalizadoDraft, setPersonalizadoDraft] = useState<RoleCapabilities>({ ...EMPTY_CAPS });
   const [papelDraft, setPapelDraft] = useState<Record<string, RoleCapabilities>>({});
   const [savingPapel, setSavingPapel] = useState<string | null>(null);
+  const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>({});
+
+  const toggleUser = (id: string) =>
+    setExpandedUsers((prev) => ({ ...prev, [id]: !prev[id] }));
+  const expandAllUsers = () =>
+    setExpandedUsers(Object.fromEntries(usuarios.map((u) => [u.id, true])));
+  const collapseAllUsers = () => setExpandedUsers({});
 
   useEffect(() => {
     fetchAll();
@@ -593,14 +601,47 @@ export const UserManagement: React.FC = () => {
           </div>
         )}
 
+        {usuarios.length > 0 && (
+          <div className="flex items-center justify-between px-1 py-1 mb-3">
+            <span className="text-xs text-gray-500 font-semibold uppercase tracking-wider">
+              Usuários cadastrados
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={expandAllUsers}
+                className="text-xs font-semibold text-gray-600 hover:text-lunardeli-red hover:bg-white px-2.5 py-1 rounded-lg border border-gray-200 shadow-sm transition-all flex items-center gap-1"
+                title="Expandir todos os usuários"
+              >
+                <Maximize2 size={13} /> Expandir todos
+              </button>
+              <button
+                type="button"
+                onClick={collapseAllUsers}
+                className="text-xs font-semibold text-gray-600 hover:text-lunardeli-red hover:bg-white px-2.5 py-1 rounded-lg border border-gray-200 shadow-sm transition-all flex items-center gap-1"
+                title="Recolher todos os usuários"
+              >
+                <Minimize2 size={13} /> Recolher todos
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-3">
           {usuarios.map(u => {
             const acessoTotal = u.capabilitiesEfetivas?.acessoTodasObras || u.perfilGlobal === 'GESTOR';
+            const isExpanded = !!expandedUsers[u.id];
             return (
-              <div key={u.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                <div className="flex items-start justify-between gap-4">
+              <div key={u.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div
+                  className={`p-5 flex items-start justify-between gap-4 cursor-pointer select-none hover:bg-gray-50/80 ${isExpanded ? 'border-b border-gray-100' : ''}`}
+                  onClick={() => toggleUser(u.id)}
+                >
                   <div className="flex items-center gap-3">
-                    <label className="cursor-pointer group flex items-center justify-center w-12 h-12 rounded-full overflow-hidden bg-red-50 shrink-0 border border-gray-200 relative transition-all">
+                    <label
+                      className="cursor-pointer group flex items-center justify-center w-12 h-12 rounded-full overflow-hidden bg-red-50 shrink-0 border border-gray-200 relative transition-all"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {uploadingFotoId === u.id ? (
                         <Loader2 className="animate-spin text-red-600" size={18} />
                       ) : u.fotoUrl ? (
@@ -623,7 +664,7 @@ export const UserManagement: React.FC = () => {
                           <Loader2 size={10} className="animate-spin" /> ATUALIZANDO...
                         </span>
                       ) : (
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
                           <select
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-sm uppercase tracking-wider cursor-pointer outline-none border transition-colors ${roleBadgeClass(u.perfilGlobal)}`}
                             value={u.perfilGlobal}
@@ -646,11 +687,23 @@ export const UserManagement: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  <button onClick={() => handleDelete(u.id, u.nome)} className="text-gray-300 hover:text-red-400 transition-colors shrink-0">
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => toggleUser(u.id)}
+                      className="p-1.5 text-gray-400 hover:text-lunardeli-red hover:bg-red-50 rounded-lg"
+                      title={isExpanded ? 'Recolher' : 'Expandir'}
+                    >
+                      {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </button>
+                    <button onClick={() => handleDelete(u.id, u.nome)} className="text-gray-300 hover:text-red-400 transition-colors p-1.5">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
 
+                {isExpanded && (
+                <div className="px-5 pb-5">
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -729,6 +782,8 @@ export const UserManagement: React.FC = () => {
                     })}
                   </div>
                 </div>
+                </div>
+                )}
               </div>
             );
           })}

@@ -193,6 +193,42 @@ export class CobrancaService {
       };
     }
 
+    if (dto.formaPagamento === 'CARTAO' && !dto.tokenCartao) {
+      const card = await this.asaas.gerarCobrancaCartao({
+        idAsaasCliente,
+        valor: Math.max(valor, 0.01),
+        vencimento: vencimento.toISOString().split('T')[0],
+        descricao: `OBRA 10 ${pacoteObras} ${periodicidade} — ${modulos.map((m) => m.slug).join(', ')}`,
+      });
+
+      cobranca = await this.prisma.cobranca.create({
+        data: {
+          empresaId: dto.empresaId,
+          valor,
+          status: 'PENDENTE',
+          formaPagamento: 'CARTAO',
+          periodicidade,
+          pacoteObras,
+          modulosSlugs,
+          mesReferencia: mesRef,
+          dataVencimento: vencimento,
+          linkPagamento: card.linkPagamento,
+          idAsaas: card.id,
+          idempotencyKey,
+        },
+      });
+
+      return {
+        cobrancaId: cobranca.id,
+        formaPagamento: 'CARTAO',
+        valor,
+        periodicidade,
+        pacoteObras,
+        linkPagamento: card.linkPagamento,
+        mensagem: 'Abra o link da Asaas para pagar com cartão. Os módulos ativam ao confirmar.',
+      };
+    }
+
     if (dto.formaPagamento === 'PIX' || !dto.tokenCartao) {
       const pix = await this.gerarPixComDocumento(empresa, idAsaasCliente, {
         valor: Math.max(valor, 0.01),
@@ -732,6 +768,63 @@ export class CobrancaService {
       throw new ForbiddenException('Acesso negado.');
     }
     return cobranca;
+  }
+
+  /** Libera ou devolve o checkout de cartão Asaas de uma cobrança pendente. */
+  async garantirLinkCartao(cobrancaId: string, empresaId: string) {
+    const cobranca = await this.prisma.cobranca.findUnique({
+      where: { id: cobrancaId },
+      include: { empresa: true },
+    });
+    if (!cobranca) throw new NotFoundException('Cobrança não encontrada.');
+    if (cobranca.empresaId !== empresaId) {
+      throw new ForbiddenException('Acesso negado.');
+    }
+    if (cobranca.status === 'PAGO') {
+      throw new BadRequestException('Esta cobrança já está paga.');
+    }
+
+    let link = cobranca.linkPagamento || '';
+    let idAsaas = cobranca.idAsaas || '';
+
+    if (idAsaas && !idAsaas.startsWith('mock-')) {
+      try {
+        const atualizado = await this.asaas.liberarCartaoNoPagamento(idAsaas);
+        link = atualizado.linkPagamento || link;
+        idAsaas = atualizado.id || idAsaas;
+      } catch {
+        idAsaas = '';
+      }
+    }
+
+    if (!link || !idAsaas || idAsaas.startsWith('mock-')) {
+      const idCliente = await this.resolverClienteAsaas(cobranca.empresa);
+      const card = await this.asaas.gerarCobrancaCartao({
+        idAsaasCliente: idCliente,
+        valor: Math.max(Number(cobranca.valor), 0.01),
+        vencimento: cobranca.dataVencimento.toISOString().split('T')[0],
+        descricao: 'OBRA 10 — Pagamento com cartão',
+      });
+      link = card.linkPagamento;
+      idAsaas = card.id;
+    }
+
+    if (!link) {
+      throw new BadRequestException(
+        'A Asaas não devolveu o link de cartão. Tente novamente em instantes.',
+      );
+    }
+
+    await this.prisma.cobranca.update({
+      where: { id: cobranca.id },
+      data: {
+        formaPagamento: 'CARTAO',
+        linkPagamento: link,
+        idAsaas,
+      },
+    });
+
+    return { linkPagamento: link, cobrancaId: cobranca.id };
   }
 
   async aplicarCupomCobranca(cobrancaId: string, codigo: string, empresaId: string) {

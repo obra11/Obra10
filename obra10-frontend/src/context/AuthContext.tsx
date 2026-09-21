@@ -67,6 +67,7 @@ interface AuthContextType {
   obraAtiva: Obra | null;
   setObraAtiva: (obra: Obra | null) => void;
   login: (data: any) => void;
+  trocarEmpresa: (empresaId: string) => Promise<any>;
   logout: () => void;
   updateEmpresaLogo: (url: string) => void;
   updateObraImage: (obraId: string, url: string) => void;
@@ -133,8 +134,16 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     // Session is established by HttpOnly cookie on backend before this reaches here
     setUser(data.usuario);
     setEmpresa(data.empresa);
-    setObras(data.obrasPermitidas);
+    setObras(data.obrasPermitidas || []);
+    setObraAtivaState(null);
+    localStorage.removeItem('obra10_obraAtiva');
     setIsAuthenticated(true);
+  };
+
+  const trocarEmpresa = async (empresaId: string) => {
+    const data = await authService.trocarEmpresa(empresaId);
+    login(data);
+    return data;
   };
 
   const logout = async () => {
@@ -175,7 +184,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   return (
     <AuthContext.Provider value={{ 
       isAuthenticated, isLoading, user, empresa, obras, obraAtiva, 
-      setObraAtiva, login, logout, updateEmpresaLogo, updateObraImage, updateUserPhoto,
+      setObraAtiva, login, trocarEmpresa, logout, updateEmpresaLogo, updateObraImage, updateUserPhoto,
       fetchSession
     }}>
       {children}

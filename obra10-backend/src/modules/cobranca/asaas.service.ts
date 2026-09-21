@@ -329,6 +329,80 @@ export class AsaasService implements OnModuleInit {
     }
   }
 
+  /**
+   * Cobrança de cartão sem token: a Asaas hospeda o checkout (PCI).
+   * O cliente preenche o cartão em invoiceUrl.
+   */
+  async gerarCobrancaCartao(dto: {
+    idAsaasCliente: string;
+    valor: number;
+    vencimento: string;
+    descricao?: string;
+  }): Promise<{ id: string; linkPagamento: string; status: string }> {
+    if (this.mockMode) {
+      const mock = {
+        id: `mock-card-${Date.now()}`,
+        linkPagamento: 'https://sandbox.asaas.com/i/mock-card',
+        status: 'PENDING',
+      };
+      this.logger.log(`[MOCK ASAAS] gerarCobrancaCartao → ${JSON.stringify(mock)}`);
+      return mock;
+    }
+    try {
+      const { data } = await axios.post(
+        `${this.baseUrl}/payments`,
+        {
+          customer: dto.idAsaasCliente,
+          billingType: 'CREDIT_CARD',
+          value: dto.valor,
+          dueDate: dto.vencimento,
+          description: dto.descricao || 'OBRA 10 — Pagamento com cartão',
+        },
+        { headers: this.headers },
+      );
+      return {
+        id: data.id,
+        linkPagamento: data.invoiceUrl,
+        status: data.status,
+      };
+    } catch (err: any) {
+      this.logger.warn(`Asaas gerar cartão: ${asaasApiMessage(err)}`);
+      throw new BadRequestException(asaasApiMessage(err));
+    }
+  }
+
+  /**
+   * Libera cartão num pagamento PIX ainda pendente (mesma fatura Asaas).
+   */
+  async liberarCartaoNoPagamento(idAsaas: string): Promise<{
+    id: string;
+    linkPagamento: string;
+    status: string;
+  }> {
+    if (this.mockMode) {
+      return {
+        id: idAsaas,
+        linkPagamento: 'https://sandbox.asaas.com/i/mock-card',
+        status: 'PENDING',
+      };
+    }
+    try {
+      const { data } = await axios.put(
+        `${this.baseUrl}/payments/${idAsaas}`,
+        { billingType: 'UNDEFINED' },
+        { headers: this.headers },
+      );
+      return {
+        id: data.id,
+        linkPagamento: data.invoiceUrl,
+        status: data.status,
+      };
+    } catch (err: any) {
+      this.logger.warn(`Asaas liberar cartão ${idAsaas}: ${asaasApiMessage(err)}`);
+      throw new BadRequestException(asaasApiMessage(err));
+    }
+  }
+
   async cobrarCartaoRecorrente(dto: {
     idAsaasCliente: string;
     tokenCartao: string;

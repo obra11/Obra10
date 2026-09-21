@@ -32,14 +32,200 @@ export class AuthService {
     private readonly cryptoService: CryptoService,
   ) {}
 
-  async login(email: string, senhaPlana: string, empresaId: string) {
+  async login(email: string, senhaPlana: string, empresaId?: string) {
     const emailNorm = String(email || '').trim().toLowerCase();
-    const user = await this.prisma.usuario.findFirst({
+    const candidatos = await this.prisma.usuario.findMany({
       where: {
-        empresaId,
         email: { equals: emailNorm, mode: 'insensitive' },
+        ativo: true,
         deletedAt: null,
       },
+      select: {
+        id: true,
+        empresaId: true,
+        senhaHash: true,
+        loginAttempts: true,
+        lockedUntil: true,
+        perfilGlobal: true,
+        empresa: {
+          select: {
+            id: true,
+            razaoSocial: true,
+            nomeFantasia: true,
+            nomeCompleto: true,
+            logoUrl: true,
+            tenantModulos: {
+              where: { ativo: true, modulo: { ativo: true } },
+              select: { modulo: { select: { slug: true } } },
+            },
+            _count: {
+              select: { cobrancas: { where: { status: 'PAGO' } } },
+            },
+          },
+        },
+      },
+    });
+
+    if (!candidatos.length) {
+      throw new UnauthorizedException('Credenciais inválidas.');
+    }
+
+    const matched: typeof candidatos = [];
+    for (const c of candidatos) {
+      if (c.lockedUntil && c.lockedUntil > new Date()) continue;
+      if (await bcrypt.compare(senhaPlana, c.senhaHash)) {
+        matched.push(c);
+      }
+    }
+
+    if (!matched.length) {
+      await this.registrarFalhasLogin(candidatos, emailNorm);
+      throw new UnauthorizedException('Credenciais inválidas.');
+    }
+
+    if (empresaId) {
+      const alvo = candidatos.find((c) => c.empresaId === empresaId);
+      if (!alvo) {
+        throw new UnauthorizedException('Credenciais inválidas.');
+      }
+      return this.emitirSessao(alvo.id);
+    }
+
+    if (candidatos.length === 1) {
+      return this.emitirSessao(candidatos[0].id);
+    }
+
+    return {
+      precisaEscolherEmpresa: true as const,
+      empresas: candidatos.map((c) => this.mapEmpresaOpcao(c)),
+    };
+  }
+
+  async minhasEmpresas(userId: string) {
+    const atual = await this.prisma.usuario.findFirst({
+      where: { id: userId, ativo: true, deletedAt: null },
+      select: { email: true, empresaId: true },
+    });
+    if (!atual) throw new UnauthorizedException('Usuário não encontrado ou inativo.');
+
+    const contas = await this.prisma.usuario.findMany({
+      where: {
+        email: { equals: atual.email, mode: 'insensitive' },
+        ativo: true,
+        deletedAt: null,
+      },
+      select: {
+        empresaId: true,
+        perfilGlobal: true,
+        empresa: {
+          select: {
+            id: true,
+            razaoSocial: true,
+            nomeFantasia: true,
+            nomeCompleto: true,
+            logoUrl: true,
+            tenantModulos: {
+              where: { ativo: true, modulo: { ativo: true } },
+              select: { modulo: { select: { slug: true } } },
+            },
+            _count: {
+              select: { cobrancas: { where: { status: 'PAGO' } } },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      empresaAtualId: atual.empresaId,
+      empresas: contas.map((c) => this.mapEmpresaOpcao(c)),
+    };
+  }
+
+  async trocarEmpresa(userId: string, empresaId: string) {
+    const atual = await this.prisma.usuario.findFirst({
+      where: { id: userId, ativo: true, deletedAt: null },
+      select: { email: true, empresaId: true },
+    });
+    if (!atual) throw new UnauthorizedException('Usuário não encontrado ou inativo.');
+
+    const alvo = await this.prisma.usuario.findFirst({
+      where: {
+        empresaId,
+        email: { equals: atual.email, mode: 'insensitive' },
+        ativo: true,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (!alvo) {
+      throw new UnauthorizedException(
+        'Você não tem acesso a esta empresa com este e-mail.',
+      );
+    }
+    return this.emitirSessao(alvo.id);
+  }
+
+  private mapEmpresaOpcao(conta: {
+    empresaId: string;
+    perfilGlobal: string;
+    empresa: any;
+  }) {
+    const emp = conta.empresa || {};
+    return {
+      id: emp.id || conta.empresaId,
+      nome:
+        emp.nomeFantasia ||
+        emp.razaoSocial ||
+        emp.nomeCompleto ||
+        'Empresa',
+      razaoSocial: emp.razaoSocial || null,
+      nomeFantasia: emp.nomeFantasia || null,
+      logoUrl: emp.logoUrl || null,
+      perfilGlobal: conta.perfilGlobal,
+      planoAtivo: this.planoAtivoDaEmpresa(emp),
+    };
+  }
+
+  private planoAtivoDaEmpresa(empresa: any) {
+    const cobrancasPagas = empresa?._count?.cobrancas ?? 0;
+    const slugs = (empresa?.tenantModulos || [])
+      .map((tm: any) => tm.modulo?.slug)
+      .filter(Boolean);
+    const soRdoSemPagamento =
+      cobrancasPagas === 0 &&
+      slugs.length > 0 &&
+      slugs.every((s: string) => s === 'RDO');
+    return cobrancasPagas > 0 || (slugs.length > 0 && !soRdoSemPagamento);
+  }
+
+  private async registrarFalhasLogin(
+    candidatos: { id: string; loginAttempts: number; lockedUntil: Date | null }[],
+    email: string,
+  ) {
+    const now = new Date();
+    for (const c of candidatos) {
+      if (c.lockedUntil && c.lockedUntil > now) continue;
+      const newAttempts = c.loginAttempts + 1;
+      const updateData: any = { loginAttempts: newAttempts };
+      if (newAttempts >= LOCKOUT_THRESHOLD) {
+        updateData.lockedUntil = new Date(
+          Date.now() + LOCKOUT_MINUTES * 60 * 1000,
+        );
+        this.logger.warn(
+          `[LOCKOUT] Conta bloqueada por ${LOCKOUT_MINUTES}min | email=${email} | tentativas=${newAttempts}`,
+        );
+      }
+      await this.prisma.usuario.update({
+        where: { id: c.id },
+        data: updateData,
+      });
+    }
+  }
+
+  private async emitirSessao(userId: string) {
+    const user = await this.prisma.usuario.findFirst({
+      where: { id: userId, ativo: true, deletedAt: null },
       include: {
         empresa: {
           include: {
@@ -58,13 +244,12 @@ export class AuthService {
       },
     });
 
-    if (!user || user.ativo === false || user.deletedAt) {
+    if (!user) {
       throw new UnauthorizedException(
         'Credenciais inválidas ou usuário inativo.',
       );
     }
 
-    // Conta só libera após confirmação do e-mail (exceto Super Admin)
     if (
       user.perfilGlobal !== 'SUPER_ADMIN' &&
       user.empresa &&
@@ -75,7 +260,6 @@ export class AuthService {
       );
     }
 
-    // --- Bloqueio de conta por tentativas falhas ---
     if (user.lockedUntil && user.lockedUntil > new Date()) {
       const minutesLeft = Math.ceil(
         (user.lockedUntil.getTime() - Date.now()) / 60000,
@@ -85,33 +269,12 @@ export class AuthService {
       );
     }
 
-    const senhaOk = await bcrypt.compare(senhaPlana, user.senhaHash);
-
-    if (!senhaOk) {
-      const newAttempts = user.loginAttempts + 1;
-      const updateData: any = { loginAttempts: newAttempts };
-      if (newAttempts >= LOCKOUT_THRESHOLD) {
-        updateData.lockedUntil = new Date(
-          Date.now() + LOCKOUT_MINUTES * 60 * 1000,
-        );
-        this.logger.warn(
-          `[LOCKOUT] Conta bloqueada por ${LOCKOUT_MINUTES}min | email=${email} | tentativas=${newAttempts}`,
-        );
-      }
-      await this.prisma.usuario.update({
-        where: { id: user.id },
-        data: updateData,
-      });
-      throw new UnauthorizedException('Credenciais inválidas.');
-    }
-
-    // Login OK — resetar contadores e registrar último login
     await this.prisma.usuario.update({
       where: { id: user.id },
-      data: { 
-        loginAttempts: 0, 
+      data: {
+        loginAttempts: 0,
         lockedUntil: null,
-        ultimoLogin: new Date()
+        ultimoLogin: new Date(),
       },
     });
 
@@ -157,8 +320,19 @@ export class AuthService {
   }
 
   /** Token Bearer de 7 dias para MCP / APIs (sem cookie). */
-  async emitirTokenMcp(email: string, senhaPlana: string, empresaId: string) {
+  async emitirTokenMcp(email: string, senhaPlana: string, empresaId?: string) {
     const login = await this.login(email, senhaPlana, empresaId);
+    if ('precisaEscolherEmpresa' in login && login.precisaEscolherEmpresa) {
+      throw new BadRequestException({
+        message:
+          'Este e-mail está em mais de uma empresa. Informe empresaId para emitir o token.',
+        precisaEscolherEmpresa: true,
+        empresas: login.empresas,
+      });
+    }
+    if (!('usuario' in login) || !login.usuario) {
+      throw new UnauthorizedException('Credenciais inválidas.');
+    }
     const user = await this.prisma.usuario.findFirst({
       where: { id: login.usuario.id },
       select: { jwtVersion: true },

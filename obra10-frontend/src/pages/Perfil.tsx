@@ -6,6 +6,7 @@ import {
   Headphones, Shield, Check, X,
 } from 'lucide-react';
 import { AppVersionBadge } from '../components/AppVersionBadge';
+import { TrocarEmpresa } from '../components/TrocarEmpresa';
 import api from '../services/api';
 import {
   formatarDocumentoFiscal,
@@ -200,6 +201,8 @@ export const Perfil: React.FC = () => {
         <h1 className="text-3xl font-bold text-lunardeli-dark flex items-center mb-8">
           <User className="mr-3 text-red-600" size={32}/> Meu Perfil
         </h1>
+
+        <TrocarEmpresa />
 
         <button
           type="button"

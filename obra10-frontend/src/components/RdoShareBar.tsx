@@ -54,8 +54,13 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
     const response = await api.get(`/rdos/${rdoId}/pdf${params}`, {
       headers: { 'x-obra-id': obraId },
       responseType: 'blob',
+      timeout: comFotos ? 180_000 : 60_000,
     });
-    return new Blob([response.data], { type: 'application/pdf' });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    if (blob.size < 80 || (response.data.type && String(response.data.type).includes('json'))) {
+      throw new Error('O servidor não devolveu um PDF válido.');
+    }
+    return blob;
   };
 
   const fetchPdfBlobUrl = async (comFotos = false): Promise<string> => {
@@ -99,9 +104,14 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    } catch (e) {
+    } catch (e: any) {
       console.error('[RdoShareBar] Erro ao baixar PDF com fotos:', e);
-      alert('Não foi possível gerar o PDF com fotos.');
+      const timedOut = e?.code === 'ECONNABORTED' || /timeout/i.test(String(e?.message || ''));
+      alert(
+        timedOut
+          ? 'O PDF com fotos está demorando. Aguarde e tente de novo; se persistir, use o PDF sem fotos.'
+          : 'Não foi possível gerar o PDF com fotos.',
+      );
     } finally {
       setPdfFotosLoading(false);
     }

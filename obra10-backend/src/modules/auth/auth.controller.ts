@@ -11,17 +11,27 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
-import { PrismaService } from '../../prisma/prisma.service';
-import { LoginDto, EsqueciSenhaDto, RedefinirSenhaDto } from './dto/auth.dto';
+import {
+  LoginDto,
+  EsqueciSenhaDto,
+  RedefinirSenhaDto,
+  TrocarEmpresaDto,
+} from './dto/auth.dto';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 
+function attachAuthCookie(res: Response, token: string) {
+  res.cookie('obra10_token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+    maxAge: 3600000,
+  });
+}
+
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly authService: AuthService,
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Post('login')
@@ -31,50 +41,15 @@ export class AuthController {
   ) {
     const email = String(dto.email || '').trim().toLowerCase();
     const senha = String(dto.senha || '');
+    const result = await this.authService.login(email, senha, dto.empresaId);
 
-    // Auto-lookup empresaId se não veio no body.
-    // Mesmo e-mail pode existir em mais de uma empresa — tenta a senha em cada conta.
-    let empresaId = dto.empresaId;
-    if (!empresaId) {
-      const candidatos = await this.prisma.usuario.findMany({
-        where: {
-          email: { equals: email, mode: 'insensitive' },
-          ativo: true,
-          deletedAt: null,
-        },
-        select: { id: true, empresaId: true, senhaHash: true },
-      });
-      if (!candidatos.length) {
-        throw new UnauthorizedException('Credenciais inválidas.');
-      }
-      if (candidatos.length === 1) {
-        empresaId = candidatos[0].empresaId;
-      } else {
-        const bcrypt = await import('bcrypt');
-        let matched: (typeof candidatos)[number] | null = null;
-        for (const c of candidatos) {
-          if (await bcrypt.compare(senha, c.senhaHash)) {
-            matched = c;
-            break;
-          }
-        }
-        if (!matched) {
-          throw new UnauthorizedException('Credenciais inválidas.');
-        }
-        empresaId = matched.empresaId;
-      }
+    if ('precisaEscolherEmpresa' in result && result.precisaEscolherEmpresa) {
+      return result;
     }
 
-    const result = await this.authService.login(email, senha, empresaId);
-
-    res.cookie('obra10_token', result.access_token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
-      maxAge: 3600000, // 1h
-    });
-
-    const { access_token, ...userData } = result;
+    const sessao = result as Extract<typeof result, { access_token: string }>;
+    attachAuthCookie(res, sessao.access_token);
+    const { access_token, ...userData } = sessao;
     return userData;
   }
 
@@ -87,37 +62,7 @@ export class AuthController {
   async emitirToken(@Body() dto: LoginDto) {
     const email = String(dto.email || '').trim().toLowerCase();
     const senha = String(dto.senha || '');
-    let empresaId = dto.empresaId;
-    if (!empresaId) {
-      const candidatos = await this.prisma.usuario.findMany({
-        where: {
-          email: { equals: email, mode: 'insensitive' },
-          ativo: true,
-          deletedAt: null,
-        },
-        select: { id: true, empresaId: true, senhaHash: true },
-      });
-      if (!candidatos.length) {
-        throw new UnauthorizedException('Credenciais inválidas.');
-      }
-      if (candidatos.length === 1) {
-        empresaId = candidatos[0].empresaId;
-      } else {
-        const bcrypt = await import('bcrypt');
-        let matched: (typeof candidatos)[number] | null = null;
-        for (const c of candidatos) {
-          if (await bcrypt.compare(senha, c.senhaHash)) {
-            matched = c;
-            break;
-          }
-        }
-        if (!matched) {
-          throw new UnauthorizedException('Credenciais inválidas.');
-        }
-        empresaId = matched.empresaId;
-      }
-    }
-    return this.authService.emitirTokenMcp(email, senha, empresaId);
+    return this.authService.emitirTokenMcp(email, senha, dto.empresaId);
   }
 
   @Post('logout')
@@ -137,6 +82,29 @@ export class AuthController {
     const userId = req.user?.sub;
     if (!userId) throw new UnauthorizedException('Token Jwt Inválido');
     return this.authService.getMe(userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('minhas-empresas')
+  async minhasEmpresas(@Req() req: any) {
+    const userId = req.user?.sub;
+    if (!userId) throw new UnauthorizedException('Token Jwt Inválido');
+    return this.authService.minhasEmpresas(userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('trocar-empresa')
+  async trocarEmpresa(
+    @Req() req: any,
+    @Body() dto: TrocarEmpresaDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const userId = req.user?.sub;
+    if (!userId) throw new UnauthorizedException('Token Jwt Inválido');
+    const result = await this.authService.trocarEmpresa(userId, dto.empresaId);
+    attachAuthCookie(res, result.access_token);
+    const { access_token, ...userData } = result;
+    return userData;
   }
 
   @Throttle({ default: { limit: 3, ttl: 60000 } })

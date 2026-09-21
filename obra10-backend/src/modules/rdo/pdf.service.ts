@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, PDFName, PDFString, degrees } from 'pdf-lib';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -37,7 +38,25 @@ interface DrawCtx {
 
 @Injectable()
 export class PdfService {
+  private s3Client: S3Client | null = null;
+
   constructor(private readonly prisma: PrismaService) {}
+
+  private getS3(): S3Client | null {
+    const key = process.env.AWS_ACCESS_KEY_ID?.trim();
+    if (!key || key === 'dummy' || key === 'dummy-key') return null;
+    if (!this.s3Client) {
+      this.s3Client = new S3Client({
+        region: process.env.AWS_REGION || 'auto',
+        endpoint: process.env.AWS_S3_ENDPOINT || undefined,
+        credentials: {
+          accessKeyId: key,
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+        },
+      });
+    }
+    return this.s3Client;
+  }
 
   /**
    * Gera PDF completo do RDO.
@@ -1249,18 +1268,49 @@ export class PdfService {
 
       if (fetchUrl.startsWith('http://') || fetchUrl.startsWith('https://')) {
         const response = await fetch(fetchUrl);
-        if (!response.ok) {
-          console.warn(
-            `[PdfService] HTTP ${response.status} ao buscar logo: ${fetchUrl}`,
-          );
-          return null;
+        if (response.ok) {
+          return new Uint8Array(await response.arrayBuffer());
         }
-        return new Uint8Array(await response.arrayBuffer());
+        console.warn(
+          `[PdfService] HTTP ${response.status} ao buscar imagem: ${fetchUrl}`,
+        );
       }
+
+      const fromS3 = await this.loadFromS3(url);
+      if (fromS3) return fromS3;
 
       return null;
     } catch (err) {
       console.warn('[PdfService] Falha ao carregar imagem:', err);
+      return this.loadFromS3(url);
+    }
+  }
+
+  private s3KeyFromUrl(url: string): string | null {
+    if (!url) return null;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return url.replace(/^\//, '');
+    }
+    try {
+      return new URL(url).pathname.replace(/^\//, '') || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async loadFromS3(url: string): Promise<Uint8Array | null> {
+    const client = this.getS3();
+    const key = this.s3KeyFromUrl(url);
+    const bucket = process.env.AWS_S3_BUCKET_NAME?.trim();
+    if (!client || !key || !bucket) return null;
+    try {
+      const out = await client.send(
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+      );
+      const bytes = await out.Body?.transformToByteArray();
+      return bytes ? new Uint8Array(bytes) : null;
+    } catch (err) {
+      console.warn(`[PdfService] S3 GetObject falhou para ${key}:`, err);
       return null;
     }
   }

@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { authService } from '../services/auth.service';
+import {
+  authService,
+  destinoPosLogin,
+  type EmpresaLoginOpcao,
+} from '../services/auth.service';
 import api from '../services/api';
-import { Lock, Mail, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Lock, Mail, Loader2, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { ListaEmpresasLogin } from '../components/TrocarEmpresa';
 import { Obra10Logo } from '../components/Obra10Logo';
 import { AppVersionBadge } from '../components/AppVersionBadge';
 import { APP_VERSION } from '../appVersion';
@@ -18,8 +23,15 @@ export const Login: React.FC = () => {
   const [resendLoading, setResendLoading] = useState(false);
   const [resendDone, setResendDone] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [empresas, setEmpresas] = useState<EmpresaLoginOpcao[] | null>(null);
+  const [escolhendoId, setEscolhendoId] = useState<string | null>(null);
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  const entrar = (data: any) => {
+    login(data);
+    navigate(destinoPosLogin(data));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,16 +41,12 @@ export const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // MVP: Chama o backend real para login
       const data = await authService.login(email, senha);
-      login(data);
-      if (data.usuario?.perfilGlobal === 'SUPER_ADMIN') {
-        navigate('/admin/dashboard');
-      } else if (data.empresa?.planoAtivo !== true) {
-        navigate('/contratacao');
-      } else {
-        navigate('/dashboard');
+      if (data?.precisaEscolherEmpresa && Array.isArray(data.empresas)) {
+        setEmpresas(data.empresas);
+        return;
       }
+      entrar(data);
     } catch (err: any) {
       console.error(err);
       const msg = err.response?.data?.message || 'E-mail ou senha incorretos.';
@@ -48,6 +56,20 @@ export const Login: React.FC = () => {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleEscolherEmpresa = async (empresaId: string) => {
+    setError('');
+    setEscolhendoId(empresaId);
+    try {
+      const data = await authService.login(email, senha, empresaId);
+      entrar(data);
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Não foi possível entrar nesta empresa.';
+      setError(msg);
+    } finally {
+      setEscolhendoId(null);
     }
   };
 
@@ -96,8 +118,14 @@ export const Login: React.FC = () => {
           </div>
 
           <div className="mb-10 text-center lg:text-left">
-            <h2 className="text-3xl font-bold text-lunardeli-dark mb-2">Bem-vindo</h2>
-            <p className="text-gray-500">Acesse sua conta para continuar</p>
+            <h2 className="text-3xl font-bold text-lunardeli-dark mb-2">
+              {empresas ? 'Escolha a empresa' : 'Bem-vindo'}
+            </h2>
+            <p className="text-gray-500">
+              {empresas
+                ? `Este e-mail está em ${empresas.length} empresas. Selecione para qual deseja entrar.`
+                : 'Acesse sua conta para continuar'}
+            </p>
           </div>
 
           {error && (
@@ -122,6 +150,23 @@ export const Login: React.FC = () => {
             </div>
           )}
 
+          {empresas ? (
+            <div>
+              <p className="text-sm text-gray-600 mb-4 truncate">{email}</p>
+              <ListaEmpresasLogin
+                empresas={empresas}
+                onEscolher={handleEscolherEmpresa}
+                loadingId={escolhendoId}
+              />
+              <button
+                type="button"
+                onClick={() => { setEmpresas(null); setError(''); }}
+                className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-lunardeli-red"
+              >
+                <ArrowLeft size={16} /> Voltar ao login
+              </button>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">E-mail</label>
@@ -198,9 +243,12 @@ export const Login: React.FC = () => {
               )}
             </button>
           </form>
+          )}
+          {!empresas && (
           <div className="mt-6 text-center text-sm text-gray-600">
             Ainda não tem conta? <Link to="/register" className="font-semibold text-lunardeli-red hover:underline">Criar conta</Link>
           </div>
+          )}
 
           <div className="mt-4 text-center text-sm">
             <Link to="/" className="font-semibold text-gray-500 hover:text-lunardeli-red">
