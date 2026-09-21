@@ -51,59 +51,13 @@ export class AppController {
         database: 'connected',
         message: 'Obra 10 - MVP API Operacional (v1.5.16)',
         app,
-        env: {
-          nodeEnv: process.env.NODE_ENV,
-          buildId: process.env.OBRA10_BUILD_ID || null,
-          hasEncryptionKey: process.env.ENCRYPTION_KEY
-            ? `defined_len_${process.env.ENCRYPTION_KEY.length}`
-            : 'undefined',
-          asaas: {
-            configured: Boolean(process.env.ASAAS_API_KEY?.trim()),
-            environment: process.env.ASAAS_ENVIRONMENT || 'sandbox',
-            nfEnabled: (process.env.ASAAS_NF_ENABLED || '').toLowerCase() === 'true',
-            webhookToken: Boolean(process.env.ASAAS_WEBHOOK_TOKEN?.trim()),
-          },
-        },
       };
     } catch {
       return {
         status: 'error',
         database: 'disconnected',
         app,
-        env: {
-          nodeEnv: process.env.NODE_ENV,
-          buildId: process.env.OBRA10_BUILD_ID || null,
-          hasEncryptionKey: process.env.ENCRYPTION_KEY
-            ? `defined_len_${process.env.ENCRYPTION_KEY.length}`
-            : 'undefined',
-          asaas: {
-            configured: Boolean(process.env.ASAAS_API_KEY?.trim()),
-            environment: process.env.ASAAS_ENVIRONMENT || 'sandbox',
-            nfEnabled: (process.env.ASAAS_NF_ENABLED || '').toLowerCase() === 'true',
-            webhookToken: Boolean(process.env.ASAAS_WEBHOOK_TOKEN?.trim()),
-          },
-        },
       };
     }
-  }
-
-  @Get('debug-fs')
-  debugFs() {
-    const cwd = process.cwd();
-    const uploadsPath = path.join(cwd, 'uploads');
-    let uploadsFiles: string[] = [];
-    try {
-      uploadsFiles = fs.readdirSync(uploadsPath);
-    } catch (e: any) {
-      uploadsFiles = [e.message];
-    }
-    return {
-      cwd,
-      cwdFiles: fs.readdirSync(cwd),
-      uploadsPath,
-      uploadsFiles,
-      dirname: __dirname,
-      clientVersion: readClientVersion(),
-    };
   }
 }

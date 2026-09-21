@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { EmailModule } from '../email/email.module';
+import { resolveJwtSecret } from '../../core/security/security-env';
 
 @Module({
   imports: [
@@ -11,7 +12,7 @@ import { EmailModule } from '../email/email.module';
     EmailModule,
     JwtModule.register({
       global: true,
-      secret: process.env.JWT_SECRET || 'obra10-mvp-secret-key-12345',
+      secret: resolveJwtSecret(),
       signOptions: { expiresIn: '1h' },
     }),
   ],

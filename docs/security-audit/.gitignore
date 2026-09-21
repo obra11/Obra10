@@ -1,0 +1,5 @@
+.venv/
+_charts/
+_preview/
+__pycache__/
+*.pyc

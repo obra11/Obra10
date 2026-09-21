@@ -6,6 +6,7 @@ import {
   Param,
   BadRequestException,
   ForbiddenException,
+  NotFoundException,
   UseGuards,
   Req,
   ParseFilePipe,
@@ -39,7 +40,7 @@ const MAX_IMAGE_UPLOAD_BYTES = 15 * 1024 * 1024;
 const MAX_RDO_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 /** Allowed image MIME types */
-const ALLOWED_IMAGE_TYPES = /^image\/(jpeg|jpg|png|gif|webp|svg\+xml|heic|heif)$/i;
+const ALLOWED_IMAGE_TYPES = /^image\/(jpeg|jpg|png|gif|webp|heic|heif)$/i;
 /** Allowed document/media MIME types (for RDO attachments) — inclui formatos de celular */
 const ALLOWED_DOC_TYPES =
   /^(image\/(jpeg|jpg|png|gif|webp|heic|heif)|application\/(pdf|msword|vnd\.ms-excel|vnd\.ms-powerpoint|vnd\.openxmlformats-officedocument\.(spreadsheetml\.sheet|wordprocessingml\.document|presentationml\.presentation))|video\/(mp4|quicktime|webm|3gpp|3gpp2|x-msvideo|avi|mpeg|ogg|x-m4v|x-matroska))$/i;
@@ -259,6 +260,16 @@ export class UploadController {
       ? true
       : await this.capabilities.hasCapability(req.user.sub, 'gerenciarUsuarios');
     if (!isOwner && !podeGerenciar) {
+      throw new ForbiddenException(
+        'Sem permissão para alterar a foto deste usuário.',
+      );
+    }
+    const alvo = await this.prisma.usuario.findFirst({
+      where: { id, deletedAt: null },
+      select: { empresaId: true },
+    });
+    if (!alvo) throw new NotFoundException('Usuário não encontrado.');
+    if (!isAdmin && alvo.empresaId !== req.user.empresaId) {
       throw new ForbiddenException(
         'Sem permissão para alterar a foto deste usuário.',
       );

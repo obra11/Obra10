@@ -1,5 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function safeHttpUrl(url: unknown): string {
+  const s = String(url ?? '').trim();
+  if (/^https?:\/\//i.test(s) || s.startsWith('data:image/')) return s;
+  return '#';
+}
+
 // Conditional mock for Resend when API key not set
 let ResendClass: any;
 try {
@@ -49,7 +64,7 @@ export class EmailService {
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#dc2626">Bem-vindo ao OBRA 10!</h2>
-        <p>Olá, <strong>${nomeEmpresa}</strong>!</p>
+        <p>Olá, <strong>${escapeHtml(nomeEmpresa)}</strong>!</p>
         <p>Clique no botão abaixo para verificar seu e-mail e ativar sua conta:</p>
         <a href="${link}" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
           Verificar E-mail
@@ -68,7 +83,7 @@ export class EmailService {
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#dc2626">Conta verificada com sucesso!</h2>
-        <p>Olá, <strong>${nomeEmpresa}</strong>!</p>
+        <p>Olá, <strong>${escapeHtml(nomeEmpresa)}</strong>!</p>
         <p>Seu e-mail foi verificado. Escolha os módulos e pague com PIX ou cartão para liberar o acesso — não há mês grátis.</p>
         <a href="${this.appUrl}/contratacao" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
           Escolher Módulos
@@ -91,11 +106,11 @@ export class EmailService {
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#dc2626">Pagamento via PIX</h2>
-        <p>Olá, <strong>${nomeEmpresa}</strong>!</p>
+        <p>Olá, <strong>${escapeHtml(nomeEmpresa)}</strong>!</p>
         <p>Valor: <strong>R$ ${valor.toFixed(2)}</strong></p>
-        ${qrCode ? `<img src="${qrCode}" alt="QR Code PIX" style="max-width:200px;margin:16px 0" />` : ''}
+        ${qrCode ? `<img src="${safeHttpUrl(qrCode)}" alt="QR Code PIX" style="max-width:200px;margin:16px 0" />` : ''}
         <p>Ou use o link de pagamento:</p>
-        <a href="${linkPagamento}" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">
+        <a href="${safeHttpUrl(linkPagamento)}" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">
           Pagar via PIX
         </a>
         <p style="color:#6b7280;font-size:12px">Após o pagamento, seus módulos serão ativados automaticamente em até 2 minutos.</p>
@@ -115,7 +130,7 @@ export class EmailService {
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#16a34a">Pagamento confirmado!</h2>
-        <p>Olá, <strong>${nomeEmpresa}</strong>!</p>
+        <p>Olá, <strong>${escapeHtml(nomeEmpresa)}</strong>!</p>
         <p>Recebemos seu pagamento de <strong>R$ ${valor.toFixed(2)}</strong>. Seus módulos estão ativos!</p>
         <a href="${this.appUrl}/dashboard" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
           Acessar OBRA 10
@@ -136,7 +151,7 @@ export class EmailService {
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#f59e0b">Conta suspensa</h2>
-        <p>Olá, <strong>${nomeEmpresa}</strong>!</p>
+        <p>Olá, <strong>${escapeHtml(nomeEmpresa)}</strong>!</p>
         <p>Sua conta foi suspensa após <strong>${diasVencido} dias</strong> de inadimplência.</p>
         <p>Para reativar, efetue o pagamento da cobrança pendente:</p>
         <a href="${this.appUrl}/gestor/financeiro" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
@@ -163,8 +178,8 @@ export class EmailService {
       <tr>
         <td style="padding:8px;border-bottom:1px solid #e5e7eb">${c.mesReferencia.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</td>
         <td style="padding:8px;border-bottom:1px solid #e5e7eb">R$ ${c.valor.toFixed(2)}</td>
-        <td style="padding:8px;border-bottom:1px solid #e5e7eb">${c.formaPagamento}</td>
-        <td style="padding:8px;border-bottom:1px solid #e5e7eb;color:${c.status === 'PAGO' ? '#16a34a' : c.status === 'VENCIDO' ? '#dc2626' : '#f59e0b'}">${c.status}</td>
+        <td style="padding:8px;border-bottom:1px solid #e5e7eb">${escapeHtml(c.formaPagamento)}</td>
+        <td style="padding:8px;border-bottom:1px solid #e5e7eb;color:${c.status === 'PAGO' ? '#16a34a' : c.status === 'VENCIDO' ? '#dc2626' : '#f59e0b'}">${escapeHtml(c.status)}</td>
       </tr>
     `,
       )
@@ -176,7 +191,7 @@ export class EmailService {
       `📊 Extrato mensal — OBRA 10`,
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
-        <h2 style="color:#dc2626">Extrato Mensal — ${nomeEmpresa}</h2>
+        <h2 style="color:#dc2626">Extrato Mensal — ${escapeHtml(nomeEmpresa)}</h2>
         <table style="width:100%;border-collapse:collapse">
           <thead><tr style="background:#f3f4f6">
             <th style="padding:8px;text-align:left">Mês</th>
@@ -208,11 +223,11 @@ export class EmailService {
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#dc2626">RDO Rejeitado</h2>
-        <p>Olá, <strong>${nomeUsuario}</strong>!</p>
-        <p>O RDO de <strong>${dataReferencia}</strong> foi <strong style="color:#dc2626">rejeitado</strong> pelo gestor da obra.</p>
+        <p>Olá, <strong>${escapeHtml(nomeUsuario)}</strong>!</p>
+        <p>O RDO de <strong>${escapeHtml(dataReferencia)}</strong> foi <strong style="color:#dc2626">rejeitado</strong> pelo gestor da obra.</p>
         <div style="background:#fef2f2;border-left:4px solid #dc2626;padding:12px 16px;border-radius:4px;margin:16px 0">
           <p style="margin:0;font-weight:bold">Motivo da rejeição:</p>
-          <p style="margin:8px 0 0">${motivo}</p>
+          <p style="margin:8px 0 0">${escapeHtml(motivo)}</p>
         </div>
         <p>Por favor, acesse o OBRA 10, revise as pendências e reabra o RDO para correção.</p>
         <a href="${this.appUrl}/dashboard" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
@@ -236,7 +251,7 @@ export class EmailService {
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#dc2626">OBRA 10</h2>
-        <p>Olá, <strong>${nomeUsuario}</strong>!</p>
+        <p>Olá, <strong>${escapeHtml(nomeUsuario)}</strong>!</p>
         ${corpoHtml}
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0" />
         <p style="color:#9ca3af;font-size:12px">Esta é uma notificação automática do OBRA 10. Não responda este e-mail.</p>
@@ -258,12 +273,12 @@ export class EmailService {
     const link = `${this.appUrl}/obras/${obraId}/rdos/${rdoId}`;
     await this.send(
       emailAprovador,
-      `📋 RDO aguardando sua aprovação — ${nomeObra}`,
+      `📋 RDO aguardando sua aprovação — ${escapeHtml(nomeObra)}`,
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto">
         <h2 style="color:#dc2626">RDO Pendente de Aprovação</h2>
-        <p>Olá, <strong>${nomeAprovador}</strong>!</p>
-        <p><strong>${nomeCriador}</strong> submeteu um Diário de Obra referente a <strong>${dataReferencia}</strong> na obra <strong>${nomeObra}</strong> e aguarda a sua revisão.</p>
+        <p>Olá, <strong>${escapeHtml(nomeAprovador)}</strong>!</p>
+        <p><strong>${escapeHtml(nomeCriador)}</strong> submeteu um Diário de Obra referente a <strong>${escapeHtml(dataReferencia)}</strong> na obra <strong>${escapeHtml(nomeObra)}</strong> e aguarda a sua revisão.</p>
         <a href="${link}" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
           Revisar RDO
         </a>
@@ -281,7 +296,7 @@ export class EmailService {
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
         <h2 style="color:#dc2626;margin-top:0">Recuperação de Senha</h2>
-        <p>Olá, <strong>${nomeUsuario}</strong>!</p>
+        <p>Olá, <strong>${escapeHtml(nomeUsuario)}</strong>!</p>
         <p>Você solicitou a redefinição de sua senha de acesso ao OBRA 10.</p>
         <p>Clique no botão abaixo para cadastrar uma nova senha:</p>
         <a href="${link}" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
@@ -305,11 +320,11 @@ export class EmailService {
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
         <h2 style="color:#dc2626;margin-top:0">Senha redefinida pelo suporte</h2>
-        <p>Olá, <strong>${nomeUsuario}</strong>!</p>
+        <p>Olá, <strong>${escapeHtml(nomeUsuario)}</strong>!</p>
         <p>Uma senha temporária foi gerada para o seu login no OBRA 10:</p>
         <p style="font-size:18px;letter-spacing:1px;background:#f3f4f6;padding:12px 16px;border-radius:8px;display:inline-block">
-          <strong>Login:</strong> ${email}<br/>
-          <strong>Senha temporária:</strong> ${senhaTemporaria}
+          <strong>Login:</strong> ${escapeHtml(email)}<br/>
+          <strong>Senha temporária:</strong> ${escapeHtml(senhaTemporaria)}
         </p>
         <p>Acesse o sistema e altere a senha assim que possível.</p>
         <a href="${this.appUrl}/login" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
@@ -332,21 +347,21 @@ export class EmailService {
       params;
     const obrasHtml =
       obrasNomes && obrasNomes.length
-        ? `<p>Você foi vinculado à(s) obra(s): <strong>${obrasNomes.join(', ')}</strong>.</p>`
+        ? `<p>Você foi vinculado à(s) obra(s): <strong>${obrasNomes.map(escapeHtml).join(', ')}</strong>.</p>`
         : '';
     const loginUrl = `${this.appUrl}/login`;
     await this.send(
       email,
-      `👋 Convite para acessar o OBRA 10 — ${nomeEmpresa}`,
+      `👋 Convite para acessar o OBRA 10 — ${escapeHtml(nomeEmpresa)}`,
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
         <h2 style="color:#dc2626;margin-top:0">Você foi convidado ao OBRA 10</h2>
-        <p>Olá, <strong>${nomeUsuario}</strong>!</p>
-        <p>A empresa <strong>${nomeEmpresa}</strong> criou seu acesso ao sistema de gestão de obras.</p>
+        <p>Olá, <strong>${escapeHtml(nomeUsuario)}</strong>!</p>
+        <p>A empresa <strong>${escapeHtml(nomeEmpresa)}</strong> criou seu acesso ao sistema de gestão de obras.</p>
         ${obrasHtml}
         <p style="font-size:16px;background:#f3f4f6;padding:12px 16px;border-radius:8px;line-height:1.6">
-          <strong>E-mail (login):</strong> ${email}<br/>
-          <strong>Senha temporária:</strong> ${senhaTemporaria}
+          <strong>E-mail (login):</strong> ${escapeHtml(email)}<br/>
+          <strong>Senha temporária:</strong> ${escapeHtml(senhaTemporaria)}
         </p>
         <a href="${loginUrl}" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
           Acessar o OBRA 10
@@ -368,12 +383,12 @@ export class EmailService {
     const loginUrl = `${this.appUrl}/login`;
     await this.send(
       email,
-      `🏗️ Nova obra no OBRA 10 — ${nomeObra}`,
+      `🏗️ Nova obra no OBRA 10 — ${escapeHtml(nomeObra)}`,
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
         <h2 style="color:#dc2626;margin-top:0">Você foi adicionado a uma obra</h2>
-        <p>Olá, <strong>${nomeUsuario}</strong>!</p>
-        <p>A empresa <strong>${nomeEmpresa}</strong> vinculou você à obra <strong>${nomeObra}</strong> no OBRA 10.</p>
+        <p>Olá, <strong>${escapeHtml(nomeUsuario)}</strong>!</p>
+        <p>A empresa <strong>${escapeHtml(nomeEmpresa)}</strong> vinculou você à obra <strong>${escapeHtml(nomeObra)}</strong> no OBRA 10.</p>
         <a href="${loginUrl}" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
           Abrir o sistema
         </a>
@@ -392,7 +407,7 @@ export class EmailService {
   ) {
     const linkSection = linkPagamento
       ? `<div style="text-align:center;margin:24px 0">
-          <a href="${linkPagamento}" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">
+          <a href="${safeHttpUrl(linkPagamento)}" style="display:inline-block;background:#dc2626;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">
             Ir para o Pagamento
           </a>
          </div>`
@@ -404,11 +419,11 @@ export class EmailService {
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
         <h2 style="color:#dc2626;margin-top:0">Fatura Pendente</h2>
-        <p>Olá, <strong>${nomeUsuario}</strong> (${empresaNome})!</p>
+        <p>Olá, <strong>${escapeHtml(nomeUsuario)}</strong> (${escapeHtml(empresaNome)})!</p>
         <p>Gostaríamos de lembrar que existe uma fatura pendente para a sua assinatura no OBRA 10:</p>
         <div style="background:#f9fafb;border:1px solid #e5e7eb;padding:16px;border-radius:8px;margin:16px 0">
           <p style="margin:0 0 8px">Valor: <strong>R$ ${valor.toFixed(2)}</strong></p>
-          <p style="margin:0">Vencimento: <strong>${dataVencimento}</strong></p>
+          <p style="margin:0">Vencimento: <strong>${escapeHtml(dataVencimento)}</strong></p>
         </div>
         ${linkSection}
         <p style="color:#6b7280;font-size:12px;margin-top:24px">Se você já realizou o pagamento, por favor desconsidere este aviso. A compensação do boleto/PIX pode levar até 2 horas.</p>
@@ -425,12 +440,12 @@ export class EmailService {
   ) {
     await this.send(
       email,
-      `⚠️ Confirmação de Exclusão de Obra — ${nomeObra}`,
+      `⚠️ Confirmação de Exclusão de Obra — ${escapeHtml(nomeObra)}`,
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
         <h2 style="color:#dc2626;margin-top:0">Obra Excluída com Sucesso</h2>
-        <p>Olá, <strong>${nomeUsuario}</strong>!</p>
-        <p>Confirmamos que o canteiro de obras <strong>${nomeObra}</strong> foi excluído (desativado) com sucesso de sua conta na plataforma OBRA 10.</p>
+        <p>Olá, <strong>${escapeHtml(nomeUsuario)}</strong>!</p>
+        <p>Confirmamos que o canteiro de obras <strong>${escapeHtml(nomeObra)}</strong> foi excluído (desativado) com sucesso de sua conta na plataforma OBRA 10.</p>
         <p style="color:#6b7280;font-size:12px;margin-top:24px">Se você não realizou esta ação, entre em contato imediatamente com o suporte técnico.</p>
         <p style="color:#9ca3af;font-size:11px;border-top:1px solid #e5e7eb;padding-top:12px">Esta é uma notificação automática do OBRA 10. Não responda este e-mail.</p>
       </div>
@@ -450,19 +465,19 @@ export class EmailService {
       process.env.SUPPORT_EMAIL ||
       'contato@obra10.com.br';
     const telefone = dto.telefone
-      ? `<p><strong>Telefone:</strong> ${dto.telefone}</p>`
+      ? `<p><strong>Telefone:</strong> ${escapeHtml(dto.telefone)}</p>`
       : '';
     await this.send(
       to,
-      `Contato site Obra 10 — ${dto.nome}`,
+      `Contato site Obra 10 — ${escapeHtml(dto.nome)}`,
       `
       <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e5e7eb;border-radius:12px">
         <h2 style="color:#E5192C;margin-top:0">Novo contato pelo site</h2>
-        <p><strong>Nome:</strong> ${dto.nome}</p>
-        <p><strong>E-mail:</strong> <a href="mailto:${dto.email}">${dto.email}</a></p>
+        <p><strong>Nome:</strong> ${escapeHtml(dto.nome)}</p>
+        <p><strong>E-mail:</strong> <a href="mailto:${escapeHtml(dto.email)}">${escapeHtml(dto.email)}</a></p>
         ${telefone}
         <p><strong>Mensagem:</strong></p>
-        <p style="white-space:pre-wrap;background:#f5f5f5;padding:12px;border-radius:8px">${dto.mensagem}</p>
+        <p style="white-space:pre-wrap;background:#f5f5f5;padding:12px;border-radius:8px">${escapeHtml(dto.mensagem)}</p>
         <p style="color:#9ca3af;font-size:11px;margin-top:24px">Responda diretamente ao e-mail do remetente.</p>
       </div>
       `,

@@ -84,20 +84,20 @@ export class AuthService {
     }
 
     if (empresaId) {
-      const alvo = candidatos.find((c) => c.empresaId === empresaId);
+      const alvo = matched.find((c) => c.empresaId === empresaId);
       if (!alvo) {
         throw new UnauthorizedException('Credenciais inválidas.');
       }
       return this.emitirSessao(alvo.id);
     }
 
-    if (candidatos.length === 1) {
-      return this.emitirSessao(candidatos[0].id);
+    if (matched.length === 1) {
+      return this.emitirSessao(matched[0].id);
     }
 
     return {
       precisaEscolherEmpresa: true as const,
-      empresas: candidatos.map((c) => this.mapEmpresaOpcao(c)),
+      empresas: matched.map((c) => this.mapEmpresaOpcao(c)),
     };
   }
 

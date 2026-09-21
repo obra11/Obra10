@@ -6,6 +6,7 @@ import {
   Query,
   Req,
   UseGuards,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { ObraContextGuard } from '../../core/guards/obra-context.guard';
@@ -43,8 +44,13 @@ export class AlertaController {
    */
   @Patch(':id/marcar-lido')
   async marcarLido(@Param('id') id: string, @Req() req: any) {
+    const obraId = req.headers['x-obra-id'] || req.query?.obraId;
+    const alerta = await this.prisma.alertaObra.findFirst({
+      where: { id, obraId },
+    });
+    if (!alerta) throw new NotFoundException('Alerta não encontrado.');
     return this.prisma.alertaObra.update({
-      where: { id },
+      where: { id: alerta.id },
       data: { lido: true },
     });
   }

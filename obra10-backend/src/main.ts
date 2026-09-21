@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { AuditInterceptor } from './core/interceptors/audit.interceptor';
 import { SanitizePipe } from './core/pipes/sanitize.pipe';
+import { assertSecurityEnv } from './core/security/security-env';
 
 
 function getImgSrcPolicy(): string[] {
@@ -32,6 +33,7 @@ function getImgSrcPolicy(): string[] {
 }
 
 async function bootstrap() {
+  assertSecurityEnv();
   const app = await NestFactory.create(AppModule);
 
   // 0. Logging Interceptor de Auditoria

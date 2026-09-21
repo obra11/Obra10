@@ -67,6 +67,7 @@ export class TenantController {
   async getMeuPlano(@Req() req: any) {
     const empresaId = req.user?.empresaId;
     if (!empresaId) throw new ForbiddenException('Sessão inválida.');
+    await this.assertGerenciarFinanceiro(req);
     return this.tenantService.obterMeuPlano(empresaId);
   }
 
@@ -80,6 +81,7 @@ export class TenantController {
   ) {
     const empresaId = req.user?.empresaId;
     if (!empresaId) throw new ForbiddenException('Sessão inválida.');
+    await this.assertGerenciarFinanceiro(req);
     return this.tenantService.listarHistoricoCobrancas(empresaId, {
       inicio,
       fim,

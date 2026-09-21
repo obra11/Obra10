@@ -33,6 +33,10 @@ export class CryptoService {
         );
         parsedKey = crypto.createHash('sha256').update(envKey).digest();
       }
+    } else if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'ENCRYPTION_KEY obrigatória em produção. Campos sensíveis não podem ser gravados em claro.',
+      );
     } else {
       this.logger.warn(
         'ENCRYPTION_KEY não configurada. Campos sensíveis serão armazenados SEM criptografia.',

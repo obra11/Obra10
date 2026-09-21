@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Request } from 'express';
+import { resolveJwtSecret } from '../security/security-env';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -27,7 +28,7 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const payload = await this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_SECRET || 'obra10-mvp-secret-key-12345',
+        secret: resolveJwtSecret(),
       });
 
       // Verificar jwtVersion — se o usuário trocou de senha, o token é invalidado

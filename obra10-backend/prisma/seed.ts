@@ -201,7 +201,7 @@ async function main() {
 
   const tarcisioUser = await prisma.usuario.upsert({
     where: { empresaId_email: { empresaId: empresaLunardeli.id, email: 'tarcisio@lunardeli.com.br' } },
-    update: { senhaHash: hashTarcisio, ativo: true, deletedAt: null },
+    update: { ativo: true, deletedAt: null },
     create: {
       empresaId: empresaLunardeli.id,
       nome: 'Tarcisio Lunardeli',

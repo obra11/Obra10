@@ -21,6 +21,7 @@ import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { Response } from 'express';
 import { ContratarModulosDto } from './dto/cobranca.dto';
 import { PaypalService } from './paypal.service';
+import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 
 // Loaded at runtime — MUST be set in .env. Empty = reject all webhook calls.
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN?.trim() || '';
@@ -33,7 +34,21 @@ export class CobrancaController {
     private readonly cobrancaService: CobrancaService,
     private readonly prisma: PrismaService,
     private readonly paypal: PaypalService,
+    private readonly capabilities: CapabilitiesService,
   ) {}
+
+  private async assertGerenciarFinanceiro(req: any) {
+    if (req.user?.perfilGlobal === 'SUPER_ADMIN') return;
+    const pode = await this.capabilities.hasCapability(
+      req.user?.sub,
+      'gerenciarFinanceiro',
+    );
+    if (!pode) {
+      throw new ForbiddenException(
+        'Você não tem permissão para alterar o plano/financeiro.',
+      );
+    }
+  }
 
   // GET /modulos moved to ModulosController (src/modules/modulos/modulos.controller.ts)
   // It now returns the full catalog with grupo, sigla, versao, submodulos, etc.
@@ -61,6 +76,7 @@ export class CobrancaController {
   async contratar(@Body() dto: ContratarModulosDto, @Req() req: any) {
     const empresaId = req.user?.empresaId;
     if (!empresaId) throw new ForbiddenException('Tenant não identificado.');
+    await this.assertGerenciarFinanceiro(req);
     return this.cobrancaService.contratarModulos({ ...dto, empresaId });
   }
 
@@ -72,6 +88,7 @@ export class CobrancaController {
     @Query('page') page = '1',
     @Query('limit') limit = '12',
   ) {
+    await this.assertGerenciarFinanceiro(req);
     return this.cobrancaService.listarCobrancas(
       req.user.empresaId,
       parseInt(page),
@@ -119,11 +136,13 @@ export class CobrancaController {
   @UseGuards(JwtAuthGuard)
   @Post('cobrancas/:id/paypal/create-order')
   async createPaypalOrder(@Param('id') cobrancaId: string, @Req() req: any) {
+    await this.assertGerenciarFinanceiro(req);
     const status = await this.cobrancaService.getStatus(cobrancaId, req.user.empresaId);
     if (status.pago) throw new BadRequestException('Esta cobrança já está paga.');
     
-    // Buscar o valor da cobrança
-    const cobranca = await this.prisma.cobranca.findUnique({ where: { id: cobrancaId } });
+    const cobranca = await this.prisma.cobranca.findFirst({
+      where: { id: cobrancaId, empresaId: req.user.empresaId },
+    });
     if (!cobranca) throw new NotFoundException('Cobrança não encontrada');
 
     return this.paypal.createOrder(Number(cobranca.valor), cobranca.id);
@@ -137,6 +156,7 @@ export class CobrancaController {
     @Body('orderId') orderId: string,
     @Req() req: any
   ) {
+    await this.assertGerenciarFinanceiro(req);
     const status = await this.cobrancaService.getStatus(cobrancaId, req.user.empresaId);
     if (status.pago) return { success: true };
 

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import axios from 'axios';
 
 @Injectable()
@@ -21,12 +21,22 @@ export class PaypalService {
     this.mockMode = !this.clientId || !this.secret;
     
     if (this.mockMode) {
-      this.logger.warn('PAYPAL_CLIENT_ID ou SECRET não configuradas — operando em modo MOCK');
+      this.logger.warn(
+        'PAYPAL_CLIENT_ID ou SECRET não configuradas — rotas PayPal recusam pagamento.',
+      );
+    }
+  }
+
+  private assertConfigured() {
+    if (this.mockMode) {
+      throw new ServiceUnavailableException(
+        'Pagamento PayPal não está configurado. Use PIX ou cartão.',
+      );
     }
   }
 
   private async getAccessToken(): Promise<string> {
-    if (this.mockMode) return 'mock-token';
+    this.assertConfigured();
 
     const auth = Buffer.from(`${this.clientId}:${this.secret}`).toString('base64');
     
@@ -48,10 +58,7 @@ export class PaypalService {
    * Retorna o OrderID que o Frontend precisa para renderizar o botão
    */
   async createOrder(valor: number, cobrancaId: string): Promise<{ orderId: string }> {
-    if (this.mockMode) {
-      this.logger.log(`[MOCK PAYPAL] createOrder → R$ ${valor} para cobrança ${cobrancaId}`);
-      return { orderId: `mock-order-${Date.now()}` };
-    }
+    this.assertConfigured();
 
     const token = await this.getAccessToken();
 
@@ -85,10 +92,7 @@ export class PaypalService {
    * Captura (Efetiva) o pagamento após a aprovação do usuário
    */
   async captureOrder(orderId: string): Promise<{ status: string }> {
-    if (this.mockMode) {
-      this.logger.log(`[MOCK PAYPAL] captureOrder → ${orderId}`);
-      return { status: 'COMPLETED' };
-    }
+    this.assertConfigured();
 
     const token = await this.getAccessToken();
 
