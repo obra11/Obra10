@@ -583,7 +583,7 @@ export class AsaasService implements OnModuleInit {
     const email = (
       process.env.ASAAS_WEBHOOK_EMAIL ||
       ping.email ||
-      'contato@obra10.com.br'
+      'contato@obra10.app.br'
     ).trim();
 
     const payload = {

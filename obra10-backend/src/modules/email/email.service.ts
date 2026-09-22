@@ -453,7 +453,7 @@ export class EmailService {
     );
   }
 
-  /** Formulário público do site comercial → contato@obra10.com.br */
+  /** Formulário público do site comercial → contato@obra10.app.br */
   async enviarContatoSite(dto: {
     nome: string;
     email: string;
@@ -463,7 +463,7 @@ export class EmailService {
     const to =
       process.env.CONTACT_EMAIL ||
       process.env.SUPPORT_EMAIL ||
-      'contato@obra10.com.br';
+      'contato@obra10.app.br';
     const telefone = dto.telefone
       ? `<p><strong>Telefone:</strong> ${escapeHtml(dto.telefone)}</p>`
       : '';

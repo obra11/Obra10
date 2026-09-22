@@ -29,7 +29,7 @@ export const MarketingContato: React.FC = () => {
         telefone: telefone.trim() || undefined,
         mensagem: mensagem.trim(),
       });
-      setOk('Mensagem enviada. Retornamos em contato@obra10.com.br.');
+      setOk('Mensagem enviada. Retornamos em contato@obra10.app.br.');
       setNome('');
       setEmail('');
       setTelefone('');
@@ -40,7 +40,7 @@ export const MarketingContato: React.FC = () => {
       const body = encodeURIComponent(
         `Nome: ${nome.trim()}\nE-mail: ${email.trim()}\nTelefone: ${telefone.trim()}\n\n${mensagem.trim()}`,
       );
-      window.location.href = `mailto:contato@obra10.com.br?subject=${subject}&body=${body}`;
+      window.location.href = `mailto:contato@obra10.app.br?subject=${subject}&body=${body}`;
       setOk('Abrimos seu e-mail para envio. Se preferir, use o WhatsApp.');
     } finally {
       setSending(false);
@@ -69,7 +69,7 @@ export const MarketingContato: React.FC = () => {
             Fale com a equipe Obra 10.
           </h1>
           <p className="mt-4 text-white/80 max-w-xl">
-            Respostas em <strong>contato@obra10.com.br</strong> ou pelo WhatsApp
+            Respostas em <strong>contato@obra10.app.br</strong> ou pelo WhatsApp
             de suporte.
           </p>
         </div>
@@ -137,10 +137,10 @@ export const MarketingContato: React.FC = () => {
               E-mail
             </p>
             <a
-              href="mailto:contato@obra10.com.br"
+              href="mailto:contato@obra10.app.br"
               className="text-lg font-semibold text-lunardeli-red hover:underline"
             >
-              contato@obra10.com.br
+              contato@obra10.app.br
             </a>
           </div>
           <div className="border border-lunardeli-lightGray p-6">

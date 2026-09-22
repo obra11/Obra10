@@ -175,10 +175,10 @@ export const MarketingLayout: React.FC = () => {
                 </>
               )}
               <a
-                href="mailto:contato@obra10.com.br"
+                href="mailto:contato@obra10.app.br"
                 className="block hover:text-lunardeli-red"
               >
-                contato@obra10.com.br
+                contato@obra10.app.br
               </a>
             </div>
             <div className="mt-6 flex items-center gap-3">
