@@ -16,9 +16,15 @@ import {
   File,
   Download,
   ExternalLink,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import api from '../services/api';
 import { format } from 'date-fns';
+import {
+  downloadAnexoArquivo,
+  downloadFotosZip,
+} from '../utils/downloadFotosZip';
 
 interface MediaItem {
   id: string;
@@ -128,6 +134,10 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [playingVideoUrl, setPlayingVideoUrl] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<MediaItem | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [zipping, setZipping] = useState(false);
+  const [zipProgress, setZipProgress] = useState('');
 
   useEffect(() => {
     if (isOpen && obraId) {
@@ -136,6 +146,10 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
       setPreviewDoc(null);
       setLightboxIndex(null);
       setPlayingVideoUrl(null);
+      setSelecting(false);
+      setSelectedIds([]);
+      setZipping(false);
+      setZipProgress('');
       carregarMidias();
     }
   }, [isOpen, obraId]);
@@ -258,6 +272,52 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
     setLightboxIndex((prev) => (prev! - 1 + fotos.length) % fotos.length);
   };
 
+  const toggleFoto = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const selecionarTodasVisiveis = () => {
+    const ids = fotos.map((f) => f.id);
+    const allOn = ids.length > 0 && ids.every((id) => selectedIds.includes(id));
+    setSelectedIds(allOn ? [] : ids);
+  };
+
+  const baixarZip = async (ids: string[]) => {
+    const escolhidas = fotos.filter((f) => ids.includes(f.id));
+    if (!escolhidas.length) {
+      setError('Selecione ao menos uma foto para baixar.');
+      return;
+    }
+    setError('');
+    setZipping(true);
+    setZipProgress(`0/${escolhidas.length}`);
+    try {
+      const mes = selectedMonth ? `_${selectedMonth}` : '';
+      await downloadFotosZip({
+        obraId,
+        items: escolhidas.map((f) => ({
+          id: f.id,
+          nomeOriginal: f.nomeOriginal,
+        })),
+        zipName: `Fotos_Obra${mes}_${new Date().toISOString().split('T')[0]}.zip`,
+        onProgress: (current, total) => setZipProgress(`${current}/${total}`),
+      });
+      setSelecting(false);
+      setSelectedIds([]);
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          'Não foi possível montar o ZIP das fotos.',
+      );
+    } finally {
+      setZipping(false);
+      setZipProgress('');
+    }
+  };
+
   const previewKind = previewDoc ? getMediaKind(previewDoc) : null;
   const previewUrl = previewDoc ? absoluteFileUrl(previewDoc) : '';
   const officeEmbedUrl =
@@ -298,27 +358,107 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
 
         <div className="px-5 py-2 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white shrink-0">
           <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar whitespace-nowrap">
-            <button onClick={() => setActiveTab('todas')} className={tabClass('todas')}>
+            <button
+              onClick={() => {
+                setActiveTab('todas');
+                setSelectedIds([]);
+              }}
+              className={tabClass('todas')}
+            >
               Todas ({items.length})
             </button>
-            <button onClick={() => setActiveTab('fotos')} className={tabClass('fotos')}>
+            <button
+              onClick={() => {
+                setActiveTab('fotos');
+                setSelectedIds([]);
+              }}
+              className={tabClass('fotos')}
+            >
               <ImageIcon size={16} /> Fotos ({totals.fotos})
             </button>
-            <button onClick={() => setActiveTab('videos')} className={tabClass('videos')}>
+            <button
+              onClick={() => {
+                setActiveTab('videos');
+                setSelectedIds([]);
+              }}
+              className={tabClass('videos')}
+            >
               <Film size={16} /> Vídeos ({totals.videos})
             </button>
-            <button onClick={() => setActiveTab('anexos')} className={tabClass('anexos')}>
+            <button
+              onClick={() => {
+                setActiveTab('anexos');
+                setSelectedIds([]);
+              }}
+              className={tabClass('anexos')}
+            >
               <FileText size={16} /> Anexos ({totals.anexos})
             </button>
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-auto">
+          <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap justify-end">
+            {fotos.length > 0 && (
+              selecting ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={selecionarTodasVisiveis}
+                    disabled={zipping}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {fotos.every((f) => selectedIds.includes(f.id)) ? (
+                      <CheckSquare size={14} />
+                    ) : (
+                      <Square size={14} />
+                    )}
+                    Todas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => baixarZip(selectedIds)}
+                    disabled={zipping || selectedIds.length === 0}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-lunardeli-red hover:bg-red-700 text-white disabled:opacity-50"
+                  >
+                    {zipping ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Download size={14} />
+                    )}
+                    {zipping
+                      ? `Compactando ${zipProgress}`
+                      : `Baixar ZIP (${selectedIds.length})`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelecting(false);
+                      setSelectedIds([]);
+                    }}
+                    disabled={zipping}
+                    className="text-xs font-semibold text-gray-500 hover:text-gray-800 disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSelecting(true)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-lunardeli-red hover:bg-red-700 text-white"
+                >
+                  <Download size={14} /> Baixar fotos
+                </button>
+              )
+            )}
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">
               Mês:
             </span>
             <select
               value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
+              onChange={(e) => {
+                setSelectedMonth(e.target.value);
+                setSelectedIds([]);
+              }}
               className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs bg-white font-semibold text-gray-700 outline-none focus:ring-1 focus:ring-lunardeli-red/50 shadow-sm cursor-pointer"
             >
               <option value="">Todos os meses</option>
@@ -398,11 +538,20 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
 
                         if (kind === 'image') {
                           const clickIdx = fotos.findIndex((f) => f.id === item.id);
+                          const selected = selectedIds.includes(item.id);
                           return (
                             <div
                               key={item.id}
-                              onClick={() => setLightboxIndex(clickIdx)}
-                              className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm cursor-pointer hover:shadow-md transition-shadow group flex flex-col"
+                              onClick={() =>
+                                selecting
+                                  ? toggleFoto(item.id)
+                                  : setLightboxIndex(clickIdx)
+                              }
+                              className={`bg-white rounded-xl overflow-hidden border shadow-sm cursor-pointer hover:shadow-md transition-shadow group flex flex-col ${
+                                selected
+                                  ? 'border-lunardeli-red ring-2 ring-lunardeli-red/30'
+                                  : 'border-gray-100'
+                              }`}
                             >
                               <div className="relative aspect-video w-full overflow-hidden bg-gray-100">
                                 <img
@@ -411,9 +560,27 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
                                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                   loading="lazy"
                                 />
-                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                  <Maximize2 className="text-white" size={20} />
-                                </div>
+                                {selecting ? (
+                                  <div className="absolute top-2 left-2">
+                                    <div
+                                      className={`w-7 h-7 rounded-md flex items-center justify-center shadow ${
+                                        selected
+                                          ? 'bg-lunardeli-red text-white'
+                                          : 'bg-white/90 text-gray-500'
+                                      }`}
+                                    >
+                                      {selected ? (
+                                        <CheckSquare size={16} />
+                                      ) : (
+                                        <Square size={16} />
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                    <Maximize2 className="text-white" size={20} />
+                                  </div>
+                                )}
                               </div>
                               <div className="p-3 flex-1 flex flex-col justify-between">
                                 <p className="text-xs font-bold text-gray-800 truncate" title={item.nomeOriginal}>
@@ -504,12 +671,44 @@ export const MediaGalleryModal: React.FC<MediaGalleryModalProps> = ({
               alt={fotos[lightboxIndex].nomeOriginal}
               className="max-w-full max-h-[75vh] object-contain rounded-lg select-none"
             />
-            <div className="mt-4 text-center text-white space-y-1">
+            <div className="mt-4 text-center text-white space-y-2">
               <p className="text-sm font-bold">{fotos[lightboxIndex].nomeOriginal}</p>
               <p className="text-xs opacity-75">
                 Por {fotos[lightboxIndex].criador?.nome || 'Desconhecido'} em{' '}
                 {format(new Date(fotos[lightboxIndex].createdAt), 'dd/MM/yyyy')}
               </p>
+              <button
+                type="button"
+                onClick={async () => {
+                  const foto = fotos[lightboxIndex];
+                  if (!foto) return;
+                  setZipping(true);
+                  try {
+                    await downloadAnexoArquivo({
+                      obraId,
+                      id: foto.id,
+                      nomeOriginal: foto.nomeOriginal,
+                    });
+                  } catch (err: any) {
+                    setError(
+                      err?.response?.data?.message ||
+                        'Não foi possível baixar esta foto.',
+                    );
+                    setLightboxIndex(null);
+                  } finally {
+                    setZipping(false);
+                  }
+                }}
+                disabled={zipping}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/15 hover:bg-white/25 text-white disabled:opacity-50"
+              >
+                {zipping ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Download size={14} />
+                )}
+                Baixar esta foto
+              </button>
             </div>
           </div>
         </div>

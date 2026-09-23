@@ -1150,8 +1150,12 @@ export const DiarioDeObra: React.FC = () => {
     persistDraftLocal({ pendingSync: !navigator.onLine }).catch(() => undefined);
   };
 
-  const handleFotosDrop = async (files: File[], opts?: { copyToDevice?: boolean }) => {
-    const copyToDevice = opts?.copyToDevice !== false;
+  const handleFotosDrop = async (
+    files: File[],
+    opts?: { copyToDevice?: boolean; annotate?: boolean },
+  ) => {
+    const copyToDevice = opts?.copyToDevice === true;
+    const annotate = opts?.annotate === true;
     const compressed: File[] = [];
     for (const raw of files) {
       try {
@@ -1171,9 +1175,19 @@ export const DiarioDeObra: React.FC = () => {
       }
     }
     if (compressed.length === 0) return;
-    setAnnotateQueue((q) =>
-      q ? { files: [...q.files, ...compressed], index: q.index } : { files: compressed, index: 0 },
-    );
+    if (annotate) {
+      setAnnotateQueue((q) =>
+        q ? { files: [...q.files, ...compressed], index: q.index } : { files: compressed, index: 0 },
+      );
+      return;
+    }
+    for (const file of compressed) {
+      await commitFotoFile(file);
+    }
+    persistDraftLocal({ pendingSync: !navigator.onLine }).catch(() => undefined);
+    if (compressed.length > 1) {
+      showToast(`📷 ${compressed.length} fotos adicionadas.`);
+    }
   };
 
   const handleReeditFotoSave = async (file: File) => {
@@ -1201,7 +1215,7 @@ export const DiarioDeObra: React.FC = () => {
     const files = Array.from(e.target.files || []).filter(
       (f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|gif|bmp)$/i.test(f.name),
     );
-    handleFotosDrop(files);
+    handleFotosDrop(files, { copyToDevice: false, annotate: false });
     e.target.value = '';
   };
 
@@ -1214,7 +1228,7 @@ export const DiarioDeObra: React.FC = () => {
     if (files.length === 0) return;
 
     const result = await persistCapturedMediaList(files, 'image', 'gallery');
-    handleFotosDrop(files, { copyToDevice: false });
+    handleFotosDrop(files, { copyToDevice: false, annotate: true });
 
     if (result === 'shared') {
       showToast('📷 Use "Salvar Imagem" para guardar na Galeria.');
@@ -1226,7 +1240,7 @@ export const DiarioDeObra: React.FC = () => {
   };
 
   const handleVideosDrop = async (files: File[], opts?: { copyToDevice?: boolean }) => {
-    const copyToDevice = opts?.copyToDevice !== false;
+    const copyToDevice = opts?.copyToDevice === true;
     for (const file of files) {
       try {
         if (copyToDevice) {
@@ -2648,7 +2662,7 @@ export const DiarioDeObra: React.FC = () => {
                <div 
                   className="bg-gray-50 border border-gray-200 rounded-xl p-4 transition-colors hover:border-lunardeli-red border-dashed drag-active:bg-red-50"
                   onDragOver={onDragOver}
-                  onDrop={(e) => { e.preventDefault(); if (isReadOnly) return; handleFotosDrop(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))); }}
+                  onDrop={(e) => { e.preventDefault(); if (isReadOnly) return; handleFotosDrop(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')), { copyToDevice: false, annotate: false }); }}
                >
                   <div className="flex justify-between items-center mb-4 relative">
                      <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><ImageIcon size={16}/> Fotos</h3>

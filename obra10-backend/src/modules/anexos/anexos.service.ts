@@ -191,6 +191,79 @@ export class AnexosService {
     );
   }
 
+  async obterArquivo(
+    anexoId: string,
+    obraId: string,
+    obraRole?: any,
+  ): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+    const anexo = await this.prisma.anexo.findFirst({
+      where: { id: anexoId, obraId, deletedAt: null },
+    });
+    if (!anexo) {
+      throw new NotFoundException(
+        'Anexo não encontrado ou não pertence a esta obra.',
+      );
+    }
+
+    const permRdo = obraRole?.permissoes?.RDO || obraRole?.permissoes?.rdo;
+    if (permRdo === 'VIEW_APPROVED' || permRdo === 'VIEW_PARTIAL_APPROVED') {
+      const rdo = await this.prisma.rdo.findFirst({
+        where: {
+          id: anexo.attachableId,
+          obraId,
+          deletedAt: null,
+          status: 'APROVADO',
+        },
+        select: { id: true },
+      });
+      if (!rdo) {
+        throw new ForbiddenException('Você não pode baixar este arquivo.');
+      }
+    }
+
+    const contentType = anexo.mimeType || 'application/octet-stream';
+    const filename = anexo.nomeOriginal || `arquivo-${anexo.id}`;
+
+    if (anexo.urlS3.startsWith('/uploads/')) {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const full = path.join(process.cwd(), anexo.urlS3.replace(/^\//, ''));
+      const bytes = await fs.readFile(full);
+      return { bytes, contentType, filename };
+    }
+
+    if (
+      anexo.urlS3.startsWith('http://') ||
+      anexo.urlS3.startsWith('https://')
+    ) {
+      const res = await fetch(anexo.urlS3);
+      if (!res.ok) {
+        throw new NotFoundException('Arquivo indisponível.');
+      }
+      return {
+        bytes: Buffer.from(await res.arrayBuffer()),
+        contentType,
+        filename,
+      };
+    }
+
+    if (!process.env.AWS_ACCESS_KEY_ID) {
+      throw new NotFoundException('Arquivo indisponível neste ambiente.');
+    }
+
+    const out = await this.s3Client.send(
+      new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: anexo.urlS3,
+      }),
+    );
+    const raw = await out.Body?.transformToByteArray();
+    if (!raw?.length) {
+      throw new NotFoundException('Arquivo vazio.');
+    }
+    return { bytes: Buffer.from(raw), contentType, filename };
+  }
+
   async deletar(anexoId: string, obraId: string) {
     const anexo = await this.prisma.anexo.findFirst({
       where: { id: anexoId, obraId, deletedAt: null },

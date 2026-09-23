@@ -9,6 +9,7 @@ import {
   Delete,
   Patch,
   ForbiddenException,
+  StreamableFile,
 } from '@nestjs/common';
 import { AnexosService } from './anexos.service';
 import { ObraContextGuard } from '../../core/guards/obra-context.guard';
@@ -61,6 +62,20 @@ export class AnexosController {
   async visualizarSeguro(@Param('id') id: string, @Req() req: any) {
     const obraId = req.headers['x-obra-id'];
     return this.anexosService.gerarViewerUrlSegura(id, obraId);
+  }
+
+  @Get(':id/arquivo')
+  async baixarArquivo(@Param('id') id: string, @Req() req: any) {
+    const obraId = req.headers['x-obra-id'];
+    const file = await this.anexosService.obterArquivo(
+      id,
+      obraId,
+      req.obraRole,
+    );
+    return new StreamableFile(file.bytes, {
+      type: file.contentType,
+      disposition: `attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
+    });
   }
 
   @Patch(':id')
