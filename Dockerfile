@@ -1,16 +1,17 @@
 ﻿# ============================================
 # Obra 10 â€” Production Dockerfile
-# Force rebuild: 2026-09-23-galeria-zip-upload-lote-2.9.37
+# Force rebuild: 2026-09-24-dwg-medir-calibrar-2.9.38
 # ============================================
 
 # --- Build stage ---
-FROM node:22-alpine AS builder
+FROM node:22-bookworm-slim AS builder
 
-ARG OBRA10_BUILD_ID=2.9.37-20260923
+ARG OBRA10_BUILD_ID=2.9.38-20260924
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 
 # Install build tools for native modules (bcrypt)
-RUN apk add --no-cache python3 make g++
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -33,9 +34,9 @@ RUN npx prisma generate && npx nest build
 ENV PRISMA_BUILD_PLACEHOLDER=
 
 # --- Production stage ---
-FROM node:22-alpine
+FROM node:22-bookworm-slim
 
-ARG OBRA10_BUILD_ID=2.9.37-20260923
+ARG OBRA10_BUILD_ID=2.9.38-20260924
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 ENV NODE_ENV=production
 
@@ -49,6 +50,14 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./
 COPY --from=builder /app/client ./client
 COPY --from=builder /app/scripts/railway-start.sh ./scripts/railway-start.sh
+COPY --from=builder /app/python ./python
+
+# Aspose.CAD publica wheel glibc (manylinux). O venv fica fora do Node.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv \
+  && python3 -m venv /opt/aspose \
+  && /opt/aspose/bin/pip install --no-cache-dir -r python/requirements.txt \
+  && rm -rf /var/lib/apt/lists/*
+ENV PYTHON=/opt/aspose/bin/python
 
 # Create uploads directory for runtime (dev/local only; produÃ§Ã£o usa R2)
 RUN mkdir -p uploads && chmod +x scripts/railway-start.sh
