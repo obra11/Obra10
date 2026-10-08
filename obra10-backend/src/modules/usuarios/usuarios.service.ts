@@ -11,9 +11,11 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 import {
   DEFAULT_CAPABILITIES_BY_TIPO,
+  mergePermissoesObra,
   normalizeCapabilities,
   perfilGlobalToTipoPapel,
   RoleCapabilities,
+  tipoPapelToPerfilGlobal,
 } from '../../core/capabilities/role-capabilities';
 import { perfilGlobalToObraNomeInterno } from '../../core/capabilities/obra-perfil';
 import { EmailService } from '../email/email.service';
@@ -88,11 +90,15 @@ export class UsuariosService {
     if (!tiposValidos.includes(tipo as TipoPapelEmpresa)) {
       throw new BadRequestException('Tipo de papel inválido.');
     }
-    return this.capabilities.updatePapel(
+    const papel = await this.capabilities.updatePapel(
       empresaId,
       tipo as TipoPapelEmpresa,
       dto,
     );
+    if (tipo !== 'PERSONALIZADO') {
+      await this.aplicarPapelNosUsuarios(empresaId, tipo as TipoPapelEmpresa, papel.capabilities);
+    }
+    return papel;
   }
 
   async create(empresaId: string, dto: any) {
@@ -582,11 +588,70 @@ export class UsuariosService {
       return normalizeCapabilities(override, papelDefaults);
     }
 
-    // Para papéis padrão, persiste o template atual (override opcional do gestor)
-    if (override) {
-      return normalizeCapabilities(override, fromPapel);
-    }
+    // Papel padrão: a função da empresa é a fonte. Não mistura a cópia antiga do usuário.
     return fromPapel;
+  }
+
+  /** Depois de salvar a função, os usuários daquele tipo passam a usar as novas autorizações. */
+  private async aplicarPapelNosUsuarios(
+    empresaId: string,
+    tipo: TipoPapelEmpresa,
+    rawCaps: unknown,
+  ) {
+    const perfil = tipoPapelToPerfilGlobal(tipo);
+    const caps = normalizeCapabilities(rawCaps, DEFAULT_CAPABILITIES_BY_TIPO[tipo]);
+    const usuarios = await this.prisma.usuario.findMany({
+      where: { empresaId, perfilGlobal: perfil, deletedAt: null },
+      select: { id: true },
+    });
+
+    for (const usuario of usuarios) {
+      await this.prisma.usuario.update({
+        where: { id: usuario.id },
+        data: { capabilities: Prisma.DbNull },
+      });
+
+      const roles = await this.prisma.userObraRole.findMany({
+        where: { usuarioId: usuario.id },
+      });
+      await Promise.all(
+        roles.map((role) =>
+          this.prisma.userObraRole.update({
+            where: { id: role.id },
+            data: {
+              permissoes: mergePermissoesObra(
+                (role.permissoes || {}) as Record<string, string>,
+                caps,
+              ) as unknown as Prisma.InputJsonValue,
+            },
+          }),
+        ),
+      );
+
+      const slugs = Object.keys(caps.modulosPadrao || {});
+      if (!slugs.length) continue;
+      const tenantModulos = await this.prisma.tenantModulo.findMany({
+        where: {
+          empresaId,
+          ativo: true,
+          modulo: { slug: { in: slugs } },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
+        select: { moduloId: true },
+      });
+      for (const modulo of tenantModulos) {
+        await this.prisma.usuarioModulo.upsert({
+          where: {
+            usuarioId_moduloId: {
+              usuarioId: usuario.id,
+              moduloId: modulo.moduloId,
+            },
+          },
+          create: { usuarioId: usuario.id, moduloId: modulo.moduloId },
+          update: {},
+        });
+      }
+    }
   }
 
   /**

@@ -72,7 +72,7 @@ export const DEFAULT_CAPABILITIES_BY_TIPO: Record<
     verTodosRdos: true,
     verSoAprovados: false,
     verParcialAprovados: false,
-    modulosPadrao: { RDO: 'EDIT', FVS: 'EDIT', PROJETOS: 'EDIT', CONCRETO: 'EDIT', IA: 'EDIT' },
+    modulosPadrao: { RDO: 'EDIT', FVS: 'EDIT', PROJETOS: 'EDIT', CONCRETO: 'EDIT', IA: 'EDIT', VISUALIZADOR: 'VIEW' },
   },
   COLABORADOR: {
     gerenciarUsuarios: false,
@@ -230,6 +230,15 @@ export function mergePermissoesObra(
   const padrao = caps?.modulosPadrao || {};
   for (const [slug, nivel] of Object.entries(padrao)) {
     if (!base[slug]) base[slug] = nivel;
+    else if (
+      slug !== 'RDO' &&
+      slug !== 'rdo' &&
+      nivel === 'EDIT' &&
+      base[slug] !== 'VIEW_APPROVED' &&
+      base[slug] !== 'VIEW_PARTIAL_APPROVED'
+    ) {
+      base[slug] = 'EDIT';
+    }
   }
 
   const obraRdo = base.RDO || base.rdo;
@@ -253,4 +262,22 @@ function boolOr(value: unknown, fallback: boolean): boolean {
 /** Defaults fortes de GESTOR legado quando template ainda não existe. */
 export function legacyGestorCapabilities(): RoleCapabilities {
   return { ...DEFAULT_CAPABILITIES_BY_TIPO.GESTOR };
+}
+
+/**
+ * Quem pode receber um diário para aprovação:
+ * a função autoriza (Aprovar RDO ou acesso a todas as obras)
+ * e a pessoa está na equipe da obra, ou alcança todas as obras.
+ */
+export function podeReceberAprovacao(params: {
+  perfilGlobal?: string | null;
+  aprovarRdo?: boolean;
+  acessoTodasObras?: boolean;
+  vinculadoAObra?: boolean;
+}): boolean {
+  const gestorDaEmpresa =
+    params.acessoTodasObras === true || params.perfilGlobal === 'SUPER_ADMIN';
+  const autorizado = params.aprovarRdo === true || gestorDaEmpresa;
+  const daEquipe = params.vinculadoAObra === true || gestorDaEmpresa;
+  return autorizado && daEquipe;
 }

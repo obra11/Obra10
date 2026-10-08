@@ -20,11 +20,12 @@ const GRUPO_COLORS: Record<string, { bg: string; badge: string; dot: string }> =
   'Qualidade':   { bg: 'bg-green-50', badge: 'bg-green-100 text-green-700', dot: 'bg-green-500' },
   'Gestão':      { bg: 'bg-purple-50', badge: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500' },
   'Pessoas':     { bg: 'bg-orange-50', badge: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500' },
+  'Desenvolvimento': { bg: 'bg-red-50', badge: 'bg-red-100 text-red-700', dot: 'bg-red-500' },
   'GERAL':       { bg: 'bg-gray-50', badge: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400' },
 };
 
 // Modules currently implemented
-const IMPLEMENTADOS = new Set(['RDO']);
+const IMPLEMENTADOS = new Set(['RDO', 'VISUALIZADOR']);
 
 export const ModulosCatalogo: React.FC = () => {
   const { user } = useAuth();
@@ -58,7 +59,7 @@ export const ModulosCatalogo: React.FC = () => {
     }).catch(() => setLoading(false));
   }, []);
 
-  const grupos = ['Operacional', 'Qualidade', 'Gestão', 'Pessoas', 'GERAL'].reduce<Record<string, Modulo[]>>((acc, g) => {
+  const grupos = ['Operacional', 'Qualidade', 'Gestão', 'Pessoas', 'Desenvolvimento', 'GERAL'].reduce<Record<string, Modulo[]>>((acc, g) => {
     const ms = modulos.filter(m => m.grupo === g);
     if (ms.length) acc[g] = ms;
     return acc;

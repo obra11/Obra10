@@ -377,10 +377,18 @@ export const DiarioDeObra: React.FC = () => {
   const isReadOnly = permRdo === 'VIEW' || permRdo === 'VIEW_APPROVED' || permRdo === 'VIEW_PARTIAL_APPROVED' || (status !== 'rascunho' && !isGestorOrAdmin);
   const isPartialView = permRdo === 'VIEW_PARTIAL_APPROVED';
 
-  // ── Colaboradores da obra (para select de aprovador) ──
-  interface Colaborador { id: string; nome: string; email: string; perfilGlobal: string; }
-  const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
+  // ── Quem pode receber o diário para aprovação ──
+  interface Aprovador { id: string; nome: string; email: string; perfilGlobal: string; }
+  const [aprovadores, setAprovadores] = useState<Aprovador[]>([]);
+  const [aprovadoresProntos, setAprovadoresProntos] = useState(false);
   const [aprovadorIdSelecionado, setAprovadorIdSelecionado] = useState('');
+
+  useEffect(() => {
+    if (!aprovadoresProntos || !aprovadorIdSelecionado) return;
+    if (!aprovadores.some((a) => a.id === aprovadorIdSelecionado)) {
+      setAprovadorIdSelecionado('');
+    }
+  }, [aprovadoresProntos, aprovadores, aprovadorIdSelecionado]);
 
   // ── Catálogo de Insumos da Empresa ──
   const [catalogoProfissionais, setCatalogoProfissionais] = useState<string[]>(DEFAULT_PROFISSIONAIS);
@@ -428,18 +436,18 @@ export const DiarioDeObra: React.FC = () => {
 
     const headers = { 'x-obra-id': obraId };
 
-    // Buscar colaboradores da obra para o selector de aprovador
-    api.get(`/obras/${obraId}/colaboradores`, { headers })
+    api.get(`/obras/${obraId}/aprovadores`, { headers })
       .then(res => {
         const mapped = (res.data || []).map((r: any) => ({
-          id: r.usuario?.id || r.id,
-          nome: r.usuario?.nome || r.nome,
-          email: r.usuario?.email || r.email,
-          perfilGlobal: r.usuario?.perfilGlobal || r.perfilGlobal,
+          id: r.id,
+          nome: r.nome,
+          email: r.email,
+          perfilGlobal: r.perfilGlobal,
         }));
-        setColaboradores(mapped);
+        setAprovadores(mapped);
       })
-      .catch(() => {/* silencioso */});
+      .catch(() => { /* silencioso */ })
+      .finally(() => setAprovadoresProntos(true));
 
     if (rdoId) {
       // Carregar RDO existente
@@ -3090,14 +3098,19 @@ export const DiarioDeObra: React.FC = () => {
                          disabled={isReadOnly}
                        >
                          <option value="">— Selecionar aprovador (opcional) —</option>
-                         {colaboradores.map(c => (
-                           <option key={c.id} value={c.id}>{c.nome} ({c.perfilGlobal})</option>
+                         {aprovadores.map(c => (
+                           <option key={c.id} value={c.id}>{c.nome}</option>
                          ))}
                        </select>
                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
                          <svg className="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/></svg>
                        </div>
                      </div>
+                     <p className="text-xs text-gray-500 mt-1">
+                       {aprovadores.length === 0
+                         ? 'Ninguém da equipe está autorizado a aprovar diários. Isso se configura em Equipe, na opção Aprovar RDO.'
+                         : 'A lista mostra só quem está autorizado a aprovar diários.'}
+                     </p>
                      {aprovadorIdSelecionado && (
                        <p className="text-xs text-green-600 mt-1 font-medium">
                          ✉️ Um e-mail será enviado ao aprovador selecionado.

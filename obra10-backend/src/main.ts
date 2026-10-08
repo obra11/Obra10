@@ -46,7 +46,8 @@ async function bootstrap() {
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'", 'https://sandbox.asaas.com', 'https://asaas.com'],
+          scriptSrc: ["'self'", "'wasm-unsafe-eval'", 'https://sandbox.asaas.com', 'https://asaas.com'],
+          workerSrc: ["'self'", 'blob:'],
           styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
           imgSrc: getImgSrcPolicy(),
           connectSrc: ["'self'"],
@@ -84,11 +85,37 @@ async function bootstrap() {
   )
     .split(',')
     .map((o: string) => o.trim());
+
+  // MCP / token: clientes externos (ChatGPT, Claude, Gemini) usam Bearer, sem cookie.
+  app.use((req: any, res: any, next: any) => {
+    const path = String(req.originalUrl || req.url || '').split('?')[0];
+    const isMcp = path === '/mcp' || path.startsWith('/mcp/');
+    const isToken = path === '/auth/token';
+    if (!isMcp && !isToken) return next();
+    const origin = req.headers.origin;
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Authorization, Content-Type, Accept, MCP-Protocol-Version, Mcp-Session-Id, Last-Event-ID',
+    );
+    res.setHeader(
+      'Access-Control-Expose-Headers',
+      'Mcp-Session-Id, MCP-Protocol-Version',
+    );
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
+
   app.enableCors({
     origin: allowedOrigins,
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
-    exposedHeaders: ['x-xsrf-token'],
+    exposedHeaders: ['x-xsrf-token', 'x-dwg-unit', 'x-dwg-units-per-point', 'x-dwg-model-page'],
   });
 
   // 4. Global Pipes: Sanitização XSS + Validação de DTOs

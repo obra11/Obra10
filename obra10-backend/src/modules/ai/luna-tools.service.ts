@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { TipoInsumo } from '@prisma/client';
+import { RdoStatus, TipoInsumo } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
+import { mergePermissoesObra } from '../../core/capabilities/role-capabilities';
 import { RdoService } from '../rdo/rdo.service';
 import { ObraService } from '../obra/obra.service';
 import { CatalogoService } from '../catalogo/catalogo.service';
@@ -46,7 +47,21 @@ export const LUNA_TOOL_DEFS: LunaToolDef[] = [
   {
     name: 'painel_obra',
     description:
-      'Painel geral de uma obra: status, RDOs pendentes, efetivo do dia, atividades recentes e principais problemas.',
+      'Painel geral de uma obra (alias: ver_obra): status, RDOs pendentes, efetivo do dia, atividades recentes e principais problemas.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        obra: {
+          type: 'string',
+          description: 'Nome ou ID da obra. Se vazio, usa a obra da tela atual.',
+        },
+      },
+    },
+  },
+  {
+    name: 'ver_obra',
+    description:
+      'Igual a painel_obra: resumo do empreendimento (problemas, efetivo do dia, RDOs).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -93,7 +108,7 @@ export const LUNA_TOOL_DEFS: LunaToolDef[] = [
   {
     name: 'agregar_diarios',
     description:
-      'Consolida clima, efetivo, atividades e pendências dos diários num período. Pode ser uma obra ou todas as obras da empresa.',
+      'Consolida clima, efetivo, atividades e pendências dos diários num período. Obra pelo nome (ex.: Victoria) ou vazio = todas as obras acessíveis. Aliases: agregar_clima, agregar_efetivo, agregar_atividades.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -109,6 +124,48 @@ export const LUNA_TOOL_DEFS: LunaToolDef[] = [
           description:
             'Pergunta original, para inferir período se as datas não vierem.',
         },
+      },
+    },
+  },
+  {
+    name: 'agregar_clima',
+    description:
+      'Corte de clima/chuva dos diários (obra pelo nome ou consolidado da empresa). Mesmos argumentos de agregar_diarios.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        obra: { type: 'string' },
+        data_inicio: { type: 'string' },
+        data_fim: { type: 'string' },
+        pergunta: { type: 'string' },
+      },
+    },
+  },
+  {
+    name: 'agregar_efetivo',
+    description:
+      'Corte de efetivo lançado nos diários (obra pelo nome ou consolidado). Mesmos argumentos de agregar_diarios.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        obra: { type: 'string' },
+        data_inicio: { type: 'string' },
+        data_fim: { type: 'string' },
+        pergunta: { type: 'string' },
+      },
+    },
+  },
+  {
+    name: 'agregar_atividades',
+    description:
+      'Corte de atividades/pendências dos diários (obra pelo nome ou consolidado). Mesmos argumentos de agregar_diarios.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        obra: { type: 'string' },
+        data_inicio: { type: 'string' },
+        data_fim: { type: 'string' },
+        pergunta: { type: 'string' },
       },
     },
   },
@@ -188,6 +245,24 @@ export const LUNA_TOOL_DEFS: LunaToolDef[] = [
   },
 ];
 
+export const LUNA_MCP_TOOL_NAMES = LUNA_TOOL_DEFS.map((t) => t.name);
+
+type ObraAcesso = {
+  id: string;
+  nome: string;
+  endereco?: string | null;
+  status?: string;
+  permissoes: Record<string, string>;
+};
+
+function rdoSoAprovados(perm?: string) {
+  return perm === 'VIEW_APPROVED' || perm === 'VIEW_PARTIAL_APPROVED';
+}
+
+function permRdo(obra: ObraAcesso) {
+  return obra.permissoes?.RDO || obra.permissoes?.rdo;
+}
+
 function clipJson(value: unknown): string {
   const text = JSON.stringify(value, null, 2);
   if (text.length <= MAX_TOOL_CHARS) return text;
@@ -260,12 +335,16 @@ export class LunaToolsService {
       case 'listar_obras':
         return this.listarObras(auth);
       case 'painel_obra':
+      case 'ver_obra':
         return this.painelObra(auth, args.obra || telaObraId);
       case 'listar_relatorios':
         return this.listarRelatorios(auth, args);
       case 'ver_rdo':
         return this.verRdo(auth, args.rdo_id, args.obra_id);
       case 'agregar_diarios':
+      case 'agregar_clima':
+      case 'agregar_efetivo':
+      case 'agregar_atividades':
         return this.agregar(auth, args, telaObraId);
       case 'listar_catalogo':
         return this.listarCatalogo(auth, args);
@@ -285,6 +364,11 @@ export class LunaToolsService {
             await consultarOnline(String(args.consulta || '')),
           ),
         };
+      case 'perguntar_luna':
+        return {
+          erro:
+            'perguntar_luna não está disponível no MCP. Use as tools de leitura (listar_obras, agregar_diarios, ajuda_obra10, …).',
+        };
       default:
         return { erro: `Ferramenta desconhecida: ${name}` };
     }
@@ -303,50 +387,83 @@ export class LunaToolsService {
   }
 
   async listarObras(auth: LunaAuth) {
+    const obras = await this.obrasAcessiveis(auth);
+    return {
+      total: obras.length,
+      obras: obras.map(({ id, nome, endereco, status }) => ({
+        id,
+        nome,
+        endereco,
+        status,
+      })),
+    };
+  }
+
+  private async obrasAcessiveis(auth: LunaAuth): Promise<ObraAcesso[]> {
     const caps = await this.caps(auth);
     const acessoTodas =
       auth.perfilGlobal === 'SUPER_ADMIN' || caps.acessoTodasObras;
-    const obras = acessoTodas
-      ? await this.prisma.obra.findMany({
-          where: { empresaId: auth.empresaId, deletedAt: null },
-          select: {
-            id: true,
-            nome: true,
-            endereco: true,
-            status: true,
-          },
-          orderBy: { nome: 'asc' },
-        })
-      : await this.prisma.obra.findMany({
-          where: {
-            empresaId: auth.empresaId,
-            deletedAt: null,
-            status: { not: 'INATIVA' },
-            userObraRole: { some: { usuarioId: auth.userId } },
-          },
-          select: {
-            id: true,
-            nome: true,
-            endereco: true,
-            status: true,
-          },
-          orderBy: { nome: 'asc' },
-        });
-    return { total: obras.length, obras };
+    const privilegiadoPerms =
+      caps.modulosPadrao && Object.keys(caps.modulosPadrao).length > 0
+        ? caps.modulosPadrao
+        : { RDO: caps.criarEditarRdo ? 'EDIT' : 'VIEW' };
+
+    if (acessoTodas) {
+      const list = await this.prisma.obra.findMany({
+        where: { empresaId: auth.empresaId, deletedAt: null },
+        select: { id: true, nome: true, endereco: true, status: true },
+        orderBy: { nome: 'asc' },
+      });
+      return list.map((o) => ({
+        ...o,
+        permissoes: privilegiadoPerms as Record<string, string>,
+      }));
+    }
+
+    const list = await this.prisma.obra.findMany({
+      where: {
+        empresaId: auth.empresaId,
+        deletedAt: null,
+        status: { not: 'INATIVA' },
+        userObraRole: { some: { usuarioId: auth.userId } },
+      },
+      select: {
+        id: true,
+        nome: true,
+        endereco: true,
+        status: true,
+        userObraRole: {
+          where: { usuarioId: auth.userId },
+          select: { permissoes: true },
+        },
+      },
+      orderBy: { nome: 'asc' },
+    });
+    return list.map((o) => ({
+      id: o.id,
+      nome: o.nome,
+      endereco: o.endereco,
+      status: o.status,
+      permissoes: mergePermissoesObra(
+        (o.userObraRole[0]?.permissoes || {}) as Record<string, string>,
+        caps,
+      ),
+    }));
   }
 
   private async resolverObra(
     auth: LunaAuth,
     ref?: string | null,
-  ): Promise<{ id: string; nome: string } | null> {
-    const list = await this.listarObras(auth);
-    if (!ref) return list.obras[0] ? { id: list.obras[0].id, nome: list.obras[0].nome } : null;
+  ): Promise<ObraAcesso | null> {
+    const list = await this.obrasAcessiveis(auth);
+    if (!ref) return list[0] || null;
     const n = String(ref).trim().toLowerCase();
-    const hit =
-      list.obras.find((o) => o.id === ref) ||
-      list.obras.find((o) => o.nome.toLowerCase() === n) ||
-      list.obras.find((o) => o.nome.toLowerCase().includes(n));
-    return hit ? { id: hit.id, nome: hit.nome } : null;
+    return (
+      list.find((o) => o.id === ref) ||
+      list.find((o) => o.nome.toLowerCase() === n) ||
+      list.find((o) => o.nome.toLowerCase().includes(n)) ||
+      null
+    );
   }
 
   private async painelObra(auth: LunaAuth, ref?: string | null) {
@@ -356,7 +473,10 @@ export class LunaToolsService {
       obra.id,
       auth.empresaId,
     );
-    return { obra, painel };
+    return {
+      obra: { id: obra.id, nome: obra.nome, status: obra.status },
+      painel,
+    };
   }
 
   private async listarRelatorios(auth: LunaAuth, args: Record<string, any>) {
@@ -375,7 +495,20 @@ export class LunaToolsService {
       items = items.filter((r) => String(r.status).toUpperCase() === st);
     }
     const limite = Math.min(Math.max(Number(args.limite) || 40, 1), 80);
-    return { total: items.length, items: items.slice(0, limite) };
+    return {
+      total: items.length,
+      items: items.slice(0, limite).map((r) => ({
+        id: r.id,
+        obraId: r.obraId,
+        obraNome: r.obraNome,
+        status: r.status,
+        dataReferencia: r.dataReferencia,
+        dataFim: r.dataFim,
+        tipoRelatorio: r.tipoRelatorio,
+        sequencial: r.sequencial,
+        criadorNome: r.criadorNome,
+      })),
+    };
   }
 
   private async verRdo(auth: LunaAuth, rdoId: string, obraIdArg?: string) {
@@ -383,17 +516,24 @@ export class LunaToolsService {
     let obraId = obraIdArg;
     if (!obraId) {
       const row = await this.prisma.rdo.findFirst({
-        where: { id: rdoId, deletedAt: null, obra: { empresaId: auth.empresaId } },
+        where: {
+          id: rdoId,
+          deletedAt: null,
+          obra: { empresaId: auth.empresaId, deletedAt: null },
+        },
         select: { obraId: true },
       });
       obraId = row?.obraId;
     }
     if (!obraId) return { erro: 'RDO não encontrado nesta empresa.' };
-    const acessiveis = await this.listarObras(auth);
-    if (!acessiveis.obras.some((o) => o.id === obraId)) {
+    const acessiveis = await this.obrasAcessiveis(auth);
+    const obra = acessiveis.find((o) => o.id === obraId);
+    if (!obra) {
       return { erro: 'Sem acesso a esta obra.' };
     }
-    const rdo = await this.rdoService.findOne(rdoId, obraId);
+    const rdo = await this.rdoService.findOne(rdoId, obraId, {
+      permissoes: obra.permissoes,
+    });
     const extras = (rdo as any).dadosExtras || {};
     return {
       id: rdo.id,
@@ -423,19 +563,35 @@ export class LunaToolsService {
     const inferido = inferirPeriodo(pergunta || 'últimos 30 dias');
     const dataInicio = parseIso(args.data_inicio) || inferido.dataInicio;
     const dataFim = parseIso(args.data_fim) || inferido.dataFim;
-    const obraRef = args.obra;
-    const obra = obraRef
-      ? await this.resolverObra(auth, obraRef)
-      : null;
-    const acessiveis = await this.listarObras(auth);
-    const obraIds = obra
-      ? [obra.id]
-      : acessiveis.obras.map((o) => o.id);
-    if (!obraIds.length) return { erro: 'Nenhuma obra acessível.' };
+    const acessiveis = await this.obrasAcessiveis(auth);
+    const obra = args.obra ? await this.resolverObra(auth, args.obra) : null;
+    if (args.obra && !obra) {
+      return { erro: 'Obra não encontrada ou sem acesso.' };
+    }
+    const selecionadas = obra
+      ? acessiveis.filter((o) => o.id === obra.id)
+      : acessiveis;
+    if (!selecionadas.length) return { erro: 'Nenhuma obra acessível.' };
+
+    const idsCompletos = selecionadas
+      .filter((o) => !rdoSoAprovados(permRdo(o)))
+      .map((o) => o.id);
+    const idsAprovados = selecionadas
+      .filter((o) => rdoSoAprovados(permRdo(o)))
+      .map((o) => o.id);
+    const orClauses: Array<Record<string, unknown>> = [];
+    if (idsCompletos.length) orClauses.push({ obraId: { in: idsCompletos } });
+    if (idsAprovados.length) {
+      orClauses.push({
+        obraId: { in: idsAprovados },
+        status: RdoStatus.APROVADO,
+      });
+    }
+    if (!orClauses.length) return { erro: 'Nenhuma obra acessível.' };
 
     const rdos = await this.prisma.rdo.findMany({
       where: {
-        obraId: { in: obraIds },
+        OR: orClauses,
         obra: { empresaId: auth.empresaId, deletedAt: null },
         dataReferencia: { gte: dataInicio, lte: dataFim },
         deletedAt: null,
@@ -549,7 +705,8 @@ export class LunaToolsService {
         obra.id,
         auth.empresaId,
       );
-      return { obra, colaboradores: cols };
+      const lista = Array.isArray(cols) ? cols.slice(0, 80) : cols;
+      return { obra: { id: obra.id, nome: obra.nome }, colaboradores: lista };
     } catch (err: any) {
       return { erro: err?.message || 'Não foi possível listar o efetivo.' };
     }
@@ -570,6 +727,7 @@ export class LunaToolsService {
         obraId: { in: obraIds },
         lido: false,
         createdAt: { gte: desde },
+        obra: { empresaId: auth.empresaId, deletedAt: null },
       },
       include: { obra: { select: { nome: true } } },
       orderBy: { createdAt: 'desc' },

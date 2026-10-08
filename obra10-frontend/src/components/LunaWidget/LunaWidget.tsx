@@ -26,7 +26,7 @@ async function ensureMicrophonePermission(): Promise<'granted' | 'denied' | 'uns
   }
 }
 
-export default function LunaWidget() {
+export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -43,6 +43,20 @@ export default function LunaWidget() {
   const recognitionRef = useRef<any>(null);
 
   const hasSpeech = !!getSpeechRecognitionCtor();
+  const [narrow, setNarrow] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches,
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const onChange = () => setNarrow(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  const buttonBottom = narrow ? 12 + clearance : 24;
+  const panelBottom = buttonBottom + 76;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -251,9 +265,13 @@ export default function LunaWidget() {
     <>
       {open && (
         <div style={{
-          position: 'fixed', bottom: '90px', right: '24px', width: 'min(380px, calc(100vw - 24px))', height: '560px',
+          position: 'fixed',
+          bottom: narrow ? `calc(${panelBottom}px + env(safe-area-inset-bottom, 0px))` : panelBottom,
+          right: narrow ? 12 : 24,
+          width: 'min(380px, calc(100vw - 24px))',
+          height: narrow ? `min(560px, calc(100dvh - ${panelBottom + 12}px - env(safe-area-inset-bottom, 0px)))` : 560,
           background: 'white', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
-          display: 'flex', flexDirection: 'column', zIndex: 9999, overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', zIndex: 45, overflow: 'hidden',
           fontFamily: 'Inter, sans-serif'
         }}>
           <div style={{
@@ -352,9 +370,12 @@ export default function LunaWidget() {
         onClick={() => setOpen(o => !o)}
         title="Falar com a Luna"
         style={{
-          position: 'fixed', bottom: '24px', right: '24px', width: 64, height: 64,
+          position: 'fixed',
+          bottom: `calc(${buttonBottom}px + env(safe-area-inset-bottom, 0px))`,
+          right: narrow ? 16 : 24,
+          width: 64, height: 64,
           borderRadius: '50%', border: 'none', cursor: 'pointer', padding: 0, overflow: 'hidden',
-          background: '#E5192C', boxShadow: '0 4px 16px rgba(229,25,44,0.35)', zIndex: 9999
+          background: '#E5192C', boxShadow: '0 4px 16px rgba(229,25,44,0.35)', zIndex: 45
         }}
       >
         <img src="/luna-avatar.png?v=3" alt="Luna" style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', margin: 4 }} />

@@ -26,6 +26,7 @@ const MODULOS = [
   { slug: 'MEDICOES',     nome: 'Boletim de Medição',                 sigla: 'BM',          grupo: 'Gestão',      descricao: 'Boletins de medição e faturamento de progresso.', preco: 29.90, ordemExibicao: 10 },
   { slug: 'SEGURANCA',    nome: 'Segurança do Trabalho',              sigla: 'HSE/Safety',  grupo: 'Pessoas',     descricao: 'APR, DDS, registro de acidentes e conformidade HSE.', preco: 29.90, ordemExibicao: 11 },
   { slug: 'TREINAMENTOS', nome: 'Treinamento de Funcionários',        sigla: 'Training',    grupo: 'Pessoas',     descricao: 'Gestão de treinamentos, certificações e competências.', preco: 29.90, ordemExibicao: 12 },
+  { slug: 'VISUALIZADOR', nome: 'Visualizador de Arquivos',           sigla: 'Viewer',      grupo: 'Desenvolvimento', descricao: 'Abre PDF e IFC no navegador e converte DWG em PDF.', preco: 29.90, ordemExibicao: 13 },
   // Legacy IA module
   { slug: 'IA',           nome: 'Análise por IA (Claude)',            sigla: 'AI',          grupo: 'Operacional', descricao: 'Análise de RDOs e chat contextual com IA.', preco: 59.90, ordemExibicao: 99 },
 ];
@@ -88,7 +89,7 @@ async function main() {
   for (const m of MODULOS) {
     const modulo = await (prisma as any).modulo.upsert({
       where: { slug: m.slug },
-      update: { preco: m.preco, nome: m.nome, descricao: m.descricao },
+      update: { preco: m.preco, nome: m.nome, descricao: m.descricao, grupo: m.grupo, sigla: m.sigla, ordemExibicao: m.ordemExibicao },
       create: { slug: m.slug, nome: m.nome, descricao: m.descricao, sigla: m.sigla, grupo: m.grupo, ordemExibicao: m.ordemExibicao, preco: m.preco, versao: '1.0.0', dependencias: [] },
     });
     modulosMap[m.slug] = modulo.id;

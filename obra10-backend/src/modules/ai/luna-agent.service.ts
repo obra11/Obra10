@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { AiService } from './ai.service';
 import { LunaAuth, LunaToolsService } from './luna-tools.service';
 
 const OPENAI_MODEL = process.env.OPENAI_LUNA_MODEL || 'gpt-4o';
@@ -20,6 +21,17 @@ Como trabalhar:
 
 Se as tools voltarem vazio, diga o período/obra que consultou e peça ajuste.`;
 
+export function buildLunaSystemPrompt(telaObraId?: string | null) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const tela = telaObraId
+    ? `O usuário está com a obra ${telaObraId} aberta na tela — isso é só “estou aqui agora”, não limite a busca se ele citar outro canteiro.`
+    : 'O usuário não está dentro de uma obra específica; consulte a empresa (obras que o JWT enxerga).';
+  return `${LUNA_SYSTEM_PROMPT}
+
+Hoje (UTC): ${hoje}.
+${tela}`;
+}
+
 type ChatMsg = { role: 'user' | 'assistant'; content: string };
 
 export type LunaStreamEvent =
@@ -31,7 +43,10 @@ export type LunaStreamEvent =
 export class LunaAgentService {
   private readonly logger = new Logger(LunaAgentService.name);
 
-  constructor(private readonly tools: LunaToolsService) {}
+  constructor(
+    private readonly tools: LunaToolsService,
+    private readonly aiService: AiService,
+  ) {}
 
   async chat(
     auth: LunaAuth,
@@ -82,14 +97,35 @@ export class LunaAgentService {
       }
     }
 
+    try {
+      const local = await this.aiService.chat(
+        auth.empresaId,
+        auth.userId,
+        message,
+        history,
+        telaObraId,
+      );
+      if (local?.reply) {
+        yield { type: 'delta', text: local.reply };
+        yield { type: 'done', reply: local.reply };
+        return;
+      }
+    } catch (err: any) {
+      this.logger.warn(`[Luna] Fallback local falhou: ${err?.message}`);
+    }
+
     const fallback =
       'Não consegui falar com o modelo de IA agora (falta chave OpenAI/Anthropic ou a API falhou). Posso tentar de novo em instantes — ou me pergunte de novo.';
     yield { type: 'error', reply: fallback };
   }
 
-  private historyToOpenAi(history: ChatMsg[], message: string) {
+  private historyToOpenAi(
+    history: ChatMsg[],
+    message: string,
+    telaObraId?: string | null,
+  ) {
     const msgs: Array<{ role: string; content: any; tool_call_id?: string }> = [
-      { role: 'system', content: LUNA_SYSTEM_PROMPT },
+      { role: 'system', content: buildLunaSystemPrompt(telaObraId) },
     ];
     for (const h of (history || []).slice(-12)) {
       if (h.role === 'user' || h.role === 'assistant') {
@@ -107,7 +143,7 @@ export class LunaAgentService {
     history: ChatMsg[],
     telaObraId?: string | null,
   ): AsyncGenerator<LunaStreamEvent> {
-    const messages = this.historyToOpenAi(history, message);
+    const messages = this.historyToOpenAi(history, message, telaObraId);
     const tools = this.tools.openaiTools();
     let full = '';
 
@@ -265,7 +301,7 @@ export class LunaAgentService {
       const response = await client.messages.create({
         model: ANTHROPIC_MODEL,
         max_tokens: MAX_OUTPUT_TOKENS,
-        system: LUNA_SYSTEM_PROMPT,
+        system: buildLunaSystemPrompt(telaObraId),
         tools: this.tools.anthropicTools(),
         messages,
       });

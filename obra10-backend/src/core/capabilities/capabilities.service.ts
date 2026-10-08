@@ -12,6 +12,7 @@ import {
   mergeCapabilities,
   normalizeCapabilities,
   perfilGlobalToTipoPapel,
+  podeReceberAprovacao,
 } from './role-capabilities';
 
 @Injectable()
@@ -149,7 +150,10 @@ export class CapabilitiesService {
       }
     }
 
-    if (capabilitiesOverride) {
+    // Personalizado guarda a configuração no próprio usuário.
+    // Gestor, Colaborador e Externo seguem a função editada em Equipe.
+    // A cópia gravada no cadastro não pode congelar uma configuração antiga.
+    if (tipo === 'PERSONALIZADO' && capabilitiesOverride) {
       return mergeCapabilities(
         papelCaps,
         normalizeCapabilities(capabilitiesOverride, papelCaps),
@@ -173,6 +177,40 @@ export class CapabilitiesService {
       empresaId: user.empresaId,
       perfilGlobal: user.perfilGlobal,
       capabilitiesOverride: user.capabilities,
+    });
+  }
+
+  async podeReceberAprovacaoRdo(userId: string, obraId: string): Promise<boolean> {
+    const user = await this.prisma.usuario.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: {
+        empresaId: true,
+        perfilGlobal: true,
+        capabilities: true,
+      },
+    });
+    if (!user?.empresaId) return false;
+
+    const obra = await this.prisma.obra.findFirst({
+      where: { id: obraId, empresaId: user.empresaId },
+      select: { id: true },
+    });
+    if (!obra) return false;
+
+    const caps = await this.resolveForUser({
+      empresaId: user.empresaId,
+      perfilGlobal: user.perfilGlobal,
+      capabilitiesOverride: user.capabilities,
+    });
+    const vinculo = await this.prisma.userObraRole.findFirst({
+      where: { obraId, usuarioId: userId },
+      select: { id: true },
+    });
+    return podeReceberAprovacao({
+      perfilGlobal: user.perfilGlobal,
+      aprovarRdo: caps.aprovarRdo,
+      acessoTodasObras: caps.acessoTodasObras,
+      vinculadoAObra: !!vinculo,
     });
   }
 

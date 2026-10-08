@@ -658,8 +658,25 @@ export class RdoService {
 
     this.validateTarefasMotivoAntesDe(rdo.tarefas);
 
-    // Determinar aprovador a ser notificado
-    const aprovadorId = aprovadorIdSelecionado ?? rdo.aprovadorId ?? null;
+    // Só segue para alguém autorizado a aprovar diários desta obra.
+    let aprovadorId = aprovadorIdSelecionado || null;
+    if (aprovadorId) {
+      const autorizado = await this.capabilities.podeReceberAprovacaoRdo(
+        aprovadorId,
+        obraId,
+      );
+      if (!autorizado) {
+        throw new BadRequestException(
+          'O aprovador escolhido não tem autorização para aprovar diários desta obra.',
+        );
+      }
+    } else if (rdo.aprovadorId) {
+      const autorizado = await this.capabilities.podeReceberAprovacaoRdo(
+        rdo.aprovadorId,
+        obraId,
+      );
+      aprovadorId = autorizado ? rdo.aprovadorId : null;
+    }
     let aprovadorInfo: { nome: string; email: string } | null = null;
     if (aprovadorId) {
       aprovadorInfo = (await this.prisma.usuario.findUnique({
@@ -673,7 +690,7 @@ export class RdoService {
       data: {
         status: RdoStatus.SUBMETIDO,
         submissaoAt: new Date(),
-        ...(aprovadorId ? { aprovadorId } : {}),
+        aprovadorId,
       },
     });
 

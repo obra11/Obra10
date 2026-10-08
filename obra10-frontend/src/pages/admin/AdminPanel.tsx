@@ -16,7 +16,7 @@ interface Tenant {
   _count: { usuarios: number };
 }
 
-const ALL_MODULES = ['RDO', 'FVS', 'PROJETOS', 'CONCRETO', 'IA'];
+const ALL_MODULES = ['RDO', 'FVS', 'PROJETOS', 'CONCRETO', 'IA', 'VISUALIZADOR'];
 const PLAN_COLOR: Record<string, string> = {
   BASICO: 'bg-gray-100 text-gray-600',
   PRO: 'bg-blue-100 text-blue-700',

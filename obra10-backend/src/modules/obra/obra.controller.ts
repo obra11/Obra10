@@ -90,6 +90,19 @@ export class ObraController {
 
   // ==================== COLABORADORES DA OBRA (EFETIVO) ====================
 
+  @Get(':id/aprovadores')
+  async listarAprovadores(@Param('id') id: string, @Req() req: any) {
+    const empresaId = req.user?.empresaId;
+    if (!empresaId) throw new UnauthorizedException('Sessão inválida.');
+    try {
+      return await this.obraService.listarAprovadores(id, empresaId);
+    } catch (err: any) {
+      throw new BadRequestException(
+        err.message || 'Obra não encontrada ou sem acesso.',
+      );
+    }
+  }
+
   @Get(':id/colaboradores')
   async listarColaboradores(@Param('id') id: string, @Req() req: any) {
     const empresaId = req.user?.empresaId;

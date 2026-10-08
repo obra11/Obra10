@@ -355,10 +355,12 @@ export class AuthService {
       usuario: {
         nome: login.usuario.nome,
         email: login.usuario.email,
+        empresaId: login.usuario.empresaId,
       },
       mcp: {
         url: 'https://obra10.app.br/mcp',
         method: 'POST',
+        transport: 'streamable-http',
       },
     };
   }
@@ -539,18 +541,17 @@ export class AuthService {
         caps?.modulosPadrao && Object.keys(caps.modulosPadrao).length > 0
           ? caps.modulosPadrao
           : { RDO: caps?.criarEditarRdo ? 'EDIT' : 'VIEW' };
+      const permissoes = isPrivilegiado
+        ? privilegiadoPerms
+        : mergePermissoesObra(permissoesObj, caps);
       return {
         id: obra.id,
         nome: obra.nome,
         endereco: obra.endereco,
         status: obra.status,
         imageUrl: obra.imageUrl,
-        minhasPermissoes: isPrivilegiado
-          ? ['SUPER']
-          : Object.keys(permissoesObj),
-        permissoes: isPrivilegiado
-          ? privilegiadoPerms
-          : mergePermissoesObra(permissoesObj, caps),
+        minhasPermissoes: isPrivilegiado ? ['SUPER'] : Object.keys(permissoes),
+        permissoes,
       };
     });
   }

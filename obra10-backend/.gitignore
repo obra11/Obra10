@@ -1,5 +1,8 @@
 node_modules
 dist
+# LibreDWG publica o glue em uma pasta chamada dist. Não é saída do Nest.
+!client/viewer/vendor/libredwg/dist/
+!client/viewer/vendor/libredwg/dist/**
 
 # Environment variables (secrets)
 .env

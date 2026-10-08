@@ -59,8 +59,17 @@ export const SUPPORT_FAQ: FaqItem[] = [
   {
     id: 'mcp',
     pergunta: 'Como ligo o Obra 10 no ChatGPT, Claude ou Gemini?',
-    resposta:
-      'Use o MCP remoto: POST https://obra10.app.br/mcp com Authorization Bearer. Gere o token em POST /auth/token com o mesmo e-mail e senha do Obra 10 (válido 7 dias). No ChatGPT, ative o Developer Mode e adicione a URL do conector. A Luna no app já usa as mesmas consultas.',
+    resposta: `1) Token: POST https://obra10.app.br/auth/token com { "email", "senha" } (e empresaId se o e-mail estiver em mais de uma empresa). Válido 7 dias.
+
+2) MCP: POST https://obra10.app.br/mcp com Authorization: Bearer <access_token>. Streamable HTTP (JSON-RPC: initialize, tools/list, tools/call). Mesmas consultas da Luna, só leitura.
+
+ChatGPT: Configurações → Developer Mode → adicionar conector com essa URL e Bearer. Se a tela só oferecer OAuth, use um Custom GPT (Action + API Key Bearer) ou Claude/Gemini.
+
+Claude: Integrações / conector remoto com a URL e o header Authorization. No Desktop, mcpServers com "url" e headers.Authorization.
+
+Gemini: conector MCP remoto (ou AI Studio) com a mesma URL e Bearer.
+
+A empresa vem só do JWT. Sem WhatsApp e sem escrita automática.`,
     categoria: 'Técnico',
   },
   {

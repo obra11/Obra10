@@ -52,6 +52,7 @@ const MODULO_LABELS: Record<string, string> = {
   RDO: 'Relatório Diário',
   FVS: 'Ficha de Verificação',
   PROJETOS: 'Projetos/PDFs',
+  VISUALIZADOR: 'Visualizador de Arquivos',
   CONCRETO: 'Concretagem',
   IA: 'Análise IA',
 };
@@ -178,7 +179,7 @@ export const UserManagement: React.FC = () => {
       if (empresaModulos?.length) {
         setTenantModulos(empresaModulos);
       } else {
-        setTenantModulos(['RDO', 'FVS', 'PROJETOS', 'CONCRETO', 'IA']);
+        setTenantModulos(['RDO', 'FVS', 'PROJETOS', 'CONCRETO', 'IA', 'VISUALIZADOR']);
       }
     } finally {
       setLoading(false);
@@ -371,7 +372,17 @@ export const UserManagement: React.FC = () => {
                   type="checkbox"
                   className="mt-0.5 rounded border-gray-300 text-red-600 focus:ring-red-500"
                   checked={!!caps[item.key]}
-                  onChange={e => onChange({ ...caps, [item.key]: e.target.checked })}
+                  onChange={e => {
+                    const checked = e.target.checked;
+                    const next = { ...caps, [item.key]: checked, modulosPadrao: { ...caps.modulosPadrao } };
+                    if (item.key === 'criarEditarRdo') {
+                      if (checked && next.modulosPadrao.RDO !== 'VIEW_APPROVED' && next.modulosPadrao.RDO !== 'VIEW_PARTIAL_APPROVED') {
+                        next.modulosPadrao.RDO = 'EDIT';
+                      }
+                      if (!checked && next.modulosPadrao.RDO === 'EDIT') next.modulosPadrao.RDO = 'VIEW';
+                    }
+                    onChange(next);
+                  }}
                 />
                 <span>
                   <span className="block text-sm font-semibold text-gray-800">{item.label}</span>
@@ -409,10 +420,14 @@ export const UserManagement: React.FC = () => {
                     <select
                       className="mt-2 w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white"
                       value={nivel}
-                      onChange={e => onChange({
-                        ...caps,
-                        modulosPadrao: { ...caps.modulosPadrao, [slug]: e.target.value },
-                      })}
+                      onChange={e => {
+                        const nivel = e.target.value;
+                        onChange({
+                          ...caps,
+                          criarEditarRdo: slug === 'RDO' ? nivel === 'EDIT' : caps.criarEditarRdo,
+                          modulosPadrao: { ...caps.modulosPadrao, [slug]: nivel },
+                        });
+                      }}
                     >
                       {slug === 'RDO' ? (
                         <>

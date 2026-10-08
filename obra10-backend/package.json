@@ -56,7 +56,8 @@
     "prisma": "^7.5.0",
     "reflect-metadata": "^0.2.2",
     "resend": "^6.9.4",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "word-extractor": "^1.0.4"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -95,7 +96,9 @@
       "ts"
     ],
     "rootDir": "src",
-    "setupFiles": ["<rootDir>/test-setup.ts"],
+    "setupFiles": [
+      "<rootDir>/test-setup.ts"
+    ],
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"

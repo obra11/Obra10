@@ -23,7 +23,8 @@ export const ModalColaboradorObra: React.FC<ModalColaboradorObraProps> = ({ obra
   const modulosDisponiveis = [
     { slug: 'RDO', nome: 'Diário de Obra (RDO)' },
     { slug: 'FVS', nome: 'Ficha de Verificação (FVS)' },
-    { slug: 'PROJETOS', nome: 'Gestão de Projetos' }
+    { slug: 'PROJETOS', nome: 'Gestão de Projetos' },
+    { slug: 'VISUALIZADOR', nome: 'Visualizador de Arquivos' },
   ];
 
   useEffect(() => {

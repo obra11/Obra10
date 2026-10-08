@@ -1,12 +1,12 @@
 ﻿# ============================================
 # Obra 10 â€” Production Dockerfile
-# Force rebuild: 2026-09-24-dwg-medir-calibrar-2.9.38
+# Force rebuild: 2026-10-08-equipe-menu-aprovacao-2.9.39
 # ============================================
 
 # --- Build stage ---
 FROM node:22-bookworm-slim AS builder
 
-ARG OBRA10_BUILD_ID=2.9.38-20260924
+ARG OBRA10_BUILD_ID=2.9.39-20261008
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 
 # Install build tools for native modules (bcrypt)
@@ -36,7 +36,7 @@ ENV PRISMA_BUILD_PLACEHOLDER=
 # --- Production stage ---
 FROM node:22-bookworm-slim
 
-ARG OBRA10_BUILD_ID=2.9.38-20260924
+ARG OBRA10_BUILD_ID=2.9.39-20261008
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 ENV NODE_ENV=production
 

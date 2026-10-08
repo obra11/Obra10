@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   LogOut, Settings, LayoutDashboard, Users, FileText, ArrowLeft, BarChart2, Loader2,
   Beaker, ClipboardCheck, Home, Package, Calendar, Clock, Layers, Files, ShieldCheck, Heart, BadgeDollarSign,
-  Building2, User, Boxes, Headphones, MoreHorizontal, X
+  Building2, User, Boxes, Headphones, Menu, X, Box
 } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
@@ -19,6 +19,7 @@ const MODULE_ICONS: Record<string, any> = {
   PLANEJAMENTO: Calendar,
   PONTUALIDADE: Clock,
   PROJETOS: Layers,
+  VISUALIZADOR: Box,
   DOCUMENTOS: Files,
   SEGURANCA: ShieldCheck,
   SOCIAL: Heart,
@@ -40,6 +41,7 @@ export const ObraLayout: React.FC = () => {
 
   // Hide bottom nav when the user is inside DiarioDeObra (it has its own floating action bar)
   const isInsideDiario = /\/rdos\/(novo|[a-f0-9-]+)$/i.test(location.pathname);
+  const isInsideVisualizador = /\/visualizador\/?$/i.test(location.pathname);
 
   useEffect(() => {
     setMobileMoreOpen(false);
@@ -144,15 +146,18 @@ export const ObraLayout: React.FC = () => {
 
   const menuItems = [...baseItems, ...moduleItems, ...extraItems, ...footerItems].filter(item => item.visible);
 
-  // Bottom nav: até 4 atalhos + "Mais" (Configurações e o resto ficavam inacessíveis no mobile)
-  const mobilePrimaryItems = menuItems.slice(0, 4);
-  const mobileMoreItems = menuItems.slice(4);
-  const showMobileMore = mobileMoreItems.length > 0 || canOpenConfiguracoes;
+  const painelItem = menuItems.find((item) => /\/dashboard$/.test(item.path) && !item.path.includes('/rdos/'));
+  const diarioItem = menuItems.find((item) => /\/rdos$/.test(item.path));
+  const mobilePrimaryItems = [painelItem, diarioItem].filter((item, index, list): item is NonNullable<typeof item> => !!item && list.indexOf(item) === index);
+  if (mobilePrimaryItems.length < 2) {
+    const extra = menuItems.find((item) => !mobilePrimaryItems.includes(item) && item.name !== 'Configurações');
+    if (extra) mobilePrimaryItems.push(extra);
+  }
 
   // const baseURL = import.meta.env.VITE_API_URL ?? '';
 
   return (
-    <div className="flex min-h-screen bg-lunardeli-gray font-sans">
+    <div className="flex min-h-screen bg-lunardeli-gray font-sans overflow-x-hidden">
       {/* Sidebar Desktop */}
       <aside className="w-64 bg-lunardeli-dark text-white flex-col hidden md:flex shrink-0 shadow-2xl z-10 transition-all duration-300">
         
@@ -336,36 +341,20 @@ export const ObraLayout: React.FC = () => {
              </div>
           </div>
           
-          <div className="flex items-center gap-1">
-            {canOpenConfiguracoes && (
-              <button
-                onClick={() => navigate(`/obras/${obraAtiva?.id}/configuracoes`)}
-                title="Configurações da obra"
-                className={`p-2.5 rounded-lg shrink-0 active:bg-gray-100 ${
-                  location.pathname.includes('/configuracoes')
-                    ? 'text-lunardeli-red bg-red-50'
-                    : 'text-gray-500 hover:text-lunardeli-red'
-                }`}
-              >
-                <Settings size={20} />
-              </button>
-            )}
-            <button onClick={() => navigate('/perfil')} title="Ver Perfil" className="relative flex items-center justify-center w-9 h-9 rounded-full overflow-hidden bg-gray-100 border border-gray-300 shrink-0">
-               {user?.fotoUrl ? (
-                 <img src={getImageUrl(user.fotoUrl)} alt="Meu Perfil" className="w-full h-full object-cover" />
-               ) : (
-                 <span className="text-xs font-bold text-gray-600">{user?.nome?.charAt(0).toUpperCase()}</span>
-               )}
-            </button>
-            <button onClick={handleLogout} className="text-gray-500 hover:text-lunardeli-red p-2.5 shrink-0 active:bg-gray-100 rounded-lg">
-              <LogOut size={20} />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setMobileMoreOpen(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-gray-700 active:bg-gray-100 shrink-0"
+            aria-label="Abrir menu da obra"
+          >
+            <Menu size={22} />
+            <span className="text-sm font-semibold">Menu</span>
+          </button>
         </header>
 
         {/* Dynamic Nested Content — add bottom padding on mobile for bottom nav */}
-        <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)] md:pb-0">
-          <div className={`md:pb-0 ${isInsideDiario ? 'pb-0' : 'pb-20'}`}>
+        <div className={`flex-1 pb-[env(safe-area-inset-bottom)] md:pb-0 ${isInsideVisualizador ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+          <div className={`md:pb-0 ${isInsideDiario || isInsideVisualizador ? 'h-full pb-0' : 'pb-20'}`}>
             <Outlet />
           </div>
         </div>
@@ -373,7 +362,7 @@ export const ObraLayout: React.FC = () => {
 
       {/* ═══ Bottom Navigation Bar — Mobile Only ═══ */}
       {/* Hidden when inside DiarioDeObra since it has its own floating action bar */}
-      {!isInsideDiario && (
+      {!isInsideDiario && !isInsideVisualizador && (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           <div className="flex items-center justify-around h-16 px-1">
             {mobilePrimaryItems.map(item => {
@@ -396,19 +385,16 @@ export const ObraLayout: React.FC = () => {
                 </button>
               );
             })}
-            {showMobileMore && (
-              <button
-                onClick={() => setMobileMoreOpen(true)}
-                className={`flex flex-col items-center justify-center flex-1 h-full min-w-0 relative transition-colors ${
-                  mobileMoreOpen || mobileMoreItems.some(i => location.pathname.startsWith(i.path))
-                    ? 'text-lunardeli-red'
-                    : 'text-gray-400'
-                }`}
-              >
-                <MoreHorizontal size={22} strokeWidth={1.8} className="shrink-0" />
-                <span className="text-[10px] mt-0.5 leading-tight font-medium">Mais</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setMobileMoreOpen(true)}
+              className={`flex flex-col items-center justify-center flex-1 h-full min-w-0 relative transition-colors ${
+                mobileMoreOpen ? 'text-lunardeli-red' : 'text-gray-400'
+              }`}
+            >
+              <Menu size={22} strokeWidth={1.8} className="shrink-0" />
+              <span className="text-[10px] mt-0.5 leading-tight font-medium">Menu</span>
+            </button>
           </div>
         </nav>
       )}
@@ -427,7 +413,7 @@ export const ObraLayout: React.FC = () => {
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <h2 className="text-sm font-bold text-gray-900">Mais opções</h2>
+              <h2 className="text-sm font-bold text-gray-900">Menu da obra</h2>
               <button
                 type="button"
                 onClick={() => setMobileMoreOpen(false)}
@@ -437,10 +423,7 @@ export const ObraLayout: React.FC = () => {
               </button>
             </div>
             <div className="p-2 pb-4">
-              {(mobileMoreItems.length > 0
-                ? mobileMoreItems
-                : menuItems.filter(i => i.name === 'Configurações')
-              ).map(item => {
+              {menuItems.map(item => {
                 const isActive = location.pathname.startsWith(item.path);
                 return (
                   <button
@@ -461,6 +444,18 @@ export const ObraLayout: React.FC = () => {
                   </button>
                 );
               })}
+              <div className="my-2 border-t border-gray-100" />
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMoreOpen(false);
+                  navigate('/perfil');
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left text-gray-800 active:bg-gray-50"
+              >
+                <User size={20} className="shrink-0" />
+                <span className="text-sm font-medium">Perfil</span>
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -470,13 +465,24 @@ export const ObraLayout: React.FC = () => {
                 className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left text-gray-800 active:bg-gray-50"
               >
                 <Headphones size={20} className="shrink-0" />
-                <span className="text-sm font-medium">Central de Suporte</span>
+                <span className="text-sm font-medium">Suporte</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMoreOpen(false);
+                  handleLogout();
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left text-gray-800 active:bg-gray-50"
+              >
+                <LogOut size={20} className="shrink-0" />
+                <span className="text-sm font-medium">Sair</span>
               </button>
             </div>
           </div>
         </div>
       )}
-      <LunaWidget />
+      <LunaWidget clearance={isInsideVisualizador ? 0 : 96} />
     </div>
   );
 };

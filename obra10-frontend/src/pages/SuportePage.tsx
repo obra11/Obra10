@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
+  Copy,
   Headphones,
   Loader2,
   MessageCircle,
@@ -13,6 +14,12 @@ import {
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { CHAMADO_CATEGORIAS, SUPPORT_FAQ } from '../data/supportFaq';
+import {
+  MCP_CLIENT_STEPS,
+  MCP_CONNECT_GUIDE,
+  MCP_TOKEN_CURL,
+  MCP_URL,
+} from '../data/mcpConnect';
 import {
   buildSupportWhatsAppMessage,
   openSupportWhatsApp,
@@ -80,6 +87,17 @@ export const SuportePage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const copiar = async (label: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(label);
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      setCopied(null);
+    }
+  };
 
   const empresaNome =
     empresa?.nomeFantasia || empresa?.razaoSocial || 'Minha empresa';
@@ -262,6 +280,52 @@ export const SuportePage: React.FC = () => {
         )}
 
         {tab === 'faq' && (
+          <>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-lunardeli-red mb-1">
+              Integração
+            </p>
+            <h2 className="text-lg font-bold text-lunardeli-dark mb-2">
+              ChatGPT, Claude e Gemini (MCP)
+            </h2>
+            <p className="text-sm text-gray-600 mb-3">
+              Servidor remoto só de leitura, com o mesmo login do Obra 10. A empresa sai do token — não cruza construtora.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2 mb-4">
+              <code className="flex-1 text-xs bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 break-all">
+                {MCP_URL}
+              </code>
+              <button
+                type="button"
+                onClick={() => copiar('url', MCP_URL)}
+                className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-semibold text-gray-700 hover:border-lunardeli-red/40"
+              >
+                <Copy size={14} /> {copied === 'url' ? 'Copiado' : 'Copiar URL'}
+              </button>
+              <button
+                type="button"
+                onClick={() => copiar('curl', MCP_TOKEN_CURL)}
+                className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-semibold text-gray-700 hover:border-lunardeli-red/40"
+              >
+                <Copy size={14} /> {copied === 'curl' ? 'Copiado' : 'Copiar curl do token'}
+              </button>
+            </div>
+            <ul className="space-y-3">
+              {MCP_CLIENT_STEPS.map((step) => (
+                <li key={step.id}>
+                  <p className="text-sm font-bold text-lunardeli-dark">{step.title}</p>
+                  <p className="text-sm text-gray-600 leading-relaxed">{step.body}</p>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={() => copiar('guia', MCP_CONNECT_GUIDE)}
+              className="mt-4 text-sm font-semibold text-lunardeli-red"
+            >
+              {copied === 'guia' ? 'Guia copiado' : 'Copiar o guia completo'}
+            </button>
+          </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100 overflow-hidden">
             {SUPPORT_FAQ.map((item) => {
               const open = faqOpen === item.id;
@@ -287,7 +351,7 @@ export const SuportePage: React.FC = () => {
                     )}
                   </button>
                   {open && (
-                    <div className="px-5 pb-4 text-sm text-gray-600 leading-relaxed">
+                    <div className="px-5 pb-4 text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
                       {item.resposta}
                     </div>
                   )}
@@ -295,6 +359,7 @@ export const SuportePage: React.FC = () => {
               );
             })}
           </div>
+          </>
         )}
 
         {tab === 'chamados' && (

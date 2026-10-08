@@ -32,6 +32,7 @@ import { FeatureModule } from './modules/feature/feature.module';
 import { CatalogoModule } from './modules/catalogo/catalogo.module';
 import { ContatoModule } from './modules/contato/contato.module';
 import { SuporteModule } from './modules/suporte/suporte.module';
+import { VisualizadorModule } from './modules/visualizador/visualizador.module';
 import { ApiVersionMiddleware } from './core/middlewares/api-version.middleware';
 
 @Module({
@@ -99,6 +100,7 @@ import { ApiVersionMiddleware } from './core/middlewares/api-version.middleware'
     CatalogoModule,
     SuporteModule,
     ContatoModule,
+    VisualizadorModule,
   ],
   controllers: [AppController],
   providers: [
@@ -115,6 +117,7 @@ export class AppModule implements NestModule {
       .exclude(
         { path: 'auth/login', method: RequestMethod.POST },
         { path: 'auth/token', method: RequestMethod.POST },
+        { path: 'auth/token', method: RequestMethod.OPTIONS },
         { path: 'auth/esqueci-senha', method: RequestMethod.POST },
         { path: 'auth/redefinir-senha', method: RequestMethod.POST },
         { path: 'tenants/register', method: RequestMethod.POST },
@@ -122,6 +125,8 @@ export class AppModule implements NestModule {
         { path: 'cobrancas/webhook/asaas', method: RequestMethod.POST },
         { path: 'mcp', method: RequestMethod.POST },
         { path: 'mcp', method: RequestMethod.GET },
+        { path: 'mcp', method: RequestMethod.DELETE },
+        { path: 'mcp', method: RequestMethod.OPTIONS },
       )
       .forRoutes('*');
 

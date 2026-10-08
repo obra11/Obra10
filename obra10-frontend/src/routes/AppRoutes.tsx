@@ -27,6 +27,7 @@ import { Assinatura } from '../pages/Assinatura';
 import { Efetivo } from '../pages/obras/Efetivo';
 import { Perfil } from '../pages/Perfil';
 import { Configuracoes } from '../pages/obras/Configuracoes';
+import { Visualizador } from '../pages/obras/Visualizador';
 import { CatalogoPage } from '../pages/CatalogoPage';
 
 import { AdminRoute } from './AdminRoute';
@@ -115,6 +116,7 @@ export const AppRoutes: React.FC = () => {
         <Route path="rdos/dashboard" element={<RdoDashboard />} />
         <Route path="efetivo" element={<Efetivo />} />
         <Route path="configuracoes" element={<Configuracoes />} />
+        <Route path="visualizador" element={<Visualizador />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

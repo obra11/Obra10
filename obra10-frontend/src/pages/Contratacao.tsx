@@ -44,13 +44,14 @@ interface CupomValidado {
   descricao: string;
 }
 
-const GRUPO_ORDER = ['Operacional', 'Qualidade', 'Gestão', 'Pessoas', 'GERAL'];
+const GRUPO_ORDER = ['Operacional', 'Qualidade', 'Gestão', 'Pessoas', 'Desenvolvimento', 'GERAL'];
 
 const GRUPO_COLORS: Record<string, string> = {
   'Operacional': 'bg-blue-50 text-blue-700 border-blue-200',
   'Qualidade':   'bg-green-50 text-green-700 border-green-200',
   'Gestão':      'bg-purple-50 text-purple-700 border-purple-200',
   'Pessoas':     'bg-orange-50 text-orange-700 border-orange-200',
+  'Desenvolvimento': 'bg-red-50 text-red-700 border-red-200',
   'GERAL':       'bg-gray-50 text-gray-700 border-gray-200',
 };
 

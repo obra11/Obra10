@@ -25,6 +25,9 @@ const PERGUNTAS = [
   'desde o início, quantos diários aprovados?',
   'em todas as obras, quantos RDOs até hoje?',
   'pesquise online o que é NBR 6118',
+  'e na outra obra, choveu em agosto?',
+  'como eu abro Relatórios de todas as obras?',
+  'quem está na equipe?',
 ];
 
 /** Pergunta de isolamento: obra de outra empresa não deve vazar dados. */
@@ -130,6 +133,12 @@ async function main() {
       status = 'FAIL';
     }
     if (/obras ativas/i.test(message) && /Acme|Drunn|Complexo Comercial Delta/i.test(reply)) {
+      status = 'FAIL';
+    }
+    if (
+      /relatórios de todas as obras/i.test(message) &&
+      !/\/relatorios/i.test(reply)
+    ) {
       status = 'FAIL';
     }
 

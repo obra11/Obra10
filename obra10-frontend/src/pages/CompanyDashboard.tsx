@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useAuth, type Obra } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List, Headphones, FileText } from 'lucide-react';
+import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List, Headphones, FileText, Menu, X } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
 import {
@@ -26,6 +26,7 @@ export const CompanyDashboard: React.FC = () => {
     user?.capabilities?.gerenciarFinanceiro === true || isGestor;
   const canCriarObra =
     user?.capabilities?.criarObra === true || isGestor;
+  const [menuContaAberto, setMenuContaAberto] = useState(false);
   const [showNovoModal, setShowNovoModal] = useState(false);
   const [novaObra, setNovaObra] = useState({ nome: '', endereco: '' });
   const [loadingCriar, setLoadingCriar] = useState(false);
@@ -168,12 +169,22 @@ export const CompanyDashboard: React.FC = () => {
 
   // const baseURL = import.meta.env.VITE_API_URL ?? '';
 
+  const opcoesConta: { label: string; icon: typeof FileText; onClick: () => void; visible: boolean }[] = [
+    { label: 'Relatórios', icon: FileText, onClick: () => navigate('/relatorios'), visible: true },
+    { label: 'Cadastro Base', icon: Boxes, onClick: () => navigate('/catalogo'), visible: true },
+    { label: 'Equipe', icon: Users, onClick: () => navigate('/gestor/usuarios'), visible: canManageUsers },
+    { label: 'Meu Plano', icon: Building2, onClick: () => navigate('/assinatura'), visible: canManageFinanceiro },
+    { label: 'Suporte', icon: Headphones, onClick: () => navigate('/suporte'), visible: true },
+    { label: 'Perfil', icon: User, onClick: () => navigate('/perfil'), visible: true },
+    { label: 'Sair', icon: LogOut, onClick: handleLogout, visible: true },
+  ];
+
   return (
-    <div className="min-h-screen bg-lunardeli-gray">
+    <div className="min-h-screen bg-lunardeli-gray overflow-x-hidden">
       {/* Header Construtora */}
       <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 md:h-20 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 md:h-20 flex items-center justify-between gap-3">
+          <div className="flex items-center space-x-4 min-w-0">
             <div className="relative flex-shrink-0">
               {canManageEmpresa ? (
                 <label title="Alterar Logotipo da Empresa" className="relative cursor-pointer group flex items-center justify-center h-12 w-12 sm:w-auto sm:max-w-[150px] rounded overflow-hidden transition-all hover:ring-2 hover:ring-lunardeli-red shrink-0">
@@ -244,10 +255,10 @@ export const CompanyDashboard: React.FC = () => {
             </div>
           </div>
           
-          <div className="flex items-center space-x-2 sm:space-x-6">
+          <div className="flex items-center gap-2 md:gap-6 shrink-0">
             
             {/* User Profile Area */}
-            <div className="flex items-center gap-3 mr-1 sm:mr-4 border-r pr-1 sm:pr-4 border-gray-200">
+            <div className="flex items-center gap-3 md:mr-4 md:border-r md:pr-4 border-gray-200">
               <div className="text-right hidden sm:block">
                  <p className="text-sm font-bold text-gray-800 leading-tight">{user?.nome}</p>
                  <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">{user?.perfilGlobal}</p>
@@ -275,34 +286,71 @@ export const CompanyDashboard: React.FC = () => {
                 <input type="file" className="hidden" accept="image/*" onChange={handleUserPhotoUpload} />
               </label>
             </div>
-            <button onClick={() => navigate('/relatorios')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Relatórios">
-              <FileText size={18} className="sm:mr-2 text-lunardeli-red" /> <span className="hidden sm:inline">Relatórios</span>
-            </button>
-            <button onClick={() => navigate('/catalogo')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Cadastro Base">
-              <Boxes size={18} className="sm:mr-2 text-lunardeli-red" /> <span className="hidden sm:inline">Cadastro Base</span>
-            </button>
-            {canManageUsers && (
-              <button onClick={() => navigate('/gestor/usuarios')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Equipe">
-                <Users size={18} className="sm:mr-2" /> <span className="hidden sm:inline">Equipe</span>
-              </button>
-            )}
-            {canManageFinanceiro && (
-              <button onClick={() => navigate('/assinatura')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Meu Plano">
-                <Building2 size={18} className="sm:mr-2" /> <span className="hidden sm:inline">Meu Plano</span>
-              </button>
-            )}
-            <button onClick={() => navigate('/suporte')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Central de Suporte">
-              <Headphones size={18} className="sm:mr-2" /> <span className="hidden sm:inline">Suporte</span>
-            </button>
-            <button onClick={() => navigate('/perfil')} className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors" title="Meu Perfil">
-              <User size={18} className="sm:mr-2" /> <span className="hidden sm:inline">Perfil</span>
-            </button>
-            <button onClick={handleLogout} className="flex items-center text-gray-500 hover:text-lunardeli-red font-medium transition-colors" title="Sair">
-              <LogOut size={18} className="sm:mr-2" /> <span className="hidden sm:inline">Sair</span>
+            <div className="hidden lg:flex items-center gap-6">
+              {opcoesConta.filter((opcao) => opcao.visible).map((opcao) => (
+                <button
+                  key={opcao.label}
+                  onClick={opcao.onClick}
+                  className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors"
+                  title={opcao.label}
+                >
+                  <opcao.icon size={18} className="mr-2" />
+                  {opcao.label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setMenuContaAberto(true)}
+              className="lg:hidden inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-gray-700 active:bg-gray-100"
+              aria-label="Abrir menu"
+            >
+              <Menu size={22} />
+              <span className="text-sm font-semibold">Menu</span>
             </button>
           </div>
         </div>
       </header>
+
+      {menuContaAberto && (
+        <div className="lg:hidden fixed inset-0 z-50">
+          <button
+            type="button"
+            aria-label="Fechar menu"
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setMenuContaAberto(false)}
+          />
+          <div className="absolute top-16 left-3 right-3 bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <p className="text-sm font-bold text-lunardeli-dark">{user?.nome}</p>
+              <button
+                type="button"
+                onClick={() => setMenuContaAberto(false)}
+                className="p-2 text-gray-500 active:bg-gray-100 rounded-lg"
+                aria-label="Fechar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-2">
+              {opcoesConta.filter((opcao) => opcao.visible).map((opcao) => (
+                <button
+                  key={opcao.label}
+                  type="button"
+                  onClick={() => {
+                    setMenuContaAberto(false);
+                    opcao.onClick();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left text-gray-800 active:bg-gray-50"
+                >
+                  <opcao.icon size={20} className="shrink-0 text-lunardeli-red" />
+                  <span className="text-sm font-medium">{opcao.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Banner de Cobranças Pendentes */}
       {cobrancasPendentes.length > 0 && !bannerDismissed && (

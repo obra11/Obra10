@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { perfilGlobalToObraNomeInterno } from '../../core/capabilities/obra-perfil';
 import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
-import { mergePermissoesObra } from '../../core/capabilities/role-capabilities';
+import { mergePermissoesObra, podeReceberAprovacao } from '../../core/capabilities/role-capabilities';
 
 const JANELA_DIAS_PROBLEMAS = 30;
 const MAX_PROBLEMAS_PAINEL = 8;
@@ -372,6 +372,65 @@ export class ObraService {
       });
     }
     return result;
+  }
+
+  /** Pessoas que podem receber o diário para aprovação nesta obra. */
+  async listarAprovadores(obraId: string, empresaId: string) {
+    const obra = await this.prisma.obra.findFirst({
+      where: { id: obraId, empresaId },
+      select: { id: true },
+    });
+    if (!obra) throw new Error('Obra não encontrada');
+
+    const [usuarios, vinculos] = await Promise.all([
+      this.prisma.usuario.findMany({
+        where: { empresaId, deletedAt: null },
+        select: {
+          id: true,
+          nome: true,
+          email: true,
+          perfilGlobal: true,
+          capabilities: true,
+        },
+        orderBy: { nome: 'asc' },
+      }),
+      this.prisma.userObraRole.findMany({
+        where: { obraId },
+        select: { usuarioId: true },
+      }),
+    ]);
+    const naObra = new Set(vinculos.map((v) => v.usuarioId));
+
+    const aprovadores: {
+      id: string;
+      nome: string;
+      email: string;
+      perfilGlobal: string;
+    }[] = [];
+    for (const usuario of usuarios) {
+      const caps = await this.capabilities.resolveForUser({
+        empresaId,
+        perfilGlobal: usuario.perfilGlobal,
+        capabilitiesOverride: usuario.capabilities,
+      });
+      if (
+        !podeReceberAprovacao({
+          perfilGlobal: usuario.perfilGlobal,
+          aprovarRdo: caps.aprovarRdo,
+          acessoTodasObras: caps.acessoTodasObras,
+          vinculadoAObra: naObra.has(usuario.id),
+        })
+      ) {
+        continue;
+      }
+      aprovadores.push({
+        id: usuario.id,
+        nome: usuario.nome,
+        email: usuario.email,
+        perfilGlobal: usuario.perfilGlobal,
+      });
+    }
+    return aprovadores;
   }
 
   async adicionarColaborador(

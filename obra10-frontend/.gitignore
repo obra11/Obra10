@@ -10,6 +10,9 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# LibreDWG publica o glue em uma pasta chamada dist. Não é saída do Vite.
+!public/viewer/vendor/libredwg/dist/
+!public/viewer/vendor/libredwg/dist/**
 *.local
 
 # Editor directories and files
