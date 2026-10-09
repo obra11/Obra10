@@ -2,6 +2,7 @@ import { Controller, Post, Body, Param, Req, Res, Headers, UseGuards } from '@ne
 import type { Response } from 'express';
 import { AiService } from './ai.service';
 import { LunaAgentService } from './luna-agent.service';
+import { LunaAcoesService } from './luna-acoes.service';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { ObraContextGuard } from '../../core/guards/obra-context.guard';
 
@@ -11,6 +12,7 @@ export class AiController {
   constructor(
     private readonly aiService: AiService,
     private readonly luna: LunaAgentService,
+    private readonly acoes: LunaAcoesService,
   ) {}
 
   /**
@@ -72,7 +74,7 @@ export class AiController {
     @Req() req: any,
     @Headers('x-obra-id') obraIdHeader?: string,
   ) {
-    const reply = await this.luna.chat(
+    const result = await this.luna.chat(
       {
         userId: req.user.sub || req.user.id,
         empresaId: req.user.empresaId,
@@ -82,7 +84,31 @@ export class AiController {
       body.history || [],
       obraIdHeader || null,
     );
-    return { reply };
+    return { reply: result.reply, ...(result.acao ? { acao: result.acao } : {}) };
+  }
+
+  @Post('ai/acoes/:id/confirmar')
+  async confirmarAcao(@Param('id') id: string, @Req() req: any) {
+    return this.acoes.confirmar(
+      {
+        userId: req.user.sub || req.user.id,
+        empresaId: req.user.empresaId,
+        perfilGlobal: req.user.perfilGlobal,
+      },
+      id,
+    );
+  }
+
+  @Post('ai/acoes/:id/cancelar')
+  async cancelarAcao(@Param('id') id: string, @Req() req: any) {
+    return this.acoes.cancelar(
+      {
+        userId: req.user.sub || req.user.id,
+        empresaId: req.user.empresaId,
+        perfilGlobal: req.user.perfilGlobal,
+      },
+      id,
+    );
   }
 
   /** POST /ai/chat/stream — SSE (delta/done) para o widget da Luna. */

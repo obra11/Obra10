@@ -6,7 +6,9 @@ describe('Luna assessora (persona + escopo empresa)', () => {
     expect(LUNA_SYSTEM_PROMPT).toContain('EMPRESA INTEIRA');
     expect(LUNA_SYSTEM_PROMPT).toContain('ajuda_obra10');
     expect(LUNA_SYSTEM_PROMPT).toMatch(/não limite|não uma prisão|listar_obras/i);
-    expect(LUNA_SYSTEM_PROMPT).toMatch(/NÃO cria/);
+    expect(LUNA_SYSTEM_PROMPT).toMatch(/propor_ajuste/);
+    expect(LUNA_SYSTEM_PROMPT).toMatch(/não grava nada sozinha/i);
+    expect(LUNA_SYSTEM_PROMPT).toContain('buscar_no_aplicativo');
   });
 
   it('trata a obra do header só como tela atual', () => {

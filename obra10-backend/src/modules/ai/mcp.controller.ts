@@ -158,7 +158,9 @@ export class McpController {
           jsonrpc: '2.0',
           id,
           result: {
-            tools: LUNA_TOOL_DEFS.filter((t) => t.name !== 'perguntar_luna').map(
+            tools: LUNA_TOOL_DEFS.filter(
+              (t) => t.name !== 'perguntar_luna' && t.name !== 'propor_ajuste',
+            ).map(
               (t) => ({
                 name: t.name,
                 description: t.description,
@@ -170,7 +172,7 @@ export class McpController {
       }
       if (method === 'tools/call') {
         const name = String(params?.name || '');
-        if (!name || name === 'perguntar_luna') {
+        if (!name || name === 'perguntar_luna' || name === 'propor_ajuste') {
           return {
             jsonrpc: '2.0',
             id,

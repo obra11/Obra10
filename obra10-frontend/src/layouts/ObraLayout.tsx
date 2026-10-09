@@ -8,8 +8,6 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
-import { LunaWidget } from '../components/LunaWidget';
-
 const MODULE_ICONS: Record<string, any> = {
   RDO: FileText,
   CTRL_TEC: Beaker,
@@ -482,7 +480,6 @@ export const ObraLayout: React.FC = () => {
           </div>
         </div>
       )}
-      <LunaWidget clearance={isInsideVisualizador ? 0 : 96} />
     </div>
   );
 };

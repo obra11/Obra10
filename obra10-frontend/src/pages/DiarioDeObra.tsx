@@ -102,6 +102,113 @@ interface SavedFile {
   nomeOriginal: string;
   urlS3: string;
   mimeType: string;
+  createdAt?: string;
+  offlineOrigem?: string;
+}
+
+type BaldeMidia = 'fotos' | 'videos' | 'anexos';
+type OrdemMidia = Record<BaldeMidia, string[]>;
+
+const ORDEM_MIDIA_VAZIA: OrdemMidia = { fotos: [], videos: [], anexos: [] };
+
+function chavePendente(id: string) {
+  return `p:${id}`;
+}
+function chaveSalva(id: string) {
+  return `s:${id}`;
+}
+function normalizarOrdemMidia(raw: any): OrdemMidia {
+  const lista = (valor: any) =>
+    Array.isArray(valor) ? valor.filter((item) => typeof item === 'string') : [];
+  return {
+    fotos: lista(raw?.fotos),
+    videos: lista(raw?.videos),
+    anexos: lista(raw?.anexos),
+  };
+}
+function mesmaOrdem(a: string[], b: string[]) {
+  return a.length === b.length && a.every((item, i) => item === b[i]);
+}
+function baldeDaMidia(mime?: string | null): BaldeMidia {
+  if (mime?.startsWith('image/')) return 'fotos';
+  if (mime?.startsWith('video/')) return 'videos';
+  return 'anexos';
+}
+function encaixarOrdem(atual: string[], pendentes: { offlineId?: string }[], salvos: SavedFile[]) {
+  const chaveDe = (item: { offlineId?: string }, index: number) =>
+    item.offlineId ? chavePendente(item.offlineId) : `m:${index}`;
+  const vivos = new Set<string>([
+    ...pendentes.map(chaveDe),
+    ...salvos.map((item) => chaveSalva(item.id)),
+  ]);
+  const mantidas = atual.filter((chave) => vivos.has(chave));
+  const presentes = new Set(mantidas);
+  const faltamPendentes = pendentes.map(chaveDe).filter((chave) => !presentes.has(chave));
+  const tempo = (item: SavedFile) => {
+    const valor = Date.parse(item.createdAt || '');
+    return Number.isNaN(valor) ? 0 : valor;
+  };
+  const faltamSalvos = [...salvos]
+    .sort((a, b) => tempo(b) - tempo(a))
+    .map((item) => chaveSalva(item.id))
+    .filter((chave) => !presentes.has(chave));
+  return [...faltamPendentes, ...mantidas, ...faltamSalvos];
+}
+function moverNaOrdem(lista: string[], chave: string, direcao: -1 | 1) {
+  const origem = lista.indexOf(chave);
+  const destino = origem + direcao;
+  if (origem < 0 || destino < 0 || destino >= lista.length) return lista;
+  const proxima = lista.slice();
+  const [item] = proxima.splice(origem, 1);
+  proxima.splice(destino, 0, item);
+  return proxima;
+}
+function substituirChaveMidia(ordem: OrdemMidia, de: string, para: string, balde: BaldeMidia): OrdemMidia {
+  const trocar = (lista: string[]) => lista.map((chave) => (chave === de ? para : chave));
+  for (const nome of ['fotos', 'videos', 'anexos'] as BaldeMidia[]) {
+    if (!ordem[nome].includes(de)) continue;
+    const lista = trocar(ordem[nome]);
+    return { ...ordem, [nome]: lista.includes(para) ? lista.filter((chave, i) => chave !== para || lista.indexOf(para) === i) : lista };
+  }
+  if (ordem[balde].includes(para)) return ordem;
+  return { ...ordem, [balde]: [para, ...ordem[balde]] };
+}
+
+function BotoesOrdem({
+  primeiro,
+  ultimo,
+  subir,
+  descer,
+}: {
+  primeiro: boolean;
+  ultimo: boolean;
+  subir: () => void;
+  descer: () => void;
+}) {
+  return (
+    <div className="flex flex-col shrink-0">
+      <button
+        type="button"
+        disabled={primeiro}
+        onClick={subir}
+        className="p-0.5 text-gray-500 disabled:opacity-25"
+        aria-label="Mover para cima"
+        title="Mover para cima"
+      >
+        <ChevronUp size={14} />
+      </button>
+      <button
+        type="button"
+        disabled={ultimo}
+        onClick={descer}
+        className="p-0.5 text-gray-500 disabled:opacity-25"
+        aria-label="Mover para baixo"
+        title="Mover para baixo"
+      >
+        <ChevronDown size={14} />
+      </button>
+    </div>
+  );
 }
 
 interface AtividadeExecutadaItem {
@@ -489,6 +596,7 @@ export const DiarioDeObra: React.FC = () => {
           setObservacoes(parseObservacoes(extras.observacoes || extras.observacoesGerais));
           setAprovadorIdSelecionado(rdo.aprovadorId || '');
           setSavedFiles(rdo.anexos || []);
+          setOrdemMidia(normalizarOrdemMidia(extras.ordemMidia));
 
           // Mapear status do backend para status do componente
           const statusMap: Record<string, RdoStatus> = {
@@ -522,6 +630,7 @@ export const DiarioDeObra: React.FC = () => {
               setAtividadesPendentes(parseAtividadesPendentes(le.atividadesPendentes));
               setObservacoes(parseObservacoes(le.observacoes || le.observacoesGerais));
               if (local.aprovadorId) setAprovadorIdSelecionado(local.aprovadorId);
+              if (le.ordemMidia) setOrdemMidia(normalizarOrdemMidia(le.ordemMidia));
               setDraftPendingSync(true);
               setLastLocalSaveAt(local.updatedAt);
             }
@@ -554,6 +663,7 @@ export const DiarioDeObra: React.FC = () => {
               setAtividadesPendentes(parseAtividadesPendentes(le.atividadesPendentes));
               setObservacoes(parseObservacoes(le.observacoes || le.observacoesGerais));
               if (local.aprovadorId) setAprovadorIdSelecionado(local.aprovadorId);
+              if (le.ordemMidia) setOrdemMidia(normalizarOrdemMidia(le.ordemMidia));
               if (local.rdoNumberStr) setRdoNumberStr(local.rdoNumberStr);
               if (local.nomeObra) setNomeObra(local.nomeObra);
               setDraftPendingSync(!!local.pendingSync);
@@ -594,6 +704,7 @@ export const DiarioDeObra: React.FC = () => {
             setAtividadesPendentes(parseAtividadesPendentes(le.atividadesPendentes));
             setObservacoes(parseObservacoes(le.observacoes || le.observacoesGerais));
             if (local.aprovadorId) setAprovadorIdSelecionado(local.aprovadorId);
+            if (le.ordemMidia) setOrdemMidia(normalizarOrdemMidia(le.ordemMidia));
             if (local.rdoNumberStr) setRdoNumberStr(local.rdoNumberStr);
             if (local.nomeObra) setNomeObra(local.nomeObra);
             if (local.tempId) tempRdoId.current = local.tempId;
@@ -649,6 +760,9 @@ export const DiarioDeObra: React.FC = () => {
   const [videos, setVideos] = useState<VideoFile[]>([]);
   const [anexos, setAnexos] = useState<Anexo[]>([]);
   const [savedFiles, setSavedFiles] = useState<SavedFile[]>([]);
+  const [ordemMidia, setOrdemMidia] = useState<OrdemMidia>(ORDEM_MIDIA_VAZIA);
+  const fotoListaRef = useRef<HTMLDivElement>(null);
+  const fotosAntesRef = useRef(0);
   const fotosRef = useRef(fotos);
   const videosRef = useRef(videos);
   const anexosRef = useRef(anexos);
@@ -656,6 +770,42 @@ export const DiarioDeObra: React.FC = () => {
   videosRef.current = videos;
   anexosRef.current = anexos;
   rdoIdAtualRef.current = rdoIdAtual;
+
+  const fotosSalvas = savedFiles.filter((item) => item.mimeType?.startsWith('image/'));
+  const videosSalvos = savedFiles.filter((item) => item.mimeType?.startsWith('video/'));
+  const anexosSalvos = savedFiles.filter((item) => !item.mimeType?.startsWith('image/') && !item.mimeType?.startsWith('video/'));
+  const ordemFotos = encaixarOrdem(ordemMidia.fotos, fotos, fotosSalvas);
+  const ordemVideos = encaixarOrdem(ordemMidia.videos, videos, videosSalvos);
+  const ordemAnexos = encaixarOrdem(ordemMidia.anexos, anexos, anexosSalvos);
+
+  useEffect(() => {
+    setOrdemMidia((prev) => {
+      const next = {
+        fotos: encaixarOrdem(prev.fotos, fotos, fotosSalvas),
+        videos: encaixarOrdem(prev.videos, videos, videosSalvos),
+        anexos: encaixarOrdem(prev.anexos, anexos, anexosSalvos),
+      };
+      if (mesmaOrdem(prev.fotos, next.fotos) && mesmaOrdem(prev.videos, next.videos) && mesmaOrdem(prev.anexos, next.anexos)) {
+        return prev;
+      }
+      return next;
+    });
+  }, [fotos, videos, anexos, fotosSalvas, videosSalvos, anexosSalvos]);
+
+  useEffect(() => {
+    if (fotos.length > fotosAntesRef.current) {
+      fotoListaRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    fotosAntesRef.current = fotos.length;
+  }, [fotos.length]);
+
+  const moverMidia = (balde: BaldeMidia, chave: string, direcao: -1 | 1) => {
+    setOrdemMidia((prev) => {
+      const base =
+        balde === 'fotos' ? ordemFotos : balde === 'videos' ? ordemVideos : ordemAnexos;
+      return { ...prev, [balde]: moverNaOrdem(base, chave, direcao) };
+    });
+  };
   const fotoCameraInputRef = useRef<HTMLInputElement>(null);
   const fotoGalleryInputRef = useRef<HTMLInputElement>(null);
   const fotoFilesInputRef = useRef<HTMLInputElement>(null);
@@ -764,10 +914,14 @@ export const DiarioDeObra: React.FC = () => {
           });
 
           if (res.data?.anexo) {
+             const anexo = res.data.anexo;
              setSavedFiles(prev => {
-               if (prev.some(a => a.id === res.data.anexo.id)) return prev;
-               return [...prev, res.data.anexo];
+               if (prev.some(a => a.id === anexo.id)) return prev;
+               return [...prev, anexo];
              });
+             setOrdemMidia((prev) =>
+               substituirChaveMidia(prev, chavePendente(item.id), chaveSalva(anexo.id), baldeDaMidia(anexo.mimeType)),
+             );
           }
           await deleteOfflineAttachment(item.id);
           removerPendenteLocal(item.id);
@@ -1058,12 +1212,14 @@ export const DiarioDeObra: React.FC = () => {
     const loadedFotos: Foto[] = [];
     const loadedVideos: VideoFile[] = [];
     const loadedAnexos: Anexo[] = [];
+    const criadoEm = new Map<string, string>();
 
     for (const key of keys) {
       const items = await getOfflineAttachments(key);
       for (const item of items) {
         if (seen.has(item.id)) continue;
         seen.add(item.id);
+        criadoEm.set(item.id, item.criadoEm || '');
         const blob = new Blob([item.dados], { type: item.mimeType });
         const file = new File([blob], item.nomeArquivo, { type: item.mimeType });
         const failed = (item.tentativas || 0) >= 3;
@@ -1100,22 +1256,27 @@ export const DiarioDeObra: React.FC = () => {
       }
     }
 
+    const maisNovaPrimeiro = (a?: string, b?: string) => (b || '').localeCompare(a || '');
+    loadedFotos.sort((a, b) => maisNovaPrimeiro(criadoEm.get(a.offlineId || ''), criadoEm.get(b.offlineId || '')));
+    loadedVideos.sort((a, b) => maisNovaPrimeiro(criadoEm.get(a.offlineId || ''), criadoEm.get(b.offlineId || '')));
+    loadedAnexos.sort((a, b) => maisNovaPrimeiro(criadoEm.get(a.offlineId || ''), criadoEm.get(b.offlineId || '')));
+
     if (loadedFotos.length) {
       setFotos((prev) => {
         const ids = new Set(prev.map((p) => p.offlineId).filter(Boolean));
-        return [...prev, ...loadedFotos.filter((f) => !ids.has(f.offlineId))];
+        return [...loadedFotos.filter((f) => !ids.has(f.offlineId)), ...prev];
       });
     }
     if (loadedVideos.length) {
       setVideos((prev) => {
         const ids = new Set(prev.map((p) => p.offlineId).filter(Boolean));
-        return [...prev, ...loadedVideos.filter((v) => !ids.has(v.offlineId))];
+        return [...loadedVideos.filter((v) => !ids.has(v.offlineId)), ...prev];
       });
     }
     if (loadedAnexos.length) {
       setAnexos((prev) => {
         const ids = new Set(prev.map((p) => p.offlineId).filter(Boolean));
-        return [...prev, ...loadedAnexos.filter((a) => !ids.has(a.offlineId))];
+        return [...loadedAnexos.filter((a) => !ids.has(a.offlineId)), ...prev];
       });
     }
   }, [rdoIdAtual, rdoId]);
@@ -1131,7 +1292,6 @@ export const DiarioDeObra: React.FC = () => {
       const offlineId = await persistMediaFileToIdb(file, 'foto');
       const online = navigator.onLine;
       setFotos((prev) => [
-        ...prev,
         {
           file,
           preview,
@@ -1141,6 +1301,7 @@ export const DiarioDeObra: React.FC = () => {
           isUploading: online,
           uploadFalhou: false,
         },
+        ...prev,
       ]);
     } catch (err) {
       console.error('Erro ao guardar foto no aparelho:', err);
@@ -1269,7 +1430,6 @@ export const DiarioDeObra: React.FC = () => {
         const offlineId = await persistMediaFileToIdb(fileNorm, 'video');
         const online = navigator.onLine;
         setVideos((prev) => [
-          ...prev,
           {
             file: fileNorm,
             legenda: '',
@@ -1278,6 +1438,7 @@ export const DiarioDeObra: React.FC = () => {
             isUploading: online,
             uploadFalhou: false,
           },
+          ...prev,
         ]);
       } catch (err) {
         console.error('Erro ao guardar vídeo no aparelho:', err);
@@ -1333,7 +1494,6 @@ export const DiarioDeObra: React.FC = () => {
         const offlineId = await persistMediaFileToIdb(file, 'anexo');
         const online = navigator.onLine;
         setAnexos((prev) => [
-          ...prev,
           {
             file,
             descricao: '',
@@ -1342,6 +1502,7 @@ export const DiarioDeObra: React.FC = () => {
             isUploading: online,
             uploadFalhou: false,
           },
+          ...prev,
         ]);
       } catch (err) {
         console.error('Erro ao guardar anexo no aparelho:', err);
@@ -1383,6 +1544,15 @@ export const DiarioDeObra: React.FC = () => {
       atividadesExecutadas,
       atividadesPendentes,
       observacoes,
+      ordemMidia: {
+        fotos: encaixarOrdem(ordemMidia.fotos, fotos, savedFiles.filter((item) => item.mimeType?.startsWith('image/'))),
+        videos: encaixarOrdem(ordemMidia.videos, videos, savedFiles.filter((item) => item.mimeType?.startsWith('video/'))),
+        anexos: encaixarOrdem(
+          ordemMidia.anexos,
+          anexos,
+          savedFiles.filter((item) => !item.mimeType?.startsWith('image/') && !item.mimeType?.startsWith('video/')),
+        ),
+      },
     };
   };
 
@@ -1411,6 +1581,7 @@ export const DiarioDeObra: React.FC = () => {
     data, dataFim, tipoRelatorio, diasChuva, responsavel, climaManha, climaTarde, climaNoite, tempMin, tempMax,
     pessoas, profissionais, materiais, equipamentos,
     atividadesExecutadas, atividadesPendentes, observacoes,
+    ordemMidia, fotos, videos, anexos, savedFiles,
   ]);
 
   const ensureRdoIdOnServer = async (): Promise<string | null> => {
@@ -1507,6 +1678,7 @@ export const DiarioDeObra: React.FC = () => {
     data, dataFim, tipoRelatorio, diasChuva, responsavel, climaManha, climaTarde, climaNoite, tempMin, tempMax,
     pessoas, profissionais, materiais, equipamentos,
     atividadesExecutadas, atividadesPendentes, observacoes, aprovadorIdSelecionado,
+    ordemMidia, fotos, videos, anexos, savedFiles,
   ]);
 
   // Monitorar conexão e sincronizar rascunhos pendentes
@@ -1742,7 +1914,7 @@ export const DiarioDeObra: React.FC = () => {
             },
           );
           if (res.data?.anexo) {
-            novosAnexos.push(res.data.anexo);
+            novosAnexos.push({ ...res.data.anexo, offlineOrigem: offlineId });
           }
           if (offlineId) {
             try {
@@ -1798,6 +1970,17 @@ export const DiarioDeObra: React.FC = () => {
         const ids = new Set(prev.map((p) => p.id));
         return [...prev, ...novosAnexos.filter((a) => !ids.has(a.id))];
       });
+      setOrdemMidia((prev) =>
+        novosAnexos.reduce((ordem, anexo) => {
+          if (!anexo.offlineOrigem) return ordem;
+          return substituirChaveMidia(
+            ordem,
+            chavePendente(anexo.offlineOrigem),
+            chaveSalva(anexo.id),
+            baldeDaMidia(anexo.mimeType),
+          );
+        }, prev),
+      );
     }
 
     if (successCount > 0) {
@@ -2726,15 +2909,28 @@ export const DiarioDeObra: React.FC = () => {
                        </>
                      )}
                   </div>
-                  <div className="space-y-3">
-                     {/* Saved Fotos */}
-                     {savedFiles.filter(a => a.mimeType?.startsWith('image/')).map((sf) => (
+                  <p className="text-[11px] text-gray-500 -mt-2 mb-3">A mais recente fica no topo. As setas mudam a ordem, e o salvamento guarda.</p>
+                  <div className="space-y-3" ref={fotoListaRef}>
+                     {ordemFotos.map((chave, pos) => {
+                       const setas = !isReadOnly && ordemFotos.length > 1 ? (
+                         <BotoesOrdem
+                           primeiro={pos === 0}
+                           ultimo={pos === ordemFotos.length - 1}
+                           subir={() => moverMidia('fotos', chave, -1)}
+                           descer={() => moverMidia('fotos', chave, 1)}
+                         />
+                       ) : null;
+                       if (chave.startsWith('s:')) {
+                         const sf = fotosSalvas.find((item) => chaveSalva(item.id) === chave);
+                         if (!sf) return null;
+                         return (
                         <div key={sf.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col relative group">
                            <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer">
                               <img src={getFileUrl(sf.urlS3)} alt={sf.nomeOriginal || 'Foto'} className="w-full h-24 object-cover hover:opacity-90 transition-opacity" />
                            </a>
                            <div className="p-2 flex flex-col gap-1.5 bg-green-50 border-t border-gray-100">
                               <div className="flex items-center gap-1.5 w-full">
+                                 {setas}
                                  <input 
                                     className="flex-1 text-xs px-2 py-1 border rounded bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-lunardeli-red" 
                                     placeholder="Legenda..." 
@@ -2755,10 +2951,13 @@ export const DiarioDeObra: React.FC = () => {
                               </div>
                            </div>
                         </div>
-                     ))}
-                     {/* Pending Fotos */}
-                     {fotos.map((f, i) => (
-                        <div key={f.offlineId || i} className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col relative">
+                         );
+                       }
+                       const i = fotos.findIndex((item, index) => (item.offlineId ? chavePendente(item.offlineId) : `m:${index}`) === chave);
+                       const f = fotos[i];
+                       if (!f) return null;
+                       return (
+                        <div key={chave} className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col relative">
                            <img src={f.preview} alt="" className="w-full h-24 object-cover" />
                            {/* Offline badge overlay */}
                            {(f.isOfflinePending || f.isUploading || f.uploadFalhou) && (
@@ -2792,6 +2991,7 @@ export const DiarioDeObra: React.FC = () => {
                               </div>
                            )}
                            <div className="p-2 flex gap-1 items-center bg-gray-50">
+                              {setas}
                               <input className="flex-1 text-xs px-2 py-1 border rounded" placeholder="Legenda..." value={f.legenda} onChange={async e => {
                                   const newVal = e.target.value;
                                   setFotos(prev => prev.map((item, idx) => idx === i ? { ...item, legenda: newVal } : item));
@@ -2811,7 +3011,8 @@ export const DiarioDeObra: React.FC = () => {
                               <button onClick={() => handleDeletePendingFoto(i, f.offlineId)} className="text-red-500 p-1 disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
                            </div>
                         </div>
-                     ))}
+                       );
+                     })}
                      {savedFiles.filter(a => a.mimeType?.startsWith('image/')).length === 0 && fotos.length === 0 && (
                         <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhuma foto</div>
                      )}
@@ -2879,10 +3080,22 @@ export const DiarioDeObra: React.FC = () => {
                      )}
                   </div>
                   <div className="space-y-2">
-                     {/* Saved Videos */}
-                     {savedFiles.filter(a => a.mimeType?.startsWith('video/')).map((sf) => (
+                     {ordemVideos.map((chave, pos) => {
+                       const setas = !isReadOnly && ordemVideos.length > 1 ? (
+                         <BotoesOrdem
+                           primeiro={pos === 0}
+                           ultimo={pos === ordemVideos.length - 1}
+                           subir={() => moverMidia('videos', chave, -1)}
+                           descer={() => moverMidia('videos', chave, 1)}
+                         />
+                       ) : null;
+                       if (chave.startsWith('s:')) {
+                         const sf = videosSalvos.find((item) => chaveSalva(item.id) === chave);
+                         if (!sf) return null;
+                         return (
                         <div key={sf.id} className="bg-white border border-gray-200 p-2 rounded-lg flex flex-col gap-2 bg-green-50/40">
                            <div className="flex items-center justify-between gap-2">
+                              {setas}
                               <div className="flex-1 min-w-0">
                                  <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-blue-600 hover:underline truncate block">
                                     🎥 Visualizar Vídeo
@@ -2907,11 +3120,15 @@ export const DiarioDeObra: React.FC = () => {
                               disabled={isReadOnly} 
                            />
                         </div>
-                     ))}
-                     {/* Pending Videos */}
-                     {videos.map((v, i) => (
-                        <div key={v.offlineId || i} className="bg-white border border-gray-200 p-2 rounded-lg flex flex-col gap-2 relative">
+                         );
+                       }
+                       const i = videos.findIndex((item, index) => (item.offlineId ? chavePendente(item.offlineId) : `m:${index}`) === chave);
+                       const v = videos[i];
+                       if (!v) return null;
+                       return (
+                        <div key={chave} className="bg-white border border-gray-200 p-2 rounded-lg flex flex-col gap-2 relative">
                            <div className="flex items-center justify-between gap-2">
+                              {setas}
                               <div className="flex-1 min-w-0">
                                  <p className="text-xs font-medium truncate">{v.file.name}</p>
                                  <input className="w-full text-xs px-1.5 py-1 border border-gray-100 rounded mt-1 bg-gray-50" placeholder="Legenda..." value={v.legenda} onChange={async e => {
@@ -2954,8 +3171,9 @@ export const DiarioDeObra: React.FC = () => {
                               </div>
                            )}
                         </div>
-                     ))}
-                     {savedFiles.filter(a => a.mimeType?.startsWith('video/')).length === 0 && videos.length === 0 && (
+                       );
+                     })}
+                     {videosSalvos.length === 0 && videos.length === 0 && (
                         <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhum vídeo</div>
                      )}
                   </div>
@@ -2980,10 +3198,22 @@ export const DiarioDeObra: React.FC = () => {
                      <button onClick={() => anexoInputRef.current?.click()} className="text-xs font-semibold text-lunardeli-red hover:underline disabled:opacity-50" disabled={isReadOnly}>+ Upload</button>
                   </div>
                   <div className="space-y-2">
-                     {/* Saved Documentos */}
-                     {savedFiles.filter(a => !a.mimeType?.startsWith('image/') && !a.mimeType?.startsWith('video/')).map((sf) => (
+                     {ordemAnexos.map((chave, pos) => {
+                       const setas = !isReadOnly && ordemAnexos.length > 1 ? (
+                         <BotoesOrdem
+                           primeiro={pos === 0}
+                           ultimo={pos === ordemAnexos.length - 1}
+                           subir={() => moverMidia('anexos', chave, -1)}
+                           descer={() => moverMidia('anexos', chave, 1)}
+                         />
+                       ) : null;
+                       if (chave.startsWith('s:')) {
+                         const sf = anexosSalvos.find((item) => chaveSalva(item.id) === chave);
+                         if (!sf) return null;
+                         return (
                         <div key={sf.id} className="bg-white border border-gray-200 p-2 rounded-lg flex flex-col gap-2 bg-green-50/40">
                            <div className="flex items-center justify-between gap-2">
+                              {setas}
                               <span className="shrink-0 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
                                  {getFileExt(sf.urlS3 || sf.nomeOriginal || 'FILE')}
                               </span>
@@ -3011,11 +3241,15 @@ export const DiarioDeObra: React.FC = () => {
                               disabled={isReadOnly} 
                            />
                         </div>
-                     ))}
-                     {/* Pending Documentos */}
-                     {anexos.map((a, i) => (
-                        <div key={a.offlineId || i} className="bg-white border border-gray-200 p-2 rounded-lg flex flex-col gap-2 relative">
+                         );
+                       }
+                       const i = anexos.findIndex((item, index) => (item.offlineId ? chavePendente(item.offlineId) : `m:${index}`) === chave);
+                       const a = anexos[i];
+                       if (!a) return null;
+                       return (
+                        <div key={chave} className="bg-white border border-gray-200 p-2 rounded-lg flex flex-col gap-2 relative">
                            <div className="flex items-center justify-between gap-2">
+                              {setas}
                               <span className="shrink-0 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">{getFileExt(a.file.name)}</span>
                               <div className="flex-1 min-w-0">
                                  <p className="text-xs font-medium truncate">{a.file.name}</p>
@@ -3059,8 +3293,9 @@ export const DiarioDeObra: React.FC = () => {
                               </div>
                            )}
                         </div>
-                     ))}
-                     {savedFiles.filter(a => !a.mimeType?.startsWith('image/') && !a.mimeType?.startsWith('video/')).length === 0 && anexos.length === 0 && (
+                       );
+                     })}
+                     {anexosSalvos.length === 0 && anexos.length === 0 && (
                         <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhum anexo</div>
                      )}
                   </div>

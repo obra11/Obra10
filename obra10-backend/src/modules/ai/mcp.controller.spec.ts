@@ -66,7 +66,11 @@ describe('MCP HTTP', () => {
       res,
     );
     const names = res.body.result.tools.map((t: { name: string }) => t.name);
-    expect(names).toEqual(LUNA_TOOL_DEFS.map((t) => t.name));
+    expect(names).toEqual(
+      LUNA_TOOL_DEFS.map((t) => t.name).filter((name) => name !== 'propor_ajuste'),
+    );
+    expect(names).not.toContain('propor_ajuste');
+    expect(names).toContain('buscar_no_aplicativo');
     expect(names).toContain('ajuda_obra10');
     expect(names).toContain('listar_obras');
     expect(names).not.toContain('perguntar_luna');

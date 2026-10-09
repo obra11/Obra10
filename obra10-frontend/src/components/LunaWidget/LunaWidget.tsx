@@ -1,9 +1,60 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useLocation } from 'react-router-dom';
 import api from '../../services/api';
+
+const BUTTON = 64;
+const POS_KEY = 'obra10_luna_pos';
+
+type Point = { x: number; y: number };
+
+function readSavedPos(): Point | null {
+  try {
+    const raw = localStorage.getItem(POS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Point;
+    if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') return parsed;
+  } catch { /* ignore */ }
+  return null;
+}
+
+function clampPos(point: Point): Point {
+  const pad = 8;
+  const maxX = Math.max(pad, window.innerWidth - BUTTON - pad);
+  const maxY = Math.max(pad, window.innerHeight - BUTTON - pad);
+  return {
+    x: Math.min(Math.max(pad, point.x), maxX),
+    y: Math.min(Math.max(pad, point.y), maxY),
+  };
+}
+
+function panelFromAnchor(anchor: Point): CSSProperties {
+  const margin = 12;
+  const width = Math.min(380, window.innerWidth - margin * 2);
+  const height = Math.min(560, window.innerHeight - margin * 2);
+  let left = anchor.x + BUTTON - width;
+  if (anchor.x < window.innerWidth / 2) left = anchor.x;
+  left = Math.min(Math.max(margin, left), window.innerWidth - width - margin);
+  let top = anchor.y - height - margin;
+  if (top < margin) top = Math.min(anchor.y + BUTTON + margin, window.innerHeight - height - margin);
+  top = Math.max(margin, top);
+  return { position: 'fixed', left, top, width, height };
+}
+
+interface LunaAcao {
+  id: string;
+  resumo: string;
+  status: 'pendente' | 'feita' | 'cancelada';
+}
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  acao?: LunaAcao;
+}
+
+function acaoDoPayload(raw: any): LunaAcao | undefined {
+  if (!raw?.id) return undefined;
+  return { id: String(raw.id), resumo: String(raw.resumo || ''), status: 'pendente' };
 }
 
 function getSpeechRecognitionCtor(): any | null {
@@ -26,7 +77,8 @@ async function ensureMicrophonePermission(): Promise<'granted' | 'denied' | 'uns
   }
 }
 
-export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
+export default function LunaWidget() {
+  const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -41,6 +93,21 @@ export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
   const [micHint, setMicHint] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+    moved: boolean;
+    latest: Point;
+  } | null>(null);
+  const [pos, setPos] = useState<Point | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const saved = readSavedPos();
+    return saved ? clampPos(saved) : null;
+  });
+  const [dragging, setDragging] = useState(false);
 
   const hasSpeech = !!getSpeechRecognitionCtor();
   const [narrow, setNarrow] = useState(() =>
@@ -55,8 +122,58 @@ export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
     return () => mq.removeEventListener('change', onChange);
   }, []);
 
+  const inObra = /^\/obras\/[^/]+/.test(pathname);
+  const inViewer = /\/visualizador\/?$/i.test(pathname);
+  const clearance = narrow && inObra && !inViewer ? 96 : 0;
   const buttonBottom = narrow ? 12 + clearance : 24;
   const panelBottom = buttonBottom + 76;
+
+  useEffect(() => {
+    const onResize = () => setPos((prev) => (prev ? clampPos(prev) : prev));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const origin = { x: rect.left, y: rect.top };
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: origin.x,
+      originY: origin.y,
+      moved: false,
+      latest: origin,
+    };
+  };
+
+  const onPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (Math.hypot(dx, dy) > 8) drag.moved = true;
+    if (!drag.moved) return;
+    const next = clampPos({ x: drag.originX + dx, y: drag.originY + dy });
+    drag.latest = next;
+    setDragging(true);
+    setPos(next);
+  };
+
+  const finishDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setDragging(false);
+    if (drag.moved) {
+      localStorage.setItem(POS_KEY, JSON.stringify(drag.latest));
+      return;
+    }
+    setOpen((current) => !current);
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -70,6 +187,43 @@ export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
     };
   }, []);
 
+  const responderAcao = async (id: string, confirmar: boolean) => {
+    const xsrf =
+      document.cookie
+        .split('; ')
+        .find((c) => c.startsWith('XSRF-TOKEN='))
+        ?.split('=')[1] || localStorage.getItem('obra10_csrf_token') || '';
+    try {
+    const { data } = await api.post(
+      `/ai/acoes/${id}/${confirmar ? 'confirmar' : 'cancelar'}`,
+      {},
+      { headers: { 'x-xsrf-token': xsrf } },
+    );
+    setMessages((prev) =>
+      prev.map((item) =>
+        item.acao?.id === id
+          ? {
+              ...item,
+              content: confirmar
+                ? `${item.content}\n\n${data?.resumo || 'Ajuste gravado.'}`
+                : item.content,
+              acao: { ...item.acao, status: confirmar ? 'feita' : 'cancelada' },
+            }
+          : item,
+      ),
+    );
+    } catch (err: any) {
+      const detalhe = err?.response?.data?.message || 'Não consegui gravar esse ajuste.';
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.acao?.id === id
+            ? { ...item, content: `${item.content}\n\n${detalhe}` }
+            : item,
+        ),
+      );
+    }
+  };
+
   const sendMessage = async (text: string) => {
     if (!text.trim()) return;
     const userMsg: Message = { role: 'user', content: text };
@@ -79,8 +233,8 @@ export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
     setLoading(true);
     const history = newMessages.slice(0, -1);
 
-    const finishWith = (content: string) => {
-      setMessages([...newMessages, { role: 'assistant', content }]);
+    const finishWith = (content: string, acao?: LunaAcao) => {
+      setMessages([...newMessages, { role: 'assistant', content, ...(acao ? { acao } : {}) }]);
       setLoading(false);
     };
 
@@ -115,7 +269,7 @@ export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
           { message: text, history },
           { timeout: 120000 },
         );
-        finishWith(data.reply || 'Não consegui responder agora.');
+        finishWith(data.reply || 'Não consegui responder agora.', acaoDoPayload(data.acao));
         return;
       }
 
@@ -123,6 +277,7 @@ export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
       const decoder = new TextDecoder();
       let buffer = '';
       let acc = '';
+      let acao: LunaAcao | undefined;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -141,7 +296,10 @@ export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
           if (ev.type === 'delta' && ev.text) {
             acc += ev.text;
             setLoading(false);
-            setMessages([...newMessages, { role: 'assistant', content: acc }]);
+            setMessages([...newMessages, { role: 'assistant', content: acc, ...(acao ? { acao } : {}) }]);
+          }
+          if ((ev.type === 'acao' || ev.type === 'done') && ev.acao?.id) {
+            acao = { id: ev.acao.id, resumo: ev.acao.resumo, status: 'pendente' };
           }
           if (ev.type === 'done' || ev.type === 'error') {
             acc = ev.reply || acc;
@@ -151,6 +309,7 @@ export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
       finishWith(
         acc ||
           'Não consegui montar a resposta. Tente de novo em instantes.',
+        acao,
       );
     } catch {
       try {
@@ -159,7 +318,7 @@ export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
           { message: text, history },
           { timeout: 120000 },
         );
-        finishWith(data.reply || 'Não consegui consultar agora.');
+        finishWith(data.reply || 'Não consegui consultar agora.', acaoDoPayload(data.acao));
       } catch {
         finishWith(
           'Não consegui consultar o Obra 10 agora. Tente novamente em instantes.',
@@ -265,13 +424,17 @@ export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
     <>
       {open && (
         <div style={{
-          position: 'fixed',
-          bottom: narrow ? `calc(${panelBottom}px + env(safe-area-inset-bottom, 0px))` : panelBottom,
-          right: narrow ? 12 : 24,
-          width: 'min(380px, calc(100vw - 24px))',
-          height: narrow ? `min(560px, calc(100dvh - ${panelBottom + 12}px - env(safe-area-inset-bottom, 0px)))` : 560,
+          ...(pos
+            ? panelFromAnchor(pos)
+            : {
+                position: 'fixed',
+                bottom: narrow ? `calc(${panelBottom}px + env(safe-area-inset-bottom, 0px))` : panelBottom,
+                right: narrow ? 12 : 24,
+                width: 'min(380px, calc(100vw - 24px))',
+                height: narrow ? `min(560px, calc(100dvh - ${panelBottom + 12}px - env(safe-area-inset-bottom, 0px)))` : 560,
+              }),
           background: 'white', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
-          display: 'flex', flexDirection: 'column', zIndex: 45, overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', zIndex: 46, overflow: 'hidden',
           fontFamily: 'Inter, sans-serif'
         }}>
           <div style={{
@@ -288,7 +451,8 @@ export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
 
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', background: '#f9f9f9' }}>
             {messages.map((m, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
+              <div key={i}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: m.role === 'user' ? 'row-reverse' : 'row' }}>
                 {m.role === 'assistant' && (
                   <img src="/luna-avatar.png?v=3" alt="Luna" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, marginTop: 2 }} />
                 )}
@@ -302,6 +466,31 @@ export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
                 }}>
                   {m.content}
                 </div>
+              </div>
+              {m.acao?.status === 'pendente' && (
+                <div style={{ display: 'flex', gap: 8, marginLeft: m.role === 'assistant' ? 36 : 0 }}>
+                  <button
+                    type="button"
+                    onClick={() => responderAcao(m.acao!.id, true)}
+                    style={{
+                      border: 'none', borderRadius: 999, padding: '8px 14px', cursor: 'pointer',
+                      background: '#E5192C', color: 'white', fontWeight: 700, fontSize: 13,
+                    }}
+                  >
+                    Confirmar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => responderAcao(m.acao!.id, false)}
+                    style={{
+                      border: '1px solid #e0e0e0', borderRadius: 999, padding: '8px 14px', cursor: 'pointer',
+                      background: 'white', color: '#333', fontSize: 13,
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )}
               </div>
             ))}
             {loading && (
@@ -367,18 +556,30 @@ export default function LunaWidget({ clearance = 0 }: { clearance?: number }) {
       )}
 
       <button
-        onClick={() => setOpen(o => !o)}
-        title="Falar com a Luna"
+        type="button"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={finishDrag}
+        onPointerCancel={finishDrag}
+        title="Arraste para mover. Toque para falar com a Luna"
+        aria-label="Falar com a Luna"
         style={{
           position: 'fixed',
-          bottom: `calc(${buttonBottom}px + env(safe-area-inset-bottom, 0px))`,
-          right: narrow ? 16 : 24,
-          width: 64, height: 64,
-          borderRadius: '50%', border: 'none', cursor: 'pointer', padding: 0, overflow: 'hidden',
-          background: '#E5192C', boxShadow: '0 4px 16px rgba(229,25,44,0.35)', zIndex: 45
+          ...(pos
+            ? { left: pos.x, top: pos.y }
+            : {
+                bottom: `calc(${buttonBottom}px + env(safe-area-inset-bottom, 0px))`,
+                right: narrow ? 16 : 24,
+              }),
+          width: BUTTON, height: BUTTON,
+          borderRadius: '50%', border: 'none', padding: 0, overflow: 'hidden',
+          background: '#E5192C', boxShadow: '0 4px 16px rgba(229,25,44,0.35)', zIndex: 45,
+          cursor: dragging ? 'grabbing' : 'grab',
+          touchAction: 'none',
+          userSelect: 'none',
         }}
       >
-        <img src="/luna-avatar.png?v=3" alt="Luna" style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', margin: 4 }} />
+        <img src="/luna-avatar.png?v=3" alt="" draggable={false} style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', margin: 4, pointerEvents: 'none' }} />
       </button>
 
       <style>{`

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { RdoStatus, TipoInsumo } from '@prisma/client';
+import { Prisma, RdoStatus, TipoInsumo } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 import { mergePermissoesObra } from '../../core/capabilities/role-capabilities';
@@ -13,6 +13,8 @@ import {
 } from './ai-context.helper';
 import { consultarOnline, formatarRespostaOnline } from './ai-online.helper';
 import { buscarAjuda } from './luna-ajuda';
+import { RegistroBusca, selecionarTrechos, termosDeBusca } from './luna-busca';
+import { LunaAcoesService } from './luna-acoes.service';
 
 export type LunaAuth = {
   userId: string;
@@ -232,6 +234,50 @@ export const LUNA_TOOL_DEFS: LunaToolDef[] = [
     },
   },
   {
+    name: 'buscar_no_aplicativo',
+    description:
+      'Varre o texto do Obra 10 desta empresa: atividades, tarefas, ocorrências, conteúdo do diário, catálogo, equipe e alertas. Use para achar um fato específico (ex.: quando a laje de um pavimento foi concretada). Devolve trechos com obra, data e id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        consulta: {
+          type: 'string',
+          description: 'Palavras do que se quer achar, como a pessoa perguntou.',
+        },
+        obra: { type: 'string', description: 'Nome ou ID da obra. Vazio = todas as acessíveis.' },
+        data_inicio: { type: 'string', description: 'YYYY-MM-DD' },
+        data_fim: { type: 'string', description: 'YYYY-MM-DD' },
+      },
+      required: ['consulta'],
+    },
+  },
+  {
+    name: 'propor_ajuste',
+    description:
+      'Prepara um ajuste e NÃO grava. A pessoa confirma no chat. Tipos: rdo_rascunho (rdo_id + atividade ou observacao), rdo_submeter, rdo_aprovar, rdo_rejeitar (motivo), catalogo_criar, catalogo_atualizar, equipe_criar, equipe_atualizar, equipe_papel. Sem apagar empresa, senha ou cobrança.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string' },
+        rdo_id: { type: 'string' },
+        atividade: { type: 'string' },
+        observacao: { type: 'string' },
+        aprovador_id: { type: 'string' },
+        motivo: { type: 'string' },
+        insumo_id: { type: 'string' },
+        nome: { type: 'string' },
+        email: { type: 'string' },
+        tipo_insumo: { type: 'string', description: 'MATERIAL, EQUIPAMENTO ou MAO_DE_OBRA.' },
+        unidade: { type: 'string' },
+        usuario_id: { type: 'string' },
+        perfil: { type: 'string' },
+        telefone: { type: 'string' },
+        papel: { type: 'string', description: 'GESTOR, COLABORADOR, EXTERNO ou PERSONALIZADO.' },
+      },
+      required: ['tipo'],
+    },
+  },
+  {
     name: 'consultar_fonte_aberta',
     description:
       'Consulta fonte aberta (norma com escopo público, Wikipedia, .gov.br) quando a pergunta NÃO for dado interno da obra. Não invente cláusula de norma paga.',
@@ -287,6 +333,7 @@ export class LunaToolsService {
     private readonly rdoService: RdoService,
     private readonly obraService: ObraService,
     private readonly catalogo: CatalogoService,
+    private readonly acoes: LunaAcoesService,
   ) {}
 
   openaiTools() {
@@ -358,6 +405,10 @@ export class LunaToolsService {
         return this.verPlano(auth);
       case 'ajuda_obra10':
         return { ajuda: buscarAjuda(args.tema) };
+      case 'buscar_no_aplicativo':
+        return this.buscarNoAplicativo(auth, args);
+      case 'propor_ajuste':
+        return this.acoes.propor(auth, args);
       case 'consultar_fonte_aberta':
         return {
           resposta: formatarRespostaOnline(
@@ -449,6 +500,273 @@ export class LunaToolsService {
         caps,
       ),
     }));
+  }
+
+  private async buscarNoAplicativo(auth: LunaAuth, args: Record<string, any>) {
+    const consulta = String(args.consulta || '').trim();
+    const termos = termosDeBusca(consulta);
+    if (!termos.length) {
+      return { consulta, total: 0, achados: [], aviso: 'Informe o que quer achar.' };
+    }
+    let obras = await this.obrasAcessiveis(auth);
+    if (args.obra) {
+      const obra = await this.resolverObra(auth, args.obra);
+      obras = obra ? [obra] : [];
+    }
+    if (!obras.length) {
+      return { consulta, total: 0, achados: [], aviso: 'Nenhuma obra acessível para essa busca.' };
+    }
+    const inicio = parseIso(args.data_inicio);
+    const fim = parseIso(args.data_fim);
+    const soAprovados = new Set(
+      obras.filter((obra) => rdoSoAprovados(permRdo(obra))).map((obra) => obra.id),
+    );
+    const ids = obras.map((obra) => obra.id);
+    const nomes = new Map(obras.map((obra) => [obra.id, obra.nome]));
+    const periodo = (data: Date | null | undefined) => {
+      if (!data) return true;
+      if (inicio && data < inicio) return false;
+      if (fim && data > fim) return false;
+      return true;
+    };
+    const dia = (data?: Date | null) => (data ? data.toISOString().slice(0, 10) : null);
+    const registros: RegistroBusca[] = [];
+
+    const atividades = await this.prisma.rdoAtividade.findMany({
+      where: {
+        deletedAt: null,
+        descricao: { contains: termos[0], mode: 'insensitive' },
+        rdo: {
+          deletedAt: null,
+          obraId: { in: ids },
+          obra: { empresaId: auth.empresaId, deletedAt: null },
+        },
+      },
+      select: {
+        descricao: true,
+        rdo: {
+          select: {
+            id: true,
+            status: true,
+            dataReferencia: true,
+            obraId: true,
+            obra: { select: { empresaId: true, nome: true } },
+          },
+        },
+      },
+      take: 40,
+    });
+    for (const item of atividades) {
+      if (!periodo(item.rdo.dataReferencia)) continue;
+      if (soAprovados.has(item.rdo.obraId) && item.rdo.status !== RdoStatus.APROVADO) continue;
+      registros.push({
+        empresaId: item.rdo.obra.empresaId,
+        obraId: item.rdo.obraId,
+        obraNome: item.rdo.obra.nome,
+        data: dia(item.rdo.dataReferencia),
+        status: item.rdo.status,
+        rdoId: item.rdo.id,
+        origem: 'atividade',
+        texto: item.descricao,
+      });
+    }
+
+    const tarefas = await this.prisma.tarefaRdo.findMany({
+      where: {
+        descricao: { contains: termos[0], mode: 'insensitive' },
+        rdo: {
+          deletedAt: null,
+          obraId: { in: ids },
+          obra: { empresaId: auth.empresaId, deletedAt: null },
+        },
+      },
+      select: {
+        descricao: true,
+        rdo: {
+          select: {
+            id: true,
+            status: true,
+            dataReferencia: true,
+            obraId: true,
+            obra: { select: { empresaId: true, nome: true } },
+          },
+        },
+      },
+      take: 40,
+    });
+    for (const item of tarefas) {
+      if (!periodo(item.rdo.dataReferencia)) continue;
+      if (soAprovados.has(item.rdo.obraId) && item.rdo.status !== RdoStatus.APROVADO) continue;
+      registros.push({
+        empresaId: item.rdo.obra.empresaId,
+        obraId: item.rdo.obraId,
+        obraNome: item.rdo.obra.nome,
+        data: dia(item.rdo.dataReferencia),
+        status: item.rdo.status,
+        rdoId: item.rdo.id,
+        origem: 'tarefa',
+        texto: item.descricao,
+      });
+    }
+
+    const ocorrencias = await this.prisma.rdoOcorrencia.findMany({
+      where: {
+        deletedAt: null,
+        descricao: { contains: termos[0], mode: 'insensitive' },
+        rdo: {
+          deletedAt: null,
+          obraId: { in: ids },
+          obra: { empresaId: auth.empresaId, deletedAt: null },
+        },
+      },
+      select: {
+        descricao: true,
+        rdo: {
+          select: {
+            id: true,
+            status: true,
+            dataReferencia: true,
+            obraId: true,
+            obra: { select: { empresaId: true, nome: true } },
+          },
+        },
+      },
+      take: 40,
+    });
+    for (const item of ocorrencias) {
+      if (!periodo(item.rdo.dataReferencia)) continue;
+      if (soAprovados.has(item.rdo.obraId) && item.rdo.status !== RdoStatus.APROVADO) continue;
+      registros.push({
+        empresaId: item.rdo.obra.empresaId,
+        obraId: item.rdo.obraId,
+        obraNome: item.rdo.obra.nome,
+        data: dia(item.rdo.dataReferencia),
+        status: item.rdo.status,
+        rdoId: item.rdo.id,
+        origem: 'ocorrencia',
+        texto: item.descricao,
+      });
+    }
+
+    if (typeof this.prisma.$queryRaw === 'function') {
+      let extras: Array<{
+        id: string;
+        data_referencia: Date;
+        status: string;
+        obra_id: string;
+        nome: string;
+        empresa_id: string;
+        texto: string;
+      }> = [];
+      try {
+      extras = await this.prisma.$queryRaw<
+        Array<{
+          id: string;
+          data_referencia: Date;
+          status: string;
+          obra_id: string;
+          nome: string;
+          empresa_id: string;
+          texto: string;
+        }>
+      >(Prisma.sql`
+        SELECT r.id, r.data_referencia, r.status::text AS status, o.id AS obra_id, o.nome,
+               o.empresa_id, left(r.dados_extras::text, 4000) AS texto
+        FROM rdos r
+        INNER JOIN obras o ON o.id = r.obra_id
+        WHERE o.empresa_id = ${auth.empresaId}
+          AND r.deleted_at IS NULL
+          AND o.deleted_at IS NULL
+          AND r.obra_id IN (${Prisma.join(ids)})
+          AND r.dados_extras::text ILIKE ${'%' + termos[0] + '%'}
+        LIMIT 40
+      `);
+      } catch (err: any) {
+        this.logger.warn(`[LunaTools] busca no diário: ${err?.message}`);
+      }
+      for (const item of extras) {
+        if (!periodo(item.data_referencia)) continue;
+        if (soAprovados.has(item.obra_id) && item.status !== 'APROVADO') continue;
+        registros.push({
+          empresaId: item.empresa_id,
+          obraId: item.obra_id,
+          obraNome: item.nome || nomes.get(item.obra_id) || '',
+          data: dia(item.data_referencia),
+          status: item.status,
+          rdoId: item.id,
+          origem: 'diario',
+          texto: item.texto,
+        });
+      }
+    }
+
+    const catalogo = await this.prisma.catalogoInsumo.findMany({
+      where: {
+        empresaId: auth.empresaId,
+        deletedAt: null,
+        nome: { contains: termos[0], mode: 'insensitive' },
+      },
+      select: { id: true, nome: true, tipo: true, empresaId: true },
+      take: 20,
+    });
+    for (const item of catalogo) {
+      registros.push({
+        empresaId: item.empresaId,
+        obraId: '',
+        obraNome: 'Cadastro Base',
+        origem: 'catalogo',
+        rdoId: item.id,
+        texto: `${item.tipo}: ${item.nome}`,
+      });
+    }
+
+    const equipe = await this.prisma.usuario.findMany({
+      where: {
+        empresaId: auth.empresaId,
+        deletedAt: null,
+        nome: { contains: termos[0], mode: 'insensitive' },
+      },
+      select: { id: true, nome: true, perfilGlobal: true, empresaId: true },
+      take: 20,
+    });
+    for (const item of equipe) {
+      registros.push({
+        empresaId: item.empresaId,
+        obraId: '',
+        obraNome: 'Equipe',
+        origem: 'equipe',
+        rdoId: item.id,
+        texto: `${item.nome} (${item.perfilGlobal})`,
+      });
+    }
+
+    const alertas = await this.prisma.alertaObra.findMany({
+      where: {
+        obraId: { in: ids },
+        mensagem: { contains: termos[0], mode: 'insensitive' },
+      },
+      select: { mensagem: true, obraId: true, createdAt: true },
+      take: 20,
+    });
+    for (const item of alertas) {
+      registros.push({
+        empresaId: auth.empresaId,
+        obraId: item.obraId,
+        obraNome: nomes.get(item.obraId) || '',
+        data: dia(item.createdAt),
+        origem: 'alerta',
+        texto: item.mensagem,
+      });
+    }
+
+    const resultado = selecionarTrechos(consulta, auth.empresaId, registros);
+    if (!resultado.total) {
+      return {
+        ...resultado,
+        aviso: 'Não achei esse texto nas obras acessíveis. Diga a obra ou outro trecho.',
+      };
+    }
+    return resultado;
   }
 
   private async resolverObra(

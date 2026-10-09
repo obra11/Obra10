@@ -108,13 +108,25 @@ export class PdfService {
     const sequencial = idx === -1 ? 1 : idx + 1;
 
     // Buscar anexos vinculados ao RDO
-    const anexos = await this.prisma.anexo.findMany({
+    const anexosBrutos = await this.prisma.anexo.findMany({
       where: { attachableId: rdoId, deletedAt: null },
       include: { criador: { select: { nome: true } } },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
     });
 
     const extras = (rdo.dadosExtras as any) || {};
+    const ordemSalva = [
+      ...(extras?.ordemMidia?.fotos || []),
+      ...(extras?.ordemMidia?.videos || []),
+      ...(extras?.ordemMidia?.anexos || []),
+    ].map((chave: string) => String(chave).replace(/^[ps]:/, ''));
+    const posicao = new Map(ordemSalva.map((id: string, index: number) => [id, index]));
+    const anexos = [...anexosBrutos].sort((a, b) => {
+      const pa = posicao.has(a.id) ? (posicao.get(a.id) as number) : 100000;
+      const pb = posicao.has(b.id) ? (posicao.get(b.id) as number) : 100000;
+      if (pa !== pb) return pa - pb;
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
     const isPeriodo =
       rdo.tipoRelatorio === 'PERIODO' ||
       String(extras.tipoRelatorio || '').toUpperCase() === 'PERIODO';

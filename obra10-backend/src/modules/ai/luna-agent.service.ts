@@ -12,9 +12,10 @@ Fale em português brasileiro, natural e prestativa — como uma secretária que
 
 Como trabalhar:
 - Use as ferramentas para buscar fatos. Não invente número, nome de obra, status de RDO nem cláusula de norma.
-- O padrão é a EMPRESA INTEIRA: se o usuário citar outro empreendimento, busque pelo nome (listar_obras → agregar_diarios / ver_rdo). A obra da tela atual é só contexto, não uma prisão.
+- Para um fato específico (quando algo aconteceu, quem fez, o que está escrito no diário), chame buscar_no_aplicativo. Cite a obra, a data e o trecho. Se a busca voltar vazia, diga que não achou.
+- O padrão é a EMPRESA INTEIRA: se o usuário citar outro empreendimento, busque pelo nome (listar_obras → buscar_no_aplicativo / ver_rdo). A obra da tela atual é só contexto, não uma prisão.
 - Dúvida de uso (“onde clico”, “como aprovo”, “PDF com fotos”, Relatórios): chame ajuda_obra10 e explique o caminho.
-- Você NÃO cria, edita, submete nem aprova registros. Oriente a pessoa a fazer na tela.
+- Para ajustar diário, equipe ou catálogo, chame propor_ajuste e espere a pessoa confirmar. Você não grava nada sozinha. Não apague empresa, não troque senha e não mexa em cobrança.
 - Se faltar permissão, diga e indique quem pode (gestor / Equipe).
 - Separe o que veio do banco Obra 10 vs. fonte aberta.
 - Responda completo, como um bom ChatGPT: parágrafos claros, listas quando ajudar, e um próximo passo. Não entregue um parágrafo engessado de uma linha se houver dado.
@@ -34,9 +35,22 @@ ${tela}`;
 
 type ChatMsg = { role: 'user' | 'assistant'; content: string };
 
+function acaoDeTool(output: string): { id: string; resumo: string } | undefined {
+  try {
+    const parsed = JSON.parse(output);
+    if (parsed?.pendente && parsed.id && parsed.resumo) {
+      return { id: String(parsed.id), resumo: String(parsed.resumo) };
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
 export type LunaStreamEvent =
   | { type: 'delta'; text: string }
-  | { type: 'done'; reply: string }
+  | { type: 'done'; reply: string; acao?: { id: string; resumo: string } }
+  | { type: 'acao'; acao: { id: string; resumo: string } }
   | { type: 'error'; reply: string };
 
 @Injectable()
@@ -53,12 +67,17 @@ export class LunaAgentService {
     message: string,
     history: ChatMsg[],
     telaObraId?: string | null,
-  ): Promise<string> {
+  ): Promise<{ reply: string; acao?: { id: string; resumo: string } }> {
     let reply = '';
+    let acao: { id: string; resumo: string } | undefined;
     for await (const ev of this.stream(auth, message, history, telaObraId)) {
-      if (ev.type === 'done' || ev.type === 'error') reply = ev.reply;
+      if (ev.type === 'acao') acao = ev.acao;
+      if (ev.type === 'done' || ev.type === 'error') {
+        reply = ev.reply;
+        if (ev.type === 'done' && ev.acao) acao = ev.acao;
+      }
     }
-    return reply;
+    return { reply, acao };
   }
 
   async *stream(
@@ -146,6 +165,7 @@ export class LunaAgentService {
     const messages = this.historyToOpenAi(history, message, telaObraId);
     const tools = this.tools.openaiTools();
     let full = '';
+    let acao: { id: string; resumo: string } | undefined;
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -231,7 +251,7 @@ export class LunaAgentService {
 
       const calls = Object.values(toolCalls).filter((c) => c.name);
       if (!calls.length) {
-        yield { type: 'done', reply: full || roundText };
+        yield { type: 'done', reply: full || roundText, acao };
         return;
       }
 
@@ -258,6 +278,13 @@ export class LunaAgentService {
           auth,
           telaObraId,
         );
+        if (call.name === 'propor_ajuste') {
+          const pendente = acaoDeTool(output);
+          if (pendente) {
+            acao = pendente;
+            yield { type: 'acao', acao: pendente };
+          }
+        }
         messages.push({
           role: 'tool',
           tool_call_id: call.id,
@@ -266,7 +293,7 @@ export class LunaAgentService {
       }
 
       if (finish && finish !== 'tool_calls') {
-        yield { type: 'done', reply: full || roundText };
+        yield { type: 'done', reply: full || roundText, acao };
         return;
       }
     }
@@ -274,6 +301,7 @@ export class LunaAgentService {
     yield {
       type: 'done',
       reply: full || 'Consultei os dados, mas a resposta veio incompleta. Pergunte de novo com um recorte menor.',
+      acao,
     };
   }
 

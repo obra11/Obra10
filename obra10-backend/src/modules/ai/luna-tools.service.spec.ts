@@ -38,12 +38,14 @@ function makeTools(caps?: Record<string, unknown>) {
     listarColaboradores: jest.fn().mockResolvedValue([]),
   };
   const catalogo = { findAll: jest.fn().mockResolvedValue([]) };
+  const acoes = { propor: jest.fn(), confirmar: jest.fn(), cancelar: jest.fn() };
   const svc = new LunaToolsService(
     prisma as any,
     capabilities as any,
     rdoService as any,
     obraService as any,
     catalogo as any,
+    acoes as any,
   );
   return { svc, prisma, capabilities, rdoService, obraService, catalogo };
 }
@@ -67,6 +69,8 @@ describe('Luna tools (empresa, permissão, aliases)', () => {
       'ver_plano',
       'ajuda_obra10',
       'listar_efetivo_obra',
+      'buscar_no_aplicativo',
+      'propor_ajuste',
     ]) {
       expect(names).toContain(n);
     }

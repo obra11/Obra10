@@ -9,10 +9,12 @@ import { PrismaModule } from '../../prisma/prisma.module';
 import { RdoModule } from '../rdo/rdo.module';
 import { ObraModule } from '../obra/obra.module';
 import { CatalogoModule } from '../catalogo/catalogo.module';
+import { UsuariosModule } from '../usuarios/usuarios.module';
+import { LunaAcoesService } from './luna-acoes.service';
 
 @Module({
-  imports: [PrismaModule, ScheduleModule, RdoModule, ObraModule, CatalogoModule],
-  providers: [AiService, LunaToolsService, LunaAgentService],
+  imports: [PrismaModule, ScheduleModule, RdoModule, ObraModule, CatalogoModule, UsuariosModule],
+  providers: [AiService, LunaToolsService, LunaAgentService, LunaAcoesService],
   controllers: [AiController, McpController],
 })
 export class AiModule {}
