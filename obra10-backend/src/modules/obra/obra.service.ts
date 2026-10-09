@@ -5,149 +5,75 @@ import { perfilGlobalToObraNomeInterno } from '../../core/capabilities/obra-perf
 import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 import { mergePermissoesObra, podeReceberAprovacao } from '../../core/capabilities/role-capabilities';
 
-const JANELA_DIAS_PROBLEMAS = 30;
-const MAX_PROBLEMAS_PAINEL = 8;
-
-const MOTIVO_NAO_EXECUCAO_LABEL: Record<string, string> = {
-  FALTA_MATERIAL: 'Falta de material',
-  FALTA_MAO_DE_OBRA: 'Falta de mão de obra',
-  CHUVA: 'Chuva / clima',
-  EQUIPAMENTO_INDISPONIVEL: 'Equipamento indisponível',
-  AGUARDANDO_APROVACAO: 'Aguardando aprovação',
-  PROJETO_NAO_LIBERADO: 'Projeto não liberado',
-  RETRABALHO: 'Retrabalho',
-  INTERFERENCIA_TERCEIROS: 'Interferência de terceiros',
-  OUTROS: 'Outros',
+type AtividadePendentePainel = {
+  descricao: string;
+  responsavel: string;
+  empresa: string;
+  status: 'pendente' | 'finalizada';
 };
 
-type TipoProblemaPainel =
-  | 'RDO_REJEITADO'
-  | 'MOTIVO_NAO_EXECUCAO'
-  | 'OCORRENCIA'
-  | 'ALERTA';
-
-type GravidadeProblemaPainel = 'alta' | 'media' | 'baixa';
-
-type ProblemaPainelItem = {
-  id: string;
-  tipo: TipoProblemaPainel;
-  titulo: string;
-  detalhe: string;
-  gravidade: GravidadeProblemaPainel;
-  data: Date;
-  link: string;
-};
-
-function truncarTexto(texto: string, max = 160): string {
-  const t = String(texto || '')
+function textoLimpo(valor: unknown): string {
+  return String(valor || '')
     .replace(/\s+/g, ' ')
     .trim();
-  if (!t) return '';
-  if (t.length <= max) return t;
-  return `${t.slice(0, max - 1).trimEnd()}…`;
 }
 
-function labelMotivoNaoExecucao(motivo: string): string {
-  return MOTIVO_NAO_EXECUCAO_LABEL[motivo] || motivo.replace(/_/g, ' ').toLowerCase();
-}
-
-function tituloAlerta(tipo: string): string {
-  const conhecidos: Record<string, string> = {
-    AFERICAO_VENCENDO: 'Aferição vencendo',
-  };
-  if (conhecidos[tipo]) return conhecidos[tipo];
-  const texto = tipo.replace(/_/g, ' ').toLowerCase();
-  return texto ? texto.charAt(0).toUpperCase() + texto.slice(1) : 'Alerta da obra';
-}
-
-function inferirMotivoClima(dadosExtras: any): string {
-  const textClima = [
-    dadosExtras?.climaManha,
-    dadosExtras?.climaTarde,
-    dadosExtras?.climaNoite,
-    dadosExtras?.clima,
-    dadosExtras?.condicoesClimaticas,
-  ]
-    .filter(Boolean)
-    .map((c) => String(c).toLowerCase())
-    .join(' ');
-  if (
-    textClima.includes('chuva') ||
-    textClima.includes('chuvoso') ||
-    textClima.includes('chuvosa')
-  ) {
-    return 'CHUVA';
+function statusPendencia(raw: unknown): 'pendente' | 'finalizada' {
+  const valor = String(raw || '').toLowerCase();
+  if (valor === 'finalizada' || valor === 'executada' || valor === 'concluida' || valor === 'concluída') {
+    return 'finalizada';
   }
-  return 'OUTROS';
+  return 'pendente';
 }
 
-function agregarMotivosNaoExecucao(
-  rdos: Array<{
-    dataReferencia: Date;
-    dadosExtras: unknown;
-    tarefas: Array<{ motivoNaoExecucao: string | null }>;
-  }>,
-): Array<{ motivo: string; total: number; ultimaData: Date }> {
-  const motivoMap: Record<string, { total: number; ultimaData: Date }> = {};
-  const registrar = (motivo: string | null | undefined, data: Date) => {
-    if (!motivo) return;
-    const key = String(motivo);
-    const atual = motivoMap[key];
-    if (!atual) {
-      motivoMap[key] = { total: 1, ultimaData: data };
-      return;
+function parseAtividadesPendentesPainel(raw: unknown): AtividadePendentePainel[] {
+  const montar = (item: any): AtividadePendentePainel =>
+    typeof item === 'string'
+      ? { descricao: textoLimpo(item), responsavel: '', empresa: '', status: 'pendente' }
+      : {
+          descricao: textoLimpo(item?.descricao),
+          responsavel: textoLimpo(item?.responsavel),
+          empresa: textoLimpo(item?.empresa),
+          status: statusPendencia(item?.status),
+        };
+  if (typeof raw === 'string') {
+    return raw
+      .split(/\r?\n/)
+      .map((line) => textoLimpo(line).replace(/^[-*•\d.]+\s*/, '').trim())
+      .filter(Boolean)
+      .map((descricao) => montar(descricao));
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw.map(montar).filter((item) => item.descricao && item.status !== 'finalizada');
+}
+
+/** Null quando o diário não tem o campo. Lista vazia quando o campo existe e não há pendência. */
+function pendenciasDoDiario(dadosExtras: unknown): AtividadePendentePainel[] | null {
+  if (!dadosExtras || typeof dadosExtras !== 'object') return null;
+  if (!Object.prototype.hasOwnProperty.call(dadosExtras, 'atividadesPendentes')) {
+    return null;
+  }
+  return parseAtividadesPendentesPainel(
+    (dadosExtras as { atividadesPendentes?: unknown }).atividadesPendentes,
+  );
+}
+
+function agruparPorResponsavel(itens: AtividadePendentePainel[]) {
+  const ordem: string[] = [];
+  const mapa = new Map<string, { responsavel: string; empresa: string; itens: string[] }>();
+  for (const item of itens) {
+    const responsavel = item.responsavel || 'Sem responsável';
+    const empresa = item.empresa || '';
+    const chave = `${responsavel}\n${empresa}`;
+    const grupo = mapa.get(chave);
+    if (!grupo) {
+      mapa.set(chave, { responsavel, empresa, itens: [item.descricao] });
+      ordem.push(chave);
+      continue;
     }
-    atual.total += 1;
-    if (data > atual.ultimaData) atual.ultimaData = data;
-  };
-
-  for (const rdo of rdos) {
-    const d = (rdo.dadosExtras as any) || {};
-    const atividades = d.atividadesExecutadas || [];
-    if (Array.isArray(atividades) && atividades.length > 0) {
-      for (const a of atividades) {
-        if (!a?.descricao) continue;
-        if (a.status === 'finalizada') continue;
-        registrar(a.motivoNaoExecucao || inferirMotivoClima(d), rdo.dataReferencia);
-      }
-    } else {
-      for (const t of rdo.tarefas) {
-        registrar(t.motivoNaoExecucao, rdo.dataReferencia);
-      }
-    }
+    grupo.itens.push(item.descricao);
   }
-
-  return Object.entries(motivoMap)
-    .map(([motivo, v]) => ({ motivo, ...v }))
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 3);
-}
-
-function extrairOcorrenciasDadosExtras(
-  rdos: Array<{ id: string; dataReferencia: Date; dadosExtras: unknown }>,
-  obraId: string,
-): ProblemaPainelItem[] {
-  const items: ProblemaPainelItem[] = [];
-  for (const rdo of rdos) {
-    const extras = (rdo.dadosExtras as any) || {};
-    const lista = extras.ocorrencias;
-    if (!Array.isArray(lista)) continue;
-    lista.forEach((o: any, idx: number) => {
-      const tipo = String(o?.tipoOcorrencia || o?.tipo || 'Ocorrência').trim();
-      const descricao = String(o?.descricao || o?.texto || '').trim();
-      if (!tipo && !descricao) return;
-      items.push({
-        id: `ocorrencia-json-${rdo.id}-${idx}`,
-        tipo: 'OCORRENCIA',
-        titulo: tipo || 'Ocorrência',
-        detalhe: truncarTexto(descricao || 'Sem descrição'),
-        gravidade: 'media',
-        data: rdo.dataReferencia,
-        link: `/obras/${obraId}/rdos/${rdo.id}`,
-      });
-    });
-  }
-  return items;
+  return ordem.map((chave) => mapa.get(chave)!);
 }
 
 @Injectable()
@@ -571,18 +497,9 @@ export class ObraService {
       throw new Error('Obra não encontrada ou sem acesso.');
     }
 
-    const since = new Date();
-    since.setDate(since.getDate() - JANELA_DIAS_PROBLEMAS);
     const tenantRdo = { obraId, deletedAt: null, obra: { empresaId } };
 
-    const [
-      rdosPendentes,
-      latestRdos,
-      rdosRejeitados,
-      rdosPeriodo,
-      ocorrenciasDb,
-      alertasNaoLidos,
-    ] = await Promise.all([
+    const [rdosPendentes, latestRdos, diariosRecentes] = await Promise.all([
       this.prisma.rdo.count({
         where: { ...tenantRdo, status: 'SUBMETIDO' },
       }),
@@ -596,65 +513,10 @@ export class ObraService {
         },
       }),
       this.prisma.rdo.findMany({
-        where: {
-          ...tenantRdo,
-          status: 'REJEITADO',
-          updatedAt: { gte: since },
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: MAX_PROBLEMAS_PAINEL,
-        select: {
-          id: true,
-          dataReferencia: true,
-          rejeitadoMotivo: true,
-          updatedAt: true,
-          aprovacaoAt: true,
-        },
-      }),
-      this.prisma.rdo.findMany({
-        where: {
-          ...tenantRdo,
-          dataReferencia: { gte: since },
-        },
-        select: {
-          id: true,
-          dataReferencia: true,
-          dadosExtras: true,
-          tarefas: { select: { motivoNaoExecucao: true } },
-        },
-        take: 500,
-      }),
-      this.prisma.rdoOcorrencia.findMany({
-        where: {
-          deletedAt: null,
-          createdAt: { gte: since },
-          rdo: tenantRdo,
-        },
-        orderBy: { createdAt: 'desc' },
-        take: MAX_PROBLEMAS_PAINEL,
-        select: {
-          id: true,
-          tipoOcorrencia: true,
-          descricao: true,
-          createdAt: true,
-          rdoId: true,
-        },
-      }),
-      this.prisma.alertaObra.findMany({
-        where: {
-          obraId,
-          lido: false,
-          createdAt: { gte: since },
-          obra: { empresaId },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: MAX_PROBLEMAS_PAINEL,
-        select: {
-          id: true,
-          tipo: true,
-          mensagem: true,
-          createdAt: true,
-        },
+        where: tenantRdo,
+        orderBy: [{ dataReferencia: 'desc' }, { updatedAt: 'desc' }],
+        take: 30,
+        select: { id: true, dataReferencia: true, dadosExtras: true },
       }),
     ]);
 
@@ -693,67 +555,29 @@ export class ObraService {
       };
     });
 
-    const problemasRejeitados: ProblemaPainelItem[] = rdosRejeitados.map((rdo) => ({
-      id: `rejeitado-${rdo.id}`,
-      tipo: 'RDO_REJEITADO',
-      titulo: 'RDO rejeitado',
-      detalhe: truncarTexto(rdo.rejeitadoMotivo || 'Sem motivo informado'),
-      gravidade: 'alta',
-      data: rdo.aprovacaoAt || rdo.updatedAt || rdo.dataReferencia,
-      link: `/obras/${obraId}/rdos/${rdo.id}`,
-    }));
-
-    const problemasMotivos: ProblemaPainelItem[] = agregarMotivosNaoExecucao(
-      rdosPeriodo,
-    ).map((m) => ({
-      id: `motivo-${m.motivo}`,
-      tipo: 'MOTIVO_NAO_EXECUCAO',
-      titulo: `Não execução: ${labelMotivoNaoExecucao(m.motivo)}`,
-      detalhe: `${m.total} ocorrência${m.total === 1 ? '' : 's'} nos últimos ${JANELA_DIAS_PROBLEMAS} dias`,
-      gravidade: 'media',
-      data: m.ultimaData,
-      link: `/obras/${obraId}/rdos/dashboard`,
-    }));
-
-    const problemasOcorrenciasTabela: ProblemaPainelItem[] = ocorrenciasDb.map(
-      (o) => ({
-        id: `ocorrencia-${o.id}`,
-        tipo: 'OCORRENCIA',
-        titulo: o.tipoOcorrencia || 'Ocorrência',
-        detalhe: truncarTexto(o.descricao || 'Sem descrição'),
-        gravidade: 'media',
-        data: o.createdAt,
-        link: `/obras/${obraId}/rdos/${o.rdoId}`,
-      }),
-    );
-    const problemasOcorrencias =
-      problemasOcorrenciasTabela.length > 0
-        ? problemasOcorrenciasTabela
-        : extrairOcorrenciasDadosExtras(rdosPeriodo, obraId);
-
-    const problemasAlertas: ProblemaPainelItem[] = alertasNaoLidos.map((a) => ({
-      id: `alerta-${a.id}`,
-      tipo: 'ALERTA',
-      titulo: tituloAlerta(a.tipo),
-      detalhe: truncarTexto(a.mensagem || 'Alerta da obra'),
-      gravidade: 'baixa',
-      data: a.createdAt,
-      link: `/obras/${obraId}/rdos`,
-    }));
-
-    const principaisProblemas = [
-      ...problemasRejeitados,
-      ...problemasMotivos,
-      ...problemasOcorrencias,
-      ...problemasAlertas,
-    ].slice(0, MAX_PROBLEMAS_PAINEL);
+    let origemPendencias: { id: string; dataReferencia: Date } | null = null;
+    let pendencias: AtividadePendentePainel[] = [];
+    for (const diario of diariosRecentes) {
+      const lista = pendenciasDoDiario(diario.dadosExtras);
+      if (lista === null) continue;
+      origemPendencias = {
+        id: diario.id,
+        dataReferencia: diario.dataReferencia,
+      };
+      pendencias = lista;
+      break;
+    }
 
     return {
       rdosPendentes,
       efetivoHoje,
       status: obra.status,
       atividadesRecentes,
-      principaisProblemas,
+      atividadesPendentes: {
+        rdoId: origemPendencias?.id || null,
+        dataReferencia: origemPendencias?.dataReferencia || null,
+        grupos: agruparPorResponsavel(pendencias),
+      },
     };
   }
 }

@@ -88,6 +88,28 @@ export class RdoController {
     return this.rdoService.findAllByObra(req.headers['x-obra-id'], req.obraRole);
   }
 
+  @Get('pendencias/pdf')
+  async downloadPendencias(
+    @Query('de') de: string,
+    @Query('ate') ate: string,
+    @Req() req: any,
+    @Res() res: any,
+  ) {
+    const obraId = req.headers['x-obra-id'];
+    const buffer = await this.pdfService.gerarPdfPendencias(
+      obraId,
+      req.user.empresaId,
+      de,
+      ate,
+    );
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="Pendencias_${de}_${ate}.pdf"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
+  }
+
   // ── PDF DO RDO APROVADO ───────────────────────────────────────────────────────
   @Get(':id/pdf')
   async downloadPdf(

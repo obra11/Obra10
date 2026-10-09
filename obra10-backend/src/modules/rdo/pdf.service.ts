@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, PDFName, PDFString, degrees } from 'pdf-lib';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -665,14 +665,23 @@ export class PdfService {
     if (atividadesPendentes && (Array.isArray(atividadesPendentes) ? atividadesPendentes.length > 0 : true)) {
       drawSectionTitle('ATIVIDADES PENDENTES / PROXIMAS');
       if (Array.isArray(atividadesPendentes)) {
-        for (const a of atividadesPendentes) {
-          const desc = typeof a === 'string' ? a : a?.descricao || '';
-          const resp = typeof a === 'string' ? '' : a?.responsavel || '';
-          if (!desc && !resp) continue;
-          const label = resp
-            ? `- ${desc} (Responsavel: ${resp})`
-            : `- ${desc}`;
-          drawMultiLineText(label, m.l + 4, 8, reg, 12);
+        const abertas = atividadesPendentes.filter((a) => String(a?.status || '').toLowerCase() !== 'finalizada');
+        const fechadas = atividadesPendentes.filter((a) => String(a?.status || '').toLowerCase() === 'finalizada');
+        const desenhar = (lista: any[]) => {
+          for (const a of lista) {
+            const desc = typeof a === 'string' ? a : a?.descricao || '';
+            const resp = typeof a === 'string' ? '' : a?.responsavel || '';
+            const empresa = typeof a === 'string' ? '' : a?.empresa || '';
+            if (!desc && !resp && !empresa) continue;
+            const quem = [resp, empresa].filter(Boolean).join(' - ');
+            const label = quem ? `- ${desc} (${quem})` : `- ${desc}`;
+            drawMultiLineText(label, m.l + 4, 8, reg, 12);
+          }
+        };
+        desenhar(abertas);
+        if (fechadas.length > 0) {
+          drawMultiLineText('Finalizadas:', m.l + 4, 8, bold, 14);
+          desenhar(fechadas);
         }
       } else {
         const lines = wrapText(String(atividadesPendentes), CONTENT_W - 8, 8, reg);
@@ -1325,6 +1334,123 @@ export class PdfService {
       console.warn(`[PdfService] S3 GetObject falhou para ${key}:`, err);
       return null;
     }
+  }
+
+  async gerarPdfPendencias(
+    obraId: string,
+    empresaId: string,
+    de: string,
+    ate: string,
+  ): Promise<Buffer> {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(de || '') || !/^\d{4}-\d{2}-\d{2}$/.test(ate || '')) {
+      throw new BadRequestException('Informe o período com datas válidas.');
+    }
+    const inicio = new Date(`${de}T00:00:00.000Z`);
+    const fim = new Date(`${ate}T23:59:59.999Z`);
+    if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime()) || inicio > fim) {
+      throw new BadRequestException('A data inicial é posterior à final.');
+    }
+
+    const obra = await this.prisma.obra.findFirst({
+      where: { id: obraId, empresaId, deletedAt: null },
+      select: { nome: true },
+    });
+    if (!obra) throw new NotFoundException('Obra não encontrada.');
+
+    const rdos = await this.prisma.rdo.findMany({
+      where: {
+        obraId,
+        deletedAt: null,
+        OR: [
+          { dataReferencia: { gte: inicio, lte: fim } },
+          { dataFim: { gte: inicio, lte: fim } },
+          { AND: [{ dataReferencia: { lte: fim } }, { dataFim: { gte: inicio } }] },
+        ],
+      },
+      orderBy: [{ dataReferencia: 'desc' }, { updatedAt: 'desc' }],
+      select: { dataReferencia: true, dadosExtras: true },
+    });
+
+    const vistas = new Set<string>();
+    const abertas: Array<{ descricao: string; responsavel: string; empresa: string; data: Date }> = [];
+    for (const rdo of rdos) {
+      const lista = (rdo.dadosExtras as any)?.atividadesPendentes;
+      if (!Array.isArray(lista)) continue;
+      for (const item of lista) {
+        const descricao = String(typeof item === 'string' ? item : item?.descricao || '').replace(/\s+/g, ' ').trim();
+        if (!descricao) continue;
+        const responsavel = String(typeof item === 'string' ? '' : item?.responsavel || '').replace(/\s+/g, ' ').trim();
+        const empresa = String(typeof item === 'string' ? '' : item?.empresa || '').replace(/\s+/g, ' ').trim();
+        const chave = `${descricao}|${responsavel}|${empresa}`.toLowerCase();
+        if (vistas.has(chave)) continue;
+        vistas.add(chave);
+        if (String(item?.status || '').toLowerCase() === 'finalizada') continue;
+        abertas.push({ descricao, responsavel, empresa, data: rdo.dataReferencia });
+      }
+    }
+
+    const pdfDoc = await PDFDocument.create();
+    const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const reg = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const m = { l: 45, r: 45, t: 52, b: 45 };
+    let ctx = this.addPage(pdfDoc, bold, reg, m);
+    const limpar = (valor: string) => valor.replace(/[^\x20-\xFF]/g, '').trim();
+    const dataBr = (iso: string) => {
+      const [ano, mes, dia] = iso.split('-');
+      return `${dia}/${mes}/${ano}`;
+    };
+    const dataRef = (data: Date) => data.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+
+    const escrever = (texto: string, size: number, font: PDFFont, cor = DARK, gap = 14) => {
+      const palavras = limpar(texto).split(' ').filter(Boolean);
+      const largura = ctx.w - m.l - m.r;
+      const linhas: string[] = [];
+      let atual = '';
+      for (const palavra of palavras) {
+        const teste = atual ? `${atual} ${palavra}` : palavra;
+        if (font.widthOfTextAtSize(teste, size) > largura && atual) {
+          linhas.push(atual);
+          atual = palavra;
+        } else {
+          atual = teste;
+        }
+      }
+      if (atual) linhas.push(atual);
+      if (linhas.length === 0) linhas.push('-');
+      for (const linha of linhas) {
+        if (ctx.y - gap < m.b) ctx = this.addPage(pdfDoc, bold, reg, m);
+        ctx.page.drawText(linha, { x: m.l, y: ctx.y, size, font, color: cor });
+        ctx.y -= gap;
+      }
+    };
+
+    escrever('Atividades pendentes', 16, bold, LUNARDELI_RED, 22);
+    escrever(obra.nome, 11, bold, DARK, 16);
+    escrever(`Período: ${dataBr(de)} a ${dataBr(ate)}`, 10, reg, GRAY, 18);
+
+    if (abertas.length === 0) {
+      escrever('Nenhuma atividade pendente neste período.', 10, reg);
+    } else {
+      const grupos = new Map<string, typeof abertas>();
+      for (const item of abertas) {
+        const chave = `${item.responsavel || 'Sem responsável'}\n${item.empresa || ''}`;
+        const lista = grupos.get(chave) || [];
+        lista.push(item);
+        grupos.set(chave, lista);
+      }
+      for (const [chave, itens] of grupos) {
+        const [responsavel, empresa] = chave.split('\n');
+        const titulo = empresa ? `${responsavel} - ${empresa}` : responsavel;
+        ctx.y -= 6;
+        escrever(titulo, 11, bold, DARK, 16);
+        for (const item of itens) {
+          escrever(`- ${item.descricao} (${dataRef(item.data)})`, 9, reg, DARK, 13);
+        }
+      }
+    }
+
+    const bytes = await pdfDoc.save();
+    return Buffer.from(bytes);
   }
 
   private async embedRasterImage(pdfDoc: PDFDocument, bytes: Uint8Array) {

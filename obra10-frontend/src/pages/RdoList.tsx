@@ -179,7 +179,11 @@ export const RdoList: React.FC = () => {
                 .map((a: any) => {
                   const desc = typeof a === 'string' ? a : a?.descricao || '';
                   const resp = typeof a === 'string' ? '' : a?.responsavel || '';
-                  return resp ? `${desc} (Responsável: ${resp})` : desc;
+                  const empresa = typeof a === 'string' ? '' : a?.empresa || '';
+                  const quem = [resp, empresa].filter(Boolean).join(', ');
+                  const finalizada = typeof a !== 'string' && String(a?.status || '').toLowerCase() === 'finalizada';
+                  const texto = quem ? `${desc} (${quem})` : desc;
+                  return finalizada ? `${texto} [finalizada]` : texto;
                 })
                 .filter(Boolean)
                 .join('; ')
@@ -474,11 +478,16 @@ export const RdoList: React.FC = () => {
               atividadesPendentes: Array.isArray(extras.atividadesPendentes)
                 ? extras.atividadesPendentes.map((a: any) =>
                     typeof a === 'string'
-                      ? { descricao: fixEncoding(a), responsavel: '' }
-                      : { descricao: fixEncoding(a?.descricao || ''), responsavel: fixEncoding(a?.responsavel || '') },
+                      ? { descricao: fixEncoding(a), responsavel: '', empresa: '', status: 'pendente' }
+                      : {
+                          descricao: fixEncoding(a?.descricao || ''),
+                          responsavel: fixEncoding(a?.responsavel || ''),
+                          empresa: fixEncoding(a?.empresa || ''),
+                          status: String(a?.status || '').toLowerCase() === 'finalizada' ? 'finalizada' : 'pendente',
+                        },
                   )
                 : (extras.atividadesPendentes
-                    ? String(extras.atividadesPendentes).split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean).map((descricao: string) => ({ descricao: fixEncoding(descricao), responsavel: '' }))
+                    ? String(extras.atividadesPendentes).split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean).map((descricao: string) => ({ descricao: fixEncoding(descricao), responsavel: '', empresa: '', status: 'pendente' }))
                     : []),
               observacoes: Array.isArray(extras.observacoes)
                 ? extras.observacoes.map((o: any) =>
@@ -716,7 +725,7 @@ export const RdoList: React.FC = () => {
             atividadesPendentes: Array.isArray(rdo.atividadesPendentes)
               ? rdo.atividadesPendentes
               : (rdo.atividadesPendentes
-                  ? String(rdo.atividadesPendentes).split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean).map((descricao: string) => ({ descricao, responsavel: '' }))
+                  ? String(rdo.atividadesPendentes).split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean).map((descricao: string) => ({ descricao, responsavel: '', empresa: '', status: 'pendente' }))
                   : []),
             observacoesList: undefined,
           }));
@@ -821,7 +830,7 @@ export const RdoList: React.FC = () => {
           atividadesPendentes: Array.isArray(item.atividadesPendentes)
             ? item.atividadesPendentes
             : (item.atividadesPendentes
-                ? String(item.atividadesPendentes).split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean).map((descricao: string) => ({ descricao, responsavel: '' }))
+                ? String(item.atividadesPendentes).split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean).map((descricao: string) => ({ descricao, responsavel: '', empresa: '', status: 'pendente' }))
                 : []),
           observacoes: Array.isArray(item.observacoes)
             ? item.observacoes

@@ -223,6 +223,8 @@ interface ObservacaoItem {
 interface AtividadePendenteItem {
   descricao: string;
   responsavel: string;
+  empresa: string;
+  status: 'pendente' | 'finalizada';
 }
 
 type TipoRelatorio = 'DIA' | 'PERIODO';
@@ -323,22 +325,33 @@ function parseObservacoes(raw: unknown): ObservacaoItem[] {
   return [];
 }
 
+function statusPendencia(raw: unknown): 'pendente' | 'finalizada' {
+  const valor = String(raw || '').toLowerCase();
+  if (valor === 'finalizada' || valor === 'executada' || valor === 'concluida' || valor === 'concluída') {
+    return 'finalizada';
+  }
+  return 'pendente';
+}
+
 /** Converte texto legado (string) ou array no formato estruturado de pendências. */
 function parseAtividadesPendentes(raw: unknown): AtividadePendenteItem[] {
+  const montar = (item: any): AtividadePendenteItem =>
+    typeof item === 'string'
+      ? { descricao: item, responsavel: '', empresa: '', status: 'pendente' }
+      : {
+          descricao: item?.descricao || '',
+          responsavel: item?.responsavel || '',
+          empresa: item?.empresa || '',
+          status: statusPendencia(item?.status),
+        };
   if (typeof raw === 'string') {
     return raw
       .split(/\r?\n/)
       .map(line => line.trim().replace(/^[-*•\d.]+\s*/, '').trim())
       .filter(Boolean)
-      .map(descricao => ({ descricao, responsavel: '' }));
+      .map(descricao => montar(descricao));
   }
-  if (Array.isArray(raw)) {
-    return raw.map((item: any) =>
-      typeof item === 'string'
-        ? { descricao: item, responsavel: '' }
-        : { descricao: item?.descricao || '', responsavel: item?.responsavel || '' },
-    );
-  }
+  if (Array.isArray(raw)) return raw.map(montar);
   return [];
 }
 
@@ -754,6 +767,7 @@ export const DiarioDeObra: React.FC = () => {
 
   // ── Seção 8 ── Atividades pendentes
   const [atividadesPendentes, setAtividadesPendentes] = useState<AtividadePendenteItem[]>([]);
+  const [abaPendencias, setAbaPendencias] = useState<'pendente' | 'finalizada'>('pendente');
 
   // ── Seção 9 ── Mídias
   const [fotos, setFotos] = useState<Foto[]>([]);
@@ -2782,7 +2796,26 @@ export const DiarioDeObra: React.FC = () => {
                onToggle={() => toggleSection('sec8')}
              >
                <div className="space-y-3">
-                 {atividadesPendentes.map((atv, i) => (
+                 <div className="flex gap-2">
+                   {(['pendente', 'finalizada'] as const).map((aba) => {
+                     const total = atividadesPendentes.filter((item) => (item.status || 'pendente') === aba).length;
+                     const ativa = abaPendencias === aba;
+                     return (
+                       <button
+                         key={aba}
+                         type="button"
+                         onClick={() => setAbaPendencias(aba)}
+                         className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${ativa ? 'bg-lunardeli-red text-white border-lunardeli-red' : 'bg-white text-gray-600 border-gray-200'}`}
+                       >
+                         {aba === 'pendente' ? 'Pendentes' : 'Finalizadas'} ({total})
+                       </button>
+                     );
+                   })}
+                 </div>
+                 {atividadesPendentes
+                   .map((atv, i) => ({ atv, i }))
+                   .filter(({ atv }) => (atv.status || 'pendente') === abaPendencias)
+                   .map(({ atv, i }, pos, visiveis) => (
                    <div key={i} className="flex gap-1.5 items-start p-2.5 sm:p-3 bg-gray-50 border border-gray-200 rounded-lg">
                      <div className="flex-1 min-w-0 space-y-2">
                        <AutoResizeTextarea
@@ -2796,24 +2829,50 @@ export const DiarioDeObra: React.FC = () => {
                          }}
                          disabled={isReadOnly}
                        />
-                       <input
-                         className="w-full sm:w-72 border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white disabled:bg-gray-50"
-                         placeholder="Responsável pela atividade..."
-                         value={atv.responsavel}
-                         onChange={e => {
-                           const newVal = e.target.value;
-                           setAtividadesPendentes(prev => prev.map((item, idx) => idx === i ? { ...item, responsavel: newVal } : item));
-                         }}
+                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                         <input
+                           className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white disabled:bg-gray-50"
+                           placeholder="Nome do responsável"
+                           value={atv.responsavel}
+                           onChange={e => {
+                             const newVal = e.target.value;
+                             setAtividadesPendentes(prev => prev.map((item, idx) => idx === i ? { ...item, responsavel: newVal } : item));
+                           }}
+                           disabled={isReadOnly}
+                         />
+                         <input
+                           className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red bg-white disabled:bg-gray-50"
+                           placeholder="Empresa"
+                           value={atv.empresa || ''}
+                           onChange={e => {
+                             const newVal = e.target.value;
+                             setAtividadesPendentes(prev => prev.map((item, idx) => idx === i ? { ...item, empresa: newVal } : item));
+                           }}
+                           disabled={isReadOnly}
+                         />
+                       </div>
+                       <button
+                         type="button"
                          disabled={isReadOnly}
-                       />
+                         onClick={() => setAtividadesPendentes(prev => prev.map((item, idx) => idx === i ? { ...item, status: abaPendencias === 'pendente' ? 'finalizada' : 'pendente' } : item))}
+                         className="text-xs font-bold text-lunardeli-red hover:underline disabled:opacity-50"
+                       >
+                         {abaPendencias === 'pendente' ? 'Marcar como finalizada' : 'Voltar para pendente'}
+                       </button>
                      </div>
                      <ItemSideActions
-                       index={i}
-                       total={atividadesPendentes.length}
+                       index={pos}
+                       total={visiveis.length}
                        disabled={isReadOnly}
-                       onMove={(dir) =>
-                         setAtividadesPendentes((prev) => moveItemInArray(prev, i, dir))
-                       }
+                       onMove={(dir) => {
+                         const alvo = visiveis[pos + dir];
+                         if (!alvo) return;
+                         setAtividadesPendentes((prev) => {
+                           const next = [...prev];
+                           [next[i], next[alvo.i]] = [next[alvo.i], next[i]];
+                           return next;
+                         });
+                       }}
                        onRemove={() =>
                          setAtividadesPendentes((prev) => prev.filter((_, idx) => idx !== i))
                        }
@@ -2821,19 +2880,23 @@ export const DiarioDeObra: React.FC = () => {
                      />
                    </div>
                  ))}
-                 {atividadesPendentes.length === 0 && (
+                 {atividadesPendentes.filter((item) => (item.status || 'pendente') === abaPendencias).length === 0 && (
                    <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-lg text-gray-400 text-sm">
-                     Nenhuma atividade pendente. Clique abaixo para acrescentar.
+                     {abaPendencias === 'pendente'
+                       ? 'Nenhuma atividade pendente. Clique abaixo para acrescentar.'
+                       : 'Nenhuma atividade finalizada nesta aba.'}
                    </div>
                  )}
-                 <button
-                   type="button"
-                   onClick={() => setAtividadesPendentes(prev => [...prev, { descricao: '', responsavel: '' }])}
-                   className="text-sm font-semibold text-lunardeli-red hover:text-red-700 flex items-center gap-1 mt-1 disabled:opacity-50"
-                   disabled={isReadOnly}
-                 >
-                   + Adicionar atividade pendente
-                 </button>
+                 {abaPendencias === 'pendente' && (
+                   <button
+                     type="button"
+                     onClick={() => setAtividadesPendentes(prev => [...prev, { descricao: '', responsavel: '', empresa: '', status: 'pendente' }])}
+                     className="text-sm font-semibold text-lunardeli-red hover:text-red-700 flex items-center gap-1 mt-1 disabled:opacity-50"
+                     disabled={isReadOnly}
+                   >
+                     + Adicionar atividade pendente
+                   </button>
+                 )}
                </div>
              </CollapsibleSection>
            )}

@@ -49,7 +49,7 @@ export const LUNA_TOOL_DEFS: LunaToolDef[] = [
   {
     name: 'painel_obra',
     description:
-      'Painel geral de uma obra (alias: ver_obra): status, RDOs pendentes, efetivo do dia, atividades recentes e principais problemas.',
+      'Painel geral de uma obra (alias: ver_obra): status, RDOs pendentes, efetivo do dia, atividades recentes e atividades pendentes do último diário, agrupadas por responsável.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -63,7 +63,7 @@ export const LUNA_TOOL_DEFS: LunaToolDef[] = [
   {
     name: 'ver_obra',
     description:
-      'Igual a painel_obra: resumo do empreendimento (problemas, efetivo do dia, RDOs).',
+      'Igual a painel_obra: resumo do empreendimento (atividades pendentes, efetivo do dia, RDOs).',
     inputSchema: {
       type: 'object',
       properties: {
