@@ -100,12 +100,35 @@ export class ObraService {
     }
   }
 
+  private async assertNomeObraDisponivel(
+    tx: { obra: { findFirst: (args: any) => Promise<any> } },
+    empresaId: string,
+    nome: string,
+    ignorarId?: string,
+  ) {
+    const duplicata = await tx.obra.findFirst({
+      where: {
+        empresaId,
+        deletedAt: null,
+        status: { not: 'EXCLUIDA' },
+        nome: { equals: nome, mode: 'insensitive' },
+        ...(ignorarId ? { id: { not: ignorarId } } : {}),
+      },
+      select: { id: true, nome: true },
+    });
+    if (duplicata) {
+      throw new BadRequestException(
+        `Já existe uma obra chamada "${duplicata.nome}". Use outro nome ou exclua a duplicata antes de cadastrar de novo.`,
+      );
+    }
+  }
+
   async listarObrasDoUsuario(usuarioId: string) {
     // Busca as obras ATIVAS nas quais o usuário tem um perfil
     const obras = await this.prisma.obra.findMany({
       where: {
         deletedAt: null,
-        status: { not: 'INATIVA' },
+        status: { notIn: ['INATIVA', 'EXCLUIDA'] },
         userObraRole: {
           some: { usuarioId },
         },
@@ -146,6 +169,12 @@ export class ObraService {
     usuarioId: string,
     data: { nome: string; endereco?: string },
   ) {
+    const nome = textoLimpo(data.nome);
+    const endereco = textoLimpo(data.endereco) || undefined;
+    if (nome.length < 2) {
+      throw new BadRequestException('Nome deve ter no mínimo 2 caracteres.');
+    }
+
     const empresa = await this.prisma.empresa.findUnique({
       where: { id: empresaId },
       select: { limiteObras: true },
@@ -157,7 +186,7 @@ export class ObraService {
     // null = ilimitado; senão conta obras não excluídas
     if (empresa.limiteObras != null) {
       const totalObras = await this.prisma.obra.count({
-        where: { empresaId, deletedAt: null },
+        where: { empresaId, deletedAt: null, status: { not: 'EXCLUIDA' } },
       });
       if (totalObras >= empresa.limiteObras) {
         throw new BadRequestException(
@@ -171,11 +200,12 @@ export class ObraService {
 
     // 2. Cria a obra e vincula o usuário na transação principal
     return this.prisma.$transaction(async (tx) => {
+      await this.assertNomeObraDisponivel(tx, empresaId, nome);
       const obra = await tx.obra.create({
         data: {
           empresaId,
-          nome: data.nome,
-          endereco: data.endereco,
+          nome,
+          endereco,
           status: 'ATIVA',
         },
       });
@@ -194,10 +224,15 @@ export class ObraService {
 
   async excluirObra(id: string, empresaId: string, userId: string) {
     // Soft delete
-    if (!id) throw new Error('ID não fornecido');
-    const obra = await this.prisma.obra.findFirst({ where: { id, empresaId } });
-    if (!obra)
-      throw new Error('Obra não encontrada ou não pertence a esta empresa.');
+    if (!id) throw new BadRequestException('ID não fornecido');
+    const obra = await this.prisma.obra.findFirst({
+      where: { id, empresaId, deletedAt: null },
+    });
+    if (!obra) {
+      throw new BadRequestException(
+        'Obra não encontrada, já foi excluída ou não pertence a esta empresa.',
+      );
+    }
 
     const user = await this.prisma.usuario.findUnique({
       where: { id: userId },
@@ -228,16 +263,31 @@ export class ObraService {
     empresaId: string,
     data: { nome?: string; endereco?: string; status?: string },
   ) {
-    if (!id) throw new Error('ID não fornecido');
-    const obra = await this.prisma.obra.findFirst({ where: { id, empresaId } });
-    if (!obra)
-      throw new Error('Obra não encontrada ou não pertence a esta empresa.');
+    if (!id) throw new BadRequestException('ID não fornecido');
+    const obra = await this.prisma.obra.findFirst({
+      where: { id, empresaId, deletedAt: null },
+    });
+    if (!obra) {
+      throw new BadRequestException(
+        'Obra não encontrada ou não pertence a esta empresa.',
+      );
+    }
+
+    const nome = data.nome !== undefined ? textoLimpo(data.nome) : undefined;
+    if (nome !== undefined && nome.length < 2) {
+      throw new BadRequestException('Nome deve ter no mínimo 2 caracteres.');
+    }
+    if (nome) {
+      await this.assertNomeObraDisponivel(this.prisma, empresaId, nome, id);
+    }
 
     return this.prisma.obra.update({
       where: { id },
       data: {
-        ...(data.nome && { nome: data.nome }),
-        ...(data.endereco !== undefined && { endereco: data.endereco }),
+        ...(nome && { nome }),
+        ...(data.endereco !== undefined && {
+          endereco: textoLimpo(data.endereco) || null,
+        }),
         ...(data.status && { status: data.status }),
       },
     });

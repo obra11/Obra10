@@ -521,21 +521,24 @@ export class AuthService {
     const isPrivilegiado = acessoTodasObras;
     const obrasBrutas = isPrivilegiado
       ? await this.prisma.obra.findMany({
-          where: { empresaId, deletedAt: null },
+          where: { empresaId, deletedAt: null, status: { not: 'EXCLUIDA' } },
           orderBy: { createdAt: 'asc' },
         })
       : await this.prisma.obra.findMany({
           where: {
             empresaId,
             deletedAt: null,
-            status: { not: 'INATIVA' },
+            status: { notIn: ['INATIVA', 'EXCLUIDA'] },
             userObraRole: { some: { usuarioId: userId } },
           },
           include: { userObraRole: { where: { usuarioId: userId } } },
           orderBy: { createdAt: 'asc' },
         });
 
-    return obrasBrutas.map((obra: any) => {
+    const vistos = new Set<string>();
+    return obrasBrutas.flatMap((obra: any) => {
+      if (vistos.has(obra.id)) return [];
+      vistos.add(obra.id);
       const permissoesObj = obra.userObraRole?.[0]?.permissoes || {};
       const privilegiadoPerms =
         caps?.modulosPadrao && Object.keys(caps.modulosPadrao).length > 0
@@ -544,15 +547,18 @@ export class AuthService {
       const permissoes = isPrivilegiado
         ? privilegiadoPerms
         : mergePermissoesObra(permissoesObj, caps);
-      return {
-        id: obra.id,
-        nome: obra.nome,
-        endereco: obra.endereco,
-        status: obra.status,
-        imageUrl: obra.imageUrl,
-        minhasPermissoes: isPrivilegiado ? ['SUPER'] : Object.keys(permissoes),
-        permissoes,
-      };
+      return [
+        {
+          id: obra.id,
+          nome: obra.nome,
+          endereco: obra.endereco,
+          status: obra.status,
+          imageUrl: obra.imageUrl,
+          createdAt: obra.createdAt,
+          minhasPermissoes: isPrivilegiado ? ['SUPER'] : Object.keys(permissoes),
+          permissoes,
+        },
+      ];
     });
   }
 

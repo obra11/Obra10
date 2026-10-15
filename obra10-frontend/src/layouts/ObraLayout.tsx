@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   LogOut, Settings, LayoutDashboard, Users, FileText, ArrowLeft, BarChart2, Loader2,
@@ -25,9 +25,10 @@ const MODULE_ICONS: Record<string, any> = {
 };
 
 export const ObraLayout: React.FC = () => {
-  const { logout, obraAtiva, empresa, setObraAtiva, user, updateUserPhoto, updateEmpresaLogo } = useAuth();
+  const { logout, obraAtiva, empresa, setObraAtiva, user, updateUserPhoto, updateEmpresaLogo, obras } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { obraId } = useParams();
   const [uploadingUserPhoto, setUploadingUserPhoto] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
@@ -44,6 +45,13 @@ export const ObraLayout: React.FC = () => {
   useEffect(() => {
     setMobileMoreOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!obraId) return;
+    if (obraAtiva?.id === obraId) return;
+    const found = obras.find((o) => o.id === obraId);
+    if (found) setObraAtiva(found);
+  }, [obraId, obras, obraAtiva?.id, setObraAtiva]);
 
   const handleLogout = () => {
     logout();
@@ -128,7 +136,10 @@ export const ObraLayout: React.FC = () => {
   const canOpenConfiguracoes =
     hasPerm('SUPER') ||
     hasPerm('CONFIGURACOES') ||
-    user?.perfilGlobal === 'GESTOR';
+    user?.perfilGlobal === 'GESTOR' ||
+    user?.perfilGlobal === 'SUPER_ADMIN' ||
+    user?.capabilities?.editarObra === true ||
+    user?.capabilities?.excluirObra === true;
 
   // Final permanent items
   const footerItems = [
