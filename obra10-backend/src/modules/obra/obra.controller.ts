@@ -59,7 +59,13 @@ export class ObraController {
       await this.assertCapability(req, 'excluirObra', 'excluir obras');
       return await this.obraService.excluirObra(id, empresaId, userId);
     } catch (err: any) {
-      if (err instanceof ForbiddenException || err instanceof UnauthorizedException) throw err;
+      if (
+        err instanceof ForbiddenException ||
+        err instanceof UnauthorizedException ||
+        err instanceof BadRequestException
+      ) {
+        throw err;
+      }
       throw new BadRequestException('Erro ao excluir: ' + err.message);
     }
   }
@@ -76,7 +82,13 @@ export class ObraController {
       await this.assertCapability(req, 'editarObra', 'editar obras');
       return await this.obraService.editarObra(id, empresaId, dto);
     } catch (err: any) {
-      if (err instanceof ForbiddenException || err instanceof UnauthorizedException) throw err;
+      if (
+        err instanceof ForbiddenException ||
+        err instanceof UnauthorizedException ||
+        err instanceof BadRequestException
+      ) {
+        throw err;
+      }
       throw new BadRequestException('Erro ao editar: ' + err.message);
     }
   }

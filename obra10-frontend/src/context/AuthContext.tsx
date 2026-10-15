@@ -54,6 +54,7 @@ export interface Obra {
   endereco?: string;
   status: string;
   imageUrl?: string;
+  createdAt?: string;
   minhasPermissoes?: string[];
   permissoes?: Record<string, string>;
 }
@@ -100,7 +101,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       const data = await authService.getSession(`?_t=${Date.now()}`);
       setUser(data.usuario);
       setEmpresa(data.empresa);
-      setObras(data.obrasPermitidas);
+      setObras(data.obrasPermitidas || []);
       setIsAuthenticated(true);
       const ativa = loadObraAtiva();
       if (ativa?.id) {
@@ -108,6 +109,9 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         if (fresh) {
           setObraAtivaState(fresh);
           localStorage.setItem('obra10_obraAtiva', JSON.stringify(fresh));
+        } else {
+          setObraAtivaState(null);
+          localStorage.removeItem('obra10_obraAtiva');
         }
       }
     } catch (err) {

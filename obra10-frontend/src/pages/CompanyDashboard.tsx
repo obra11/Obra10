@@ -1,17 +1,32 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useAuth, type Obra } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List, Headphones, FileText, Menu, X } from 'lucide-react';
+import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List, Headphones, FileText, Menu, X, Trash2 } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
+import { confirmouExclusao } from '../utils/confirmouExclusao';
+import { ConfirmarExclusaoObra } from '../components/ConfirmarExclusaoObra';
 import {
   formatarDocumentoFiscal,
   mascaraDocumentoFiscal,
   normalizarDocumentoFiscal,
 } from '../utils/documentoFiscal';
 
+function formatarCadastroObra(iso?: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export const CompanyDashboard: React.FC = () => {
-  const { user, empresa, obras, logout, setObraAtiva, updateEmpresaLogo, updateUserPhoto } = useAuth();
+  const { user, empresa, obras, logout, setObraAtiva, updateEmpresaLogo, updateUserPhoto, fetchSession, obraAtiva } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -26,10 +41,16 @@ export const CompanyDashboard: React.FC = () => {
     user?.capabilities?.gerenciarFinanceiro === true || isGestor;
   const canCriarObra =
     user?.capabilities?.criarObra === true || isGestor;
+  const canExcluirObra =
+    user?.capabilities?.excluirObra === true || isGestor;
   const [menuContaAberto, setMenuContaAberto] = useState(false);
   const [showNovoModal, setShowNovoModal] = useState(false);
   const [novaObra, setNovaObra] = useState({ nome: '', endereco: '' });
   const [loadingCriar, setLoadingCriar] = useState(false);
+  const criandoRef = useRef(false);
+  const [obraParaExcluir, setObraParaExcluir] = useState<Obra | null>(null);
+  const [confirmWord, setConfirmWord] = useState('');
+  const [loadingDelete, setLoadingDelete] = useState(false);
 
   // Filtros e Modos de Visualização das Obras
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,6 +78,17 @@ export const CompanyDashboard: React.FC = () => {
       return matchSearch && matchStatus;
     });
   }, [obras, searchQuery, statusFilter]);
+
+  const nomesDuplicados = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const obra of obras) {
+      const chave = obra.nome.trim().toLowerCase();
+      counts.set(chave, (counts.get(chave) || 0) + 1);
+    }
+    return new Set(
+      [...counts.entries()].filter(([, n]) => n > 1).map(([chave]) => chave),
+    );
+  }, [obras]);
 
 
   const [showEditEmpresaModal, setShowEditEmpresaModal] = useState(false);
@@ -86,14 +118,43 @@ export const CompanyDashboard: React.FC = () => {
   }, []);
 
   const handleCriarObra = async () => {
-    if (!novaObra.nome.trim()) return;
+    const nome = novaObra.nome.trim();
+    if (!nome || criandoRef.current || loadingCriar) return;
+    const duplicada = obras.some(
+      (obra) => obra.nome.trim().toLowerCase() === nome.toLowerCase(),
+    );
+    if (duplicada) {
+      alert(
+        `Já existe uma obra chamada "${nome}". Use outro nome ou exclua a duplicata antes de cadastrar de novo.`,
+      );
+      return;
+    }
+    criandoRef.current = true;
     setLoadingCriar(true);
     try {
-      await api.post('/obras', novaObra);
+      await api.post('/obras', { ...novaObra, nome });
       window.location.reload();
     } catch(e: any) {
       alert('Erro ao criar obra: ' + (e?.response?.data?.message || e.message));
-    } finally { setLoadingCriar(false); }
+      criandoRef.current = false;
+      setLoadingCriar(false);
+    }
+  };
+
+  const handleExcluirObra = async () => {
+    if (!obraParaExcluir || !confirmouExclusao(confirmWord) || loadingDelete) return;
+    setLoadingDelete(true);
+    try {
+      await api.delete(`/obras/${obraParaExcluir.id}`);
+      if (obraAtiva?.id === obraParaExcluir.id) setObraAtiva(null);
+      setObraParaExcluir(null);
+      setConfirmWord('');
+      await fetchSession();
+    } catch (e: any) {
+      alert('Erro ao excluir obra: ' + (e?.response?.data?.message || e.message));
+    } finally {
+      setLoadingDelete(false);
+    }
   };
 
   const handleEditarEmpresa = async () => {
@@ -118,6 +179,29 @@ export const CompanyDashboard: React.FC = () => {
   const handleObraSelect = (obra: Obra) => {
     setObraAtiva(obra);
     navigate(`/obras/${obra.id}/dashboard`);
+  };
+
+  const abrirExclusao = (obra: Obra, e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    setConfirmWord('');
+    setObraParaExcluir(obra);
+  };
+
+  const linhaCadastro = (obra: Obra) => {
+    const cadastro = formatarCadastroObra(obra.createdAt);
+    const duplicada = nomesDuplicados.has(obra.nome.trim().toLowerCase());
+    if (!cadastro && !duplicada) return null;
+    return (
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-400 mb-2">
+        {cadastro && <span>Cadastrada em {cadastro}</span>}
+        {duplicada && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold uppercase tracking-wide text-[10px]">
+            Mesmo nome
+          </span>
+        )}
+      </div>
+    );
   };
 
   const handleUserPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -410,6 +494,16 @@ export const CompanyDashboard: React.FC = () => {
             )}
         </div>
 
+        {nomesDuplicados.size > 0 && (
+          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-2">
+            <AlertTriangle size={18} className="shrink-0 mt-0.5 text-amber-600" />
+            <p>
+              Há mais de um canteiro com o mesmo nome. São obras diferentes — use a data de cadastro para distingui-las.
+              {canExcluirObra ? ' Você pode excluir a duplicata direto neste painel.' : ''}
+            </p>
+          </div>
+        )}
+
         {/* Toolbar de Busca, Filtro e Visualização */}
         {obras.length > 0 && (
           <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm mb-6 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
@@ -537,7 +631,8 @@ export const CompanyDashboard: React.FC = () => {
                 </div>
 
                 <div className="p-5 flex-1 flex flex-col">
-                  <h3 className="text-lg font-bold text-gray-800 mb-2 truncate">{obra.nome}</h3>
+                  <h3 className="text-lg font-bold text-gray-800 mb-1 truncate">{obra.nome}</h3>
+                  {linhaCadastro(obra)}
                   {obra.endereco && (
                     <div className="flex items-start text-gray-500 text-sm mb-4">
                       <MapPin size={16} className="mr-1 mt-0.5 flex-shrink-0" />
@@ -545,13 +640,23 @@ export const CompanyDashboard: React.FC = () => {
                     </div>
                   )}
                   
-                  <div className="mt-auto pt-4 border-t border-gray-100">
+                  <div className="mt-auto pt-4 border-t border-gray-100 flex gap-2">
                     <button 
                       onClick={() => handleObraSelect(obra)}
-                      className="w-full flex justify-center py-2.5 px-4 rounded-lg bg-gray-50 hover:bg-lunardeli-red hover:text-white transition-colors text-lunardeli-dark font-semibold border border-gray-200 hover:border-transparent text-sm"
+                      className="flex-1 flex justify-center py-2.5 px-4 rounded-lg bg-gray-50 hover:bg-lunardeli-red hover:text-white transition-colors text-lunardeli-dark font-semibold border border-gray-200 hover:border-transparent text-sm"
                     >
                       Acessar Painel
                     </button>
+                    {canExcluirObra && (
+                      <button
+                        type="button"
+                        title="Excluir obra"
+                        onClick={(e) => abrirExclusao(obra, e)}
+                        className="shrink-0 px-3 py-2.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 active:bg-red-100"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -584,6 +689,7 @@ export const CompanyDashboard: React.FC = () => {
                 <div className="p-3.5 flex-1 flex flex-col justify-between">
                   <div>
                     <h3 className="text-sm font-bold text-gray-800 truncate mb-1" title={obra.nome}>{obra.nome}</h3>
+                    {linhaCadastro(obra)}
                     {obra.endereco ? (
                       <p className="text-xs text-gray-500 flex items-center gap-1 mb-3 truncate" title={obra.endereco}>
                         <MapPin size={12} className="shrink-0" />
@@ -594,12 +700,24 @@ export const CompanyDashboard: React.FC = () => {
                     )}
                   </div>
 
-                  <button 
-                    onClick={() => handleObraSelect(obra)}
-                    className="w-full py-1.5 px-3 rounded-lg bg-gray-50 hover:bg-lunardeli-red hover:text-white transition-colors text-lunardeli-dark font-semibold border border-gray-200 hover:border-transparent text-xs text-center"
-                  >
-                    Acessar Painel
-                  </button>
+                  <div className="flex gap-1.5">
+                    <button 
+                      onClick={() => handleObraSelect(obra)}
+                      className="flex-1 py-1.5 px-3 rounded-lg bg-gray-50 hover:bg-lunardeli-red hover:text-white transition-colors text-lunardeli-dark font-semibold border border-gray-200 hover:border-transparent text-xs text-center"
+                    >
+                      Acessar Painel
+                    </button>
+                    {canExcluirObra && (
+                      <button
+                        type="button"
+                        title="Excluir obra"
+                        onClick={(e) => abrirExclusao(obra, e)}
+                        className="shrink-0 px-2 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -638,15 +756,28 @@ export const CompanyDashboard: React.FC = () => {
                         <span className="truncate">{obra.endereco}</span>
                       </p>
                     )}
+                    {linhaCadastro(obra)}
                   </div>
                 </div>
 
-                <button 
-                  onClick={() => handleObraSelect(obra)}
-                  className="w-full sm:w-auto px-4 py-2 bg-gray-50 hover:bg-lunardeli-red hover:text-white border border-gray-200 hover:border-transparent rounded-lg font-semibold text-gray-700 text-xs transition-all text-center shrink-0"
-                >
-                  Acessar Painel →
-                </button>
+                <div className="flex w-full sm:w-auto gap-2 shrink-0">
+                  <button 
+                    onClick={() => handleObraSelect(obra)}
+                    className="flex-1 sm:flex-none px-4 py-2 bg-gray-50 hover:bg-lunardeli-red hover:text-white border border-gray-200 hover:border-transparent rounded-lg font-semibold text-gray-700 text-xs transition-all text-center"
+                  >
+                    Acessar Painel →
+                  </button>
+                  {canExcluirObra && (
+                    <button
+                      type="button"
+                      title="Excluir obra"
+                      onClick={(e) => abrirExclusao(obra, e)}
+                      className="px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -670,12 +801,34 @@ export const CompanyDashboard: React.FC = () => {
             </div>
             <div className="flex gap-3 justify-end mt-6">
               <button onClick={() => setShowNovoModal(false)} className="px-4 py-2 text-gray-600 font-semibold hover:bg-gray-100 rounded-lg">Cancelar</button>
-              <button onClick={handleCriarObra} disabled={loadingCriar} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 flex items-center gap-2">
+              <button type="button" onClick={handleCriarObra} disabled={loadingCriar} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 flex items-center gap-2">
                 {loadingCriar ? <Loader2 size={16} className="animate-spin" /> : null} Salvar Obra
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {obraParaExcluir && (
+        <ConfirmarExclusaoObra
+          nome={obraParaExcluir.nome}
+          detalhe={
+            formatarCadastroObra(obraParaExcluir.createdAt)
+              ? `Cadastrada em ${formatarCadastroObra(obraParaExcluir.createdAt)}${obraParaExcluir.endereco ? ` · ${obraParaExcluir.endereco}` : ''}`
+              : obraParaExcluir.endereco
+          }
+          email={user?.email}
+          confirmWord={confirmWord}
+          onConfirmWord={setConfirmWord}
+          onCancel={() => {
+            if (!loadingDelete) {
+              setObraParaExcluir(null);
+              setConfirmWord('');
+            }
+          }}
+          onConfirm={handleExcluirObra}
+          loading={loadingDelete}
+        />
       )}
 
 

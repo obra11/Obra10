@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Save, Trash2, Loader2, Upload, AlertTriangle, CheckCircle, ShieldAlert } from 'lucide-react';
+import { Settings, Save, Trash2, Loader2, Upload, CheckCircle, ShieldAlert } from 'lucide-react';
 import api from '../../services/api';
 import { getImageUrl } from '../../utils/image';
+import { confirmouExclusao } from '../../utils/confirmouExclusao';
+import { ConfirmarExclusaoObra } from '../../components/ConfirmarExclusaoObra';
 
 export const Configuracoes: React.FC = () => {
   const { user, obraAtiva, setObraAtiva, updateObraImage, fetchSession } = useAuth();
@@ -28,7 +30,10 @@ export const Configuracoes: React.FC = () => {
     }
   }, [obraAtiva]);
 
-  const isGestor = user?.perfilGlobal === 'GESTOR';
+  const isGestor =
+    user?.perfilGlobal === 'GESTOR' || user?.perfilGlobal === 'SUPER_ADMIN';
+  const canEditarObra = isGestor || user?.capabilities?.editarObra === true;
+  const canExcluirObra = isGestor || user?.capabilities?.excluirObra === true;
 
   const handleSave = async () => {
     if (!nome.trim() || !obraAtiva) return;
@@ -72,7 +77,7 @@ export const Configuracoes: React.FC = () => {
   };
 
   const handleDelete = async () => {
-    if (!obraAtiva || confirmWord !== 'EXCLUIR') return;
+    if (!obraAtiva || !confirmouExclusao(confirmWord)) return;
     setLoadingDelete(true);
     try {
       await api.delete(`/obras/${obraAtiva.id}`);
@@ -83,7 +88,6 @@ export const Configuracoes: React.FC = () => {
       alert('Erro ao excluir obra: ' + (e?.response?.data?.message || e.message));
     } finally {
       setLoadingDelete(false);
-      setShowConfirmDelete(false);
     }
   };
 
@@ -125,7 +129,7 @@ export const Configuracoes: React.FC = () => {
                   </div>
                 )}
                 {/* Desktop: overlay no hover. Mobile: sempre visível (não existe hover). */}
-                {isGestor && (
+                {canEditarObra && (
                   <label className="absolute inset-0 bg-black/55 md:bg-black/60 opacity-100 md:opacity-0 md:group-hover:opacity-100 flex flex-col items-center justify-center text-white cursor-pointer transition-opacity text-center p-2">
                     {uploadingImage ? (
                       <Loader2 className="animate-spin text-white mb-1" size={20} />
@@ -139,7 +143,7 @@ export const Configuracoes: React.FC = () => {
                   </label>
                 )}
               </div>
-              {isGestor && (
+              {canEditarObra && (
                 <label className="mt-3 w-full md:hidden inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-sm font-semibold text-gray-800 active:bg-gray-50 cursor-pointer">
                   {uploadingImage ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                   {uploadingImage ? 'Enviando...' : 'Escolher foto da obra'}
@@ -157,7 +161,7 @@ export const Configuracoes: React.FC = () => {
                 <label className="block text-sm font-bold text-gray-700 mb-1">Nome do Canteiro de Obras *</label>
                 <input
                   type="text"
-                  disabled={!isGestor}
+                  disabled={!canEditarObra}
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
                   className="w-full px-3.5 py-2 border rounded-lg focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red outline-none disabled:bg-gray-50 disabled:text-gray-500"
@@ -169,7 +173,7 @@ export const Configuracoes: React.FC = () => {
                 <label className="block text-sm font-bold text-gray-700 mb-1">Endereço da Obra</label>
                 <input
                   type="text"
-                  disabled={!isGestor}
+                  disabled={!canEditarObra}
                   value={endereco}
                   onChange={(e) => setEndereco(e.target.value)}
                   className="w-full px-3.5 py-2 border rounded-lg focus:ring-2 focus:ring-lunardeli-red focus:border-lunardeli-red outline-none disabled:bg-gray-50 disabled:text-gray-500"
@@ -186,7 +190,7 @@ export const Configuracoes: React.FC = () => {
                       <button
                         key={s}
                         type="button"
-                        disabled={!isGestor}
+                        disabled={!canEditarObra}
                         onClick={() => setStatus(s)}
                         className={`py-2 px-3 text-xs font-bold rounded-lg border uppercase tracking-wider text-center transition-all ${
                           isActive
@@ -209,7 +213,7 @@ export const Configuracoes: React.FC = () => {
         </div>
 
         {/* Save Footer Bar */}
-        {isGestor && (
+        {canEditarObra && (
           <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
             <div className="flex items-center gap-2 text-green-600 h-6">
               {saveSuccess && (
@@ -232,7 +236,7 @@ export const Configuracoes: React.FC = () => {
       </div>
 
       {/* Danger Zone */}
-      {isGestor && (
+      {canExcluirObra && (
         <div className="bg-red-50 rounded-xl border border-red-200 overflow-hidden">
           <div className="p-6">
             <div className="flex items-start gap-4">
@@ -262,58 +266,16 @@ export const Configuracoes: React.FC = () => {
         </div>
       )}
 
-      {/* Confirm Delete Modal */}
       {showConfirmDelete && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-fade-in">
-            <div className="p-6">
-              <div className="flex items-center gap-2 text-red-600 mb-4">
-                <AlertTriangle size={24} />
-                <h3 className="text-lg font-bold">Você tem certeza absoluta?</h3>
-              </div>
-              
-              <div className="text-sm text-gray-600 space-y-3">
-                <p>
-                  Esta ação não pode ser desfeita. Todos os dados da obra <strong>{obraAtiva.nome}</strong> serão excluídos permanentemente.
-                </p>
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800 flex items-start gap-2">
-                  <AlertTriangle className="shrink-0 mt-0.5" size={14} />
-                  <span>
-                    <strong>Importante:</strong> Um e-mail de confirmação será enviado para <strong>{user?.email}</strong> assim que a exclusão for concluída.
-                  </span>
-                </div>
-                <p>
-                  Para confirmar, digite a palavra <strong className="text-red-600 select-all">EXCLUIR</strong> no campo abaixo:
-                </p>
-              </div>
-
-              <input
-                type="text"
-                value={confirmWord}
-                onChange={(e) => setConfirmWord(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none mt-4 font-bold uppercase tracking-wider text-center text-red-600 bg-red-50/50"
-                placeholder="Digite EXCLUIR"
-              />
-            </div>
-
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
-              <button
-                onClick={() => setShowConfirmDelete(false)}
-                className="px-4 py-2 text-gray-600 font-semibold hover:bg-gray-100 rounded-lg text-sm transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={confirmWord !== 'EXCLUIR' || loadingDelete}
-                className="px-5 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-lg text-sm flex items-center gap-1.5 transition-colors shadow-sm"
-              >
-                {loadingDelete ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                Confirmar Exclusão
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmarExclusaoObra
+          nome={obraAtiva.nome}
+          email={user?.email}
+          confirmWord={confirmWord}
+          onConfirmWord={setConfirmWord}
+          onCancel={() => setShowConfirmDelete(false)}
+          onConfirm={handleDelete}
+          loading={loadingDelete}
+        />
       )}
     </div>
   );
