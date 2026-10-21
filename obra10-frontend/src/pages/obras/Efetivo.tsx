@@ -193,7 +193,7 @@ export const Efetivo: React.FC = () => {
                               setShowModal(true);
                             }}
                             className="p-2 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Editar Permissões"
+                            title="Editar nome, e-mail e permissões"
                           >
                             <Edit2 size={16} />
                           </button>

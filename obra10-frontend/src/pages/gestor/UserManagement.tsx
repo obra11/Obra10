@@ -137,6 +137,9 @@ export const UserManagement: React.FC = () => {
   const [papelDraft, setPapelDraft] = useState<Record<string, RoleCapabilities>>({});
   const [savingPapel, setSavingPapel] = useState<string | null>(null);
   const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>({});
+  const [dadosEdit, setDadosEdit] = useState<{ id: string; nome: string; email: string } | null>(null);
+  const [dadosEditError, setDadosEditError] = useState('');
+  const [dadosEditLoading, setDadosEditLoading] = useState(false);
 
   const toggleUser = (id: string) =>
     setExpandedUsers((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -216,6 +219,29 @@ export const UserManagement: React.FC = () => {
       setFormError(err?.response?.data?.message || 'Erro ao criar usuário.');
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  const handleSaveDados = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dadosEdit) return;
+    const nome = dadosEdit.nome.trim();
+    const email = dadosEdit.email.trim();
+    if (!nome || !email) {
+      setDadosEditError('Informe o nome e o e-mail.');
+      return;
+    }
+    setDadosEditLoading(true);
+    setDadosEditError('');
+    try {
+      await api.patch(`/usuarios/${dadosEdit.id}`, { nome, email });
+      setDadosEdit(null);
+      await fetchAll();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message;
+      setDadosEditError(Array.isArray(msg) ? msg.join(' ') : (msg || 'Erro ao salvar nome e e-mail.'));
+    } finally {
+      setDadosEditLoading(false);
     }
   };
 
@@ -588,6 +614,52 @@ export const UserManagement: React.FC = () => {
           </div>
         )}
 
+        {dadosEdit && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[100]">
+            <form onSubmit={handleSaveDados} className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+              <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <h3 className="text-lg font-bold text-gray-800">Editar nome e e-mail</h3>
+                <button type="button" onClick={() => setDadosEdit(null)} className="text-gray-400 hover:text-gray-700">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                {dadosEditError && (
+                  <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border-l-4 border-red-500">{dadosEditError}</div>
+                )}
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Nome</label>
+                  <input
+                    required
+                    value={dadosEdit.nome}
+                    onChange={(e) => setDadosEdit((atual) => atual ? { ...atual, nome: e.target.value } : atual)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-1 block">E-mail</label>
+                  <input
+                    required
+                    type="email"
+                    value={dadosEdit.email}
+                    onChange={(e) => setDadosEdit((atual) => atual ? { ...atual, email: e.target.value } : atual)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 outline-none"
+                  />
+                </div>
+                <p className="text-[11px] text-gray-400">O próximo acesso dessa pessoa usa o e-mail novo.</p>
+              </div>
+              <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+                <button type="button" onClick={() => setDadosEdit(null)} className="px-4 py-2 text-gray-600 font-semibold rounded-lg hover:bg-gray-200">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={dadosEditLoading} className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 disabled:opacity-70">
+                  {dadosEditLoading ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
         {editingPersonalizadoId && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[100]">
             <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -710,6 +782,16 @@ export const UserManagement: React.FC = () => {
                       title={isExpanded ? 'Recolher' : 'Expandir'}
                     >
                       {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDadosEdit({ id: u.id, nome: u.nome, email: u.email });
+                        setDadosEditError('');
+                      }}
+                      className="text-xs font-semibold text-gray-600 hover:text-lunardeli-red hover:bg-red-50 px-2 py-1.5 rounded-lg"
+                    >
+                      Editar dados
                     </button>
                     <button onClick={() => handleDelete(u.id, u.nome)} className="text-gray-300 hover:text-red-400 transition-colors p-1.5">
                       <Trash2 size={16} />

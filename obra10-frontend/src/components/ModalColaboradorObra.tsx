@@ -16,6 +16,8 @@ export const ModalColaboradorObra: React.FC<ModalColaboradorObraProps> = ({ obra
 
   // State do formulário
   const [selectedUserId, setSelectedUserId] = useState('');
+  const [nome, setNome] = useState('');
+  const [email, setEmail] = useState('');
   
   // permissoes form state: { "RDO": "EDIT", "FVS": "VIEW" }
   const [permissoes, setPermissoes] = useState<Record<string, string>>({});
@@ -42,6 +44,8 @@ export const ModalColaboradorObra: React.FC<ModalColaboradorObraProps> = ({ obra
 
     if (colaboradorEdit) {
       setSelectedUserId(colaboradorEdit.usuario.id);
+      setNome(colaboradorEdit.usuario.nome || '');
+      setEmail(colaboradorEdit.usuario.email || '');
       setPermissoes(colaboradorEdit.permissoes || {});
     }
   }, [colaboradorEdit]);
@@ -78,6 +82,11 @@ export const ModalColaboradorObra: React.FC<ModalColaboradorObraProps> = ({ obra
       return;
     }
 
+    if (colaboradorEdit && (!nome.trim() || !email.trim())) {
+      alert('Informe o nome e o e-mail.');
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -86,7 +95,10 @@ export const ModalColaboradorObra: React.FC<ModalColaboradorObraProps> = ({ obra
       };
 
       if (colaboradorEdit) {
-        // Edit
+        await api.patch(`/usuarios/${selectedUserId}`, {
+          nome: nome.trim(),
+          email: email.trim(),
+        });
         await api.patch(`/obras/${obraId}/colaboradores/${selectedUserId}`, payload);
       } else {
         // Create
@@ -106,7 +118,7 @@ export const ModalColaboradorObra: React.FC<ModalColaboradorObraProps> = ({ obra
         
         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
           <h3 className="text-xl font-bold text-gray-800 flex items-center">
-            {colaboradorEdit ? 'Editar Permissões' : 'Adicionar Colaborador'}
+            {colaboradorEdit ? 'Editar colaborador' : 'Adicionar Colaborador'}
           </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 bg-white p-1 rounded-md shadow-sm border border-gray-200">
             <X size={20} />
@@ -118,8 +130,26 @@ export const ModalColaboradorObra: React.FC<ModalColaboradorObraProps> = ({ obra
           <div className="mb-6">
             <label className="block text-sm font-semibold text-gray-700 mb-1">Usuário</label>
             {colaboradorEdit ? (
-              <div className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-gray-700 font-medium">
-                {colaboradorEdit.usuario.nome} ({colaboradorEdit.usuario.email})
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Nome</label>
+                  <input
+                    value={nome}
+                    onChange={(e) => setNome(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-red-500 focus:border-red-500 outline-none"
+                    placeholder="Nome da pessoa"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">E-mail</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-red-500 focus:border-red-500 outline-none"
+                    placeholder="email@empresa.com"
+                  />
+                </div>
               </div>
             ) : (
               <select 

@@ -1,9 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Settings, Save, Trash2, Loader2, Upload, AlertTriangle, CheckCircle, ShieldAlert } from 'lucide-react';
 import api from '../../services/api';
 import { getImageUrl } from '../../utils/image';
+
+type CapaRascunho = {
+  url: string;
+  largura: number;
+  altura: number;
+};
+
+type Pan = { x: number; y: number };
+
+function enquadrar(quadroW: number, quadroH: number, imgW: number, imgH: number, zoom: number, pan: Pan) {
+  const caber = Math.min(quadroW / imgW, quadroH / imgH);
+  const escala = caber * zoom;
+  const dw = imgW * escala;
+  const dh = imgH * escala;
+  const maxX = Math.max(0, (dw - quadroW) / 2);
+  const maxY = Math.max(0, (dh - quadroH) / 2);
+  const x = Math.min(maxX, Math.max(-maxX, pan.x));
+  const y = Math.min(maxY, Math.max(-maxY, pan.y));
+  return {
+    dw,
+    dh,
+    x,
+    y,
+    left: (quadroW - dw) / 2 + x,
+    top: (quadroH - dh) / 2 + y,
+  };
+}
 
 export const Configuracoes: React.FC = () => {
   const { user, obraAtiva, setObraAtiva, updateObraImage, fetchSession } = useAuth();
@@ -19,6 +46,12 @@ export const Configuracoes: React.FC = () => {
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [confirmWord, setConfirmWord] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [rascunhoCapa, setRascunhoCapa] = useState<CapaRascunho | null>(null);
+  const [zoomCapa, setZoomCapa] = useState(1);
+  const [panCapa, setPanCapa] = useState<Pan>({ x: 0, y: 0 });
+  const quadroRef = useRef<HTMLDivElement>(null);
+  const [quadroTamanho, setQuadroTamanho] = useState({ w: 0, h: 0 });
+  const arrasteRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
 
   useEffect(() => {
     if (obraAtiva) {
@@ -27,6 +60,25 @@ export const Configuracoes: React.FC = () => {
       setStatus(obraAtiva.status);
     }
   }, [obraAtiva]);
+
+  useEffect(() => {
+    if (!rascunhoCapa) return;
+    const el = quadroRef.current;
+    if (!el) return;
+    const medir = () => setQuadroTamanho({ w: el.clientWidth, h: el.clientHeight });
+    medir();
+    const obs = new ResizeObserver(medir);
+    obs.observe(el);
+    const aoRoda = (e: WheelEvent) => {
+      e.preventDefault();
+      setZoomCapa((atual) => Math.min(3, Math.max(1, atual + (e.deltaY < 0 ? 0.08 : -0.08))));
+    };
+    el.addEventListener('wheel', aoRoda, { passive: false });
+    return () => {
+      obs.disconnect();
+      el.removeEventListener('wheel', aoRoda);
+    };
+  }, [rascunhoCapa]);
 
   const isGestor = user?.perfilGlobal === 'GESTOR';
 
@@ -48,27 +100,93 @@ export const Configuracoes: React.FC = () => {
     }
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const fecharRascunhoCapa = () => {
+    setRascunhoCapa((atual) => {
+      if (atual) URL.revokeObjectURL(atual.url);
+      return null;
+    });
+    setZoomCapa(1);
+    setPanCapa({ x: 0, y: 0 });
+    arrasteRef.current = null;
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file || !obraAtiva) return;
+    const url = URL.createObjectURL(file);
+    const imagem = new Image();
+    imagem.onload = () => {
+      setRascunhoCapa((atual) => {
+        if (atual) URL.revokeObjectURL(atual.url);
+        return { url, largura: imagem.naturalWidth, altura: imagem.naturalHeight };
+      });
+      setZoomCapa(1);
+      setPanCapa({ x: 0, y: 0 });
+    };
+    imagem.onerror = () => {
+      URL.revokeObjectURL(url);
+      alert('Não foi possível abrir essa imagem.');
+    };
+    imagem.src = url;
+  };
+
+  const confirmarCapa = async () => {
+    if (!rascunhoCapa || !obraAtiva || !quadroRef.current) return;
+    const quadroW = quadroRef.current.clientWidth;
+    const quadroH = quadroRef.current.clientHeight;
+    if (!quadroW || !quadroH) return;
 
     setUploadingImage(true);
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
+      const imagem = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+        img.src = rascunhoCapa.url;
+      });
+      const outW = 1600;
+      const outH = 1200;
+      const canvas = document.createElement('canvas');
+      canvas.width = outW;
+      canvas.height = outH;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Não foi possível preparar a capa.');
+      ctx.fillStyle = '#f3f4f6';
+      ctx.fillRect(0, 0, outW, outH);
+      const view = enquadrar(quadroW, quadroH, rascunhoCapa.largura, rascunhoCapa.altura, zoomCapa, panCapa);
+      const fator = outW / quadroW;
+      ctx.drawImage(imagem, view.left * fator, view.top * fator, view.dw * fator, view.dh * fator);
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((gerado) => (gerado ? resolve(gerado) : reject(new Error('Falha ao gerar a capa.'))), 'image/jpeg', 0.92);
+      });
+      const arquivo = new File([blob], 'capa-obra.jpg', { type: 'image/jpeg' });
+      const formData = new FormData();
+      formData.append('file', arquivo);
       const response = await api.post(`/upload/obra/${obraAtiva.id}/imagem`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       updateObraImage(obraAtiva.id, response.data.url);
       await fetchSession();
+      fecharRascunhoCapa();
     } catch (err: any) {
       console.error('Erro ao fazer upload da imagem:', err);
       alert('Erro ao atualizar imagem de capa: ' + (err?.response?.data?.message || err.message));
     } finally {
       setUploadingImage(false);
-      e.target.value = '';
     }
+  };
+
+  const moverCapa = (clienteX: number, clienteY: number) => {
+    const arraste = arrasteRef.current;
+    const quadro = quadroRef.current;
+    if (!arraste || !quadro || !rascunhoCapa) return;
+    const proposto = {
+      x: arraste.panX + (clienteX - arraste.x),
+      y: arraste.panY + (clienteY - arraste.y),
+    };
+    const limitado = enquadrar(quadro.clientWidth, quadro.clientHeight, rascunhoCapa.largura, rascunhoCapa.altura, zoomCapa, proposto);
+    setPanCapa({ x: limitado.x, y: limitado.y });
   };
 
   const handleDelete = async () => {
@@ -147,7 +265,7 @@ export const Configuracoes: React.FC = () => {
                 </label>
               )}
               <p className="text-[10px] text-gray-400 mt-2 text-center">
-                Use imagens retangulares (relação de aspecto 4:3 ou 16:9).
+                Depois de escolher a foto, use o zoom para a capa mostrar a imagem inteira.
               </p>
             </div>
 
@@ -257,6 +375,86 @@ export const Configuracoes: React.FC = () => {
                   <Trash2 size={14} /> Excluir Obra
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rascunhoCapa && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[80]">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div className="p-5">
+              <h3 className="text-lg font-bold text-gray-800">Ajustar imagem de capa</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                No zoom mínimo a foto inteira cabe no quadro. Aumente para aproximar e arraste para posicionar.
+              </p>
+              <div
+                ref={quadroRef}
+                className="mt-4 w-full aspect-[4/3] rounded-lg bg-gray-100 border border-gray-200 overflow-hidden relative touch-none cursor-grab active:cursor-grabbing"
+                onPointerDown={(e) => {
+                  arrasteRef.current = { x: e.clientX, y: e.clientY, panX: panCapa.x, panY: panCapa.y };
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                }}
+                onPointerMove={(e) => moverCapa(e.clientX, e.clientY)}
+                onPointerUp={() => { arrasteRef.current = null; }}
+                onPointerCancel={() => { arrasteRef.current = null; }}
+              >
+                {(() => {
+                  const view = quadroTamanho.w
+                    ? enquadrar(quadroTamanho.w, quadroTamanho.h, rascunhoCapa.largura, rascunhoCapa.altura, zoomCapa, panCapa)
+                    : null;
+                  return (
+                    <img
+                      src={rascunhoCapa.url}
+                      alt=""
+                      draggable={false}
+                      className="absolute max-w-none select-none"
+                      style={view ? { width: view.dw, height: view.dh, left: view.left, top: view.top } : { width: '100%', height: '100%', objectFit: 'contain' }}
+                    />
+                  );
+                })()}
+              </div>
+              <label className="mt-4 block text-xs font-bold text-gray-600">
+                Zoom
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.01}
+                  value={zoomCapa}
+                  onChange={(e) => {
+                    const proximo = Number(e.target.value);
+                    setZoomCapa(proximo);
+                    if (!quadroTamanho.w) return;
+                    const limitado = enquadrar(quadroTamanho.w, quadroTamanho.h, rascunhoCapa.largura, rascunhoCapa.altura, proximo, panCapa);
+                    setPanCapa({ x: limitado.x, y: limitado.y });
+                  }}
+                  className="mt-2 w-full accent-lunardeli-red"
+                />
+                <span className="mt-1 flex justify-between font-medium text-gray-400">
+                  <span>Imagem inteira</span>
+                  <span>Aproximar</span>
+                </span>
+              </label>
+            </div>
+            <div className="px-5 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={fecharRascunhoCapa}
+                disabled={uploadingImage}
+                className="px-4 py-2 text-gray-600 font-semibold hover:bg-gray-100 rounded-lg text-sm transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarCapa}
+                disabled={uploadingImage}
+                className="px-5 py-2 bg-lunardeli-red hover:bg-red-700 text-white font-bold rounded-lg text-sm flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {uploadingImage ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                Usar esta capa
+              </button>
             </div>
           </div>
         </div>

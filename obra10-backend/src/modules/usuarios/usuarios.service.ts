@@ -348,18 +348,26 @@ export class UsuariosService {
       capabilities,
       permissoesObras,
     } = dto;
+    const nomeLimpo = nome === undefined ? undefined : String(nome).trim();
+    const emailLimpo = email === undefined ? undefined : String(email).trim().toLowerCase();
+    if (nomeLimpo !== undefined && !nomeLimpo) {
+      throw new BadRequestException('Informe o nome.');
+    }
+    if (emailLimpo !== undefined && !emailLimpo) {
+      throw new BadRequestException('Informe o e-mail.');
+    }
     const usuario = await this.prisma.usuario.findFirst({
       where: { id, empresaId, deletedAt: null },
     });
     if (!usuario) throw new NotFoundException('Usuário não encontrado.');
 
-    if (email && email !== usuario.email) {
+    if (emailLimpo && emailLimpo.toLowerCase() !== usuario.email.toLowerCase()) {
       const existente = await this.prisma.usuario.findFirst({
-        where: { empresaId, email, deletedAt: null, id: { not: id } },
+        where: { empresaId, email: emailLimpo, deletedAt: null, id: { not: id } },
       });
       if (existente)
         throw new ConflictException(
-          `E-mail "${email}" já está em uso nesta empresa.`,
+          `E-mail "${emailLimpo}" já está em uso nesta empresa.`,
         );
     }
 
@@ -384,8 +392,8 @@ export class UsuariosService {
     const updated = await this.prisma.usuario.update({
       where: { id },
       data: {
-        ...(nome && { nome }),
-        ...(email && { email }),
+        ...(nomeLimpo && { nome: nomeLimpo }),
+        ...(emailLimpo && { email: emailLimpo }),
         ...(perfilGlobal && { perfilGlobal: perfilGlobal as any }),
         ...(telefone !== undefined && { telefone }),
         ...(capsToStore && {
