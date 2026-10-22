@@ -183,9 +183,9 @@ export const CompanyDashboard: React.FC = () => {
     <div className="min-h-screen bg-lunardeli-gray overflow-x-hidden">
       {/* Header Construtora */}
       <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 md:h-20 flex items-center justify-between gap-3">
-          <div className="flex items-center space-x-4 min-w-0">
-            <div className="relative flex-shrink-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 md:h-20 flex items-center justify-between gap-3 min-w-0 overflow-hidden">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1 overflow-hidden">
+            <div className="relative shrink-0">
               {canManageEmpresa ? (
                 <label title="Alterar Logotipo da Empresa" className="relative cursor-pointer group flex items-center justify-center h-12 w-12 sm:w-auto sm:max-w-[150px] rounded overflow-hidden transition-all hover:ring-2 hover:ring-lunardeli-red shrink-0">
                   {uploadingLogo ? (
@@ -220,9 +220,9 @@ export const CompanyDashboard: React.FC = () => {
               )}
             </div>
             
-            <div className="border-l pl-4 border-gray-200">
-              <div className="flex items-center gap-2">
-                <h1 className="text-base md:text-xl font-bold text-lunardeli-dark truncate max-w-[140px] md:max-w-[200px]">{empresa?.nomeFantasia || empresa?.razaoSocial}</h1>
+            <div className="border-l pl-3 sm:pl-4 border-gray-200 min-w-0 flex-1 overflow-hidden">
+              <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                <h1 className="text-base md:text-xl font-bold text-lunardeli-dark truncate min-w-0 flex-1" title={empresa?.nomeFantasia || empresa?.razaoSocial || ''}>{empresa?.nomeFantasia || empresa?.razaoSocial}</h1>
                 {canManageEmpresa && (
                   <button onClick={() => { 
                     setEmpresaEdit({ 
@@ -258,10 +258,10 @@ export const CompanyDashboard: React.FC = () => {
           <div className="flex items-center gap-2 md:gap-6 shrink-0">
             
             {/* User Profile Area */}
-            <div className="flex items-center gap-3 md:mr-4 md:border-r md:pr-4 border-gray-200">
-              <div className="text-right hidden sm:block">
-                 <p className="text-sm font-bold text-gray-800 leading-tight">{user?.nome}</p>
-                 <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">{user?.perfilGlobal}</p>
+            <div className="flex items-center gap-2 sm:gap-3 md:mr-4 md:border-r md:pr-4 border-gray-200 min-w-0">
+              <div className="text-right hidden sm:block min-w-0 max-w-[7.5rem] md:max-w-[10rem] lg:max-w-[12rem]">
+                 <p className="text-sm font-bold text-gray-800 leading-tight truncate" title={user?.nome}>{user?.nome}</p>
+                 <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider truncate">{user?.perfilGlobal}</p>
               </div>
               <label title="Alterar Foto de Perfil" className="relative cursor-pointer group flex items-center justify-center w-10 h-10 rounded-full overflow-hidden bg-gray-100 border border-gray-300 transition-all hover:border-lunardeli-red shadow-sm shrink-0">
                 {uploadingUserPhoto ? (
@@ -294,8 +294,8 @@ export const CompanyDashboard: React.FC = () => {
                   className="text-gray-500 flex items-center hover:text-lunardeli-red font-semibold transition-colors"
                   title={opcao.label}
                 >
-                  <opcao.icon size={18} className="mr-2" />
-                  {opcao.label}
+                  <opcao.icon size={18} className="mr-0 xl:mr-2 shrink-0" />
+                  <span className="hidden xl:inline">{opcao.label}</span>
                 </button>
               ))}
             </div>

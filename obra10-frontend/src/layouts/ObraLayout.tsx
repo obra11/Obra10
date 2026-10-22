@@ -333,7 +333,7 @@ export const ObraLayout: React.FC = () => {
               )}
             </div>
 
-             <div className="min-w-0">
+             <div className="min-w-0 flex-1 overflow-hidden">
                 <span className="text-[10px] font-bold uppercase text-lunardeli-red block truncate leading-tight">{empresa?.razaoSocial}</span>
                 <span className="font-bold text-sm truncate block leading-tight">{obraAtiva?.nome || 'Obra Indefinida'}</span>
              </div>
