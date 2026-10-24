@@ -65,6 +65,13 @@ function ensureStyle() {
     .obra10-stage #ifc-cut-controls, .obra10-stage #ifc-measure-info { display:flex; flex-wrap:wrap; gap:6px; align-items:center; width:100%; }
     .obra10-stage #ifc-cut-overlay, .obra10-stage #ifc-measure-overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:4; }
     .obra10-stage #ifc-cut-handle { position:absolute; z-index:6; transform:translate(-50%,-50%); background:#E5192C; color:#fff; border:0; border-radius:999px; padding:8px 12px; font-size:12px; font-weight:700; }
+    .obra10-stage #ifc-views-panel { display:flex; flex-wrap:wrap; gap:6px; width:100%; }
+    .obra10-stage #ifc-walk-pad { position:absolute; z-index:6; left:16px; bottom:88px; width:92px; height:92px; border-radius:50%; background:rgba(27,27,27,.72); border:2px solid rgba(255,255,255,.28); touch-action:none; }
+    .obra10-stage #ifc-walk-knob { position:absolute; left:50%; top:50%; width:36px; height:36px; margin:-18px 0 0 -18px; border-radius:50%; background:#E5192C; pointer-events:none; }
+    .obra10-stage #ifc-walk-info { position:absolute; z-index:6; right:12px; bottom:88px; display:flex; gap:6px; align-items:center; padding:8px 10px; border-radius:12px; background:rgba(27,27,27,.88); }
+    .obra10-stage #ifc-walk-info button { background:#E5192C; color:#fff; border:0; border-radius:8px; padding:8px 10px; font-size:12px; font-weight:700; }
+    .obra10-stage #ifc-walk-info button[aria-pressed="true"] { outline:2px solid #fff; }
+    .obra10-stage #ifc-hidden { width:100%; display:flex; align-items:center; gap:8px; color:#fff; font-size:12px; }
   `;
 }
 
@@ -146,6 +153,10 @@ export function mountViewer(host, hooks = {}) {
       <button id="ifc-focus" type="button" aria-pressed="false">Focar ponto</button>
       <button id="ifc-cut" type="button" aria-pressed="false">Corte</button>
       <button id="ifc-measure" type="button" aria-pressed="false">Medir</button>
+      <button id="ifc-measure-level" type="button" aria-pressed="false">Nível</button>
+      <button id="ifc-views" type="button" aria-pressed="false">Vistas</button>
+      <button id="ifc-walk" type="button" aria-pressed="false">Caminhar</button>
+      <button id="ifc-hide" type="button" aria-pressed="false">Ocultar</button>
       <div id="ifc-cut-controls" hidden>
         <label>Direção
           <select id="ifc-cut-axis">
@@ -154,15 +165,33 @@ export function mountViewer(host, hooks = {}) {
             <option value="z">Frontal</option>
           </select>
         </label>
+        <button id="ifc-cut-face" type="button">Face</button>
+        <button id="ifc-cut-side" type="button">Lado</button>
+        <button id="ifc-cut-rotate" type="button">Girar</button>
         <input id="ifc-cut-position" type="range" min="0" max="100" value="50" aria-label="Posição do corte">
         <span id="ifc-cut-value">50%</span>
         <label><input id="ifc-cut-reverse" type="checkbox"> Inverter</label>
+      </div>
+      <div id="ifc-views-panel" hidden>
+        <button id="ifc-view-top" type="button">Topo</button>
+        <button id="ifc-view-front" type="button">Frente</button>
+        <button id="ifc-view-iso" type="button">Iso</button>
+        <button id="ifc-view-ortho" type="button">Paralela</button>
       </div>
       <div id="ifc-measure-info" hidden>
         <strong id="ifc-measure-result"></strong>
         <button id="ifc-measure-clear" type="button">Limpar</button>
       </div>
+      <div id="ifc-hidden" hidden>
+        <span id="ifc-hidden-count"></span>
+        <button id="ifc-hide-clear" type="button">Mostrar</button>
+      </div>
       <small id="ifc-hint">Arraste para orbitar. Dois dedos aproximam e deslocam.</small>
+    </div>
+    <div id="ifc-walk-pad" hidden><div id="ifc-walk-knob"></div></div>
+    <div id="ifc-walk-info" hidden>
+      <button id="ifc-walk-through" type="button" aria-pressed="false">Atravessar</button>
+      <button id="ifc-walk-exit" type="button">Sair</button>
     </div>
   `;
   host.appendChild(stage);
@@ -182,6 +211,7 @@ export function mountViewer(host, hooks = {}) {
   let ifcApi = null;
   let ifcNavigation = null;
   let ifcTools = null;
+  let ifcWalk = null;
   let disposeIfcGroup = null;
   let ifcNeedsRender = false;
   let alive = true;
@@ -199,6 +229,7 @@ export function mountViewer(host, hooks = {}) {
     $('ifc-cut-overlay').style.visibility = next === 'ifc' ? 'visible' : 'hidden';
     $('ifc-measure-overlay').style.visibility = next === 'ifc' ? 'visible' : 'hidden';
     if (next !== 'ifc') $('ifc-cut-handle').hidden = true;
+    if (next !== 'ifc') ifcWalk?.stop();
     ifcTools?.activate(next === 'ifc');
     hooks.onKind?.(next);
   }
@@ -278,6 +309,10 @@ export function mountViewer(host, hooks = {}) {
     ifcTools = new IfcTools(THREE, renderer, camera, controls, ifcNavigation, () => {
       ifcNeedsRender = true;
     }, stage);
+    const { IfcWalk } = await import(asset('./ifc-walk.js'));
+    ifcWalk = new IfcWalk(THREE, camera, controls, renderer.domElement, ifcTools, ifcNavigation, () => {
+      ifcNeedsRender = true;
+    }, stage, (state) => hooks.onWalk?.(state));
     $('ifc-pan').onclick = () => {
       const pressed = $('ifc-pan').getAttribute('aria-pressed') === 'true';
       ifcNavigation.setPan(!pressed);
@@ -298,6 +333,12 @@ export function mountViewer(host, hooks = {}) {
     resize();
     renderer.setAnimationLoop(() => {
       if (!alive || kind !== 'ifc') return;
+      if (ifcWalk?.walking) {
+        ifcWalk.step();
+        renderer.render(scene, camera);
+        ifcNeedsRender = false;
+        return;
+      }
       const changed = ifcTools?.cutDrag ? false : controls.update();
       if (changed || ifcNeedsRender) {
         renderer.render(scene, camera);
@@ -645,12 +686,14 @@ export function mountViewer(host, hooks = {}) {
           originLocked = true;
         }
       }
-      ifcModels.set(modelId, { name: file.name, group: next });
+      ifcModels.set(modelId, { name: file.name, group: next, color: null });
       camera.up.set(0, 1, 0);
       ifcTools.setModel(root);
       setKind('ifc');
       resize();
       fit3d();
+      warnIfcDistance(next);
+      publishIfcModels();
       return modelId;
     } catch (error) {
       if (next) dispose(next);
@@ -674,6 +717,75 @@ export function mountViewer(host, hooks = {}) {
     if (!model) return;
     model.group.visible = !!visible;
     ifcNeedsRender = true;
+    publishIfcModels();
+  }
+
+  function paintIfcGroup(group, color) {
+    group.traverse((object) => {
+      const materials = object.material ? (Array.isArray(object.material) ? object.material : [object.material]) : [];
+      for (const material of materials) {
+        if (!material?.color) continue;
+        if (!material.userData.prumoOriginal) {
+          material.userData.prumoOriginal = {
+            color: material.color.clone(),
+            opacity: material.opacity,
+            transparent: material.transparent,
+          };
+        }
+        const original = material.userData.prumoOriginal;
+        if (color == null) {
+          material.color.copy(original.color);
+          material.opacity = original.opacity;
+          material.transparent = original.transparent;
+        } else {
+          material.color.set(color);
+          if (original.transparent) {
+            material.transparent = true;
+            material.opacity = original.opacity;
+          }
+        }
+        material.needsUpdate = true;
+      }
+    });
+  }
+
+  function setIfcColor(modelId, color) {
+    const model = ifcModels.get(modelId);
+    if (!model) return;
+    model.color = color || null;
+    paintIfcGroup(model.group, color);
+    ifcNeedsRender = true;
+    publishIfcModels();
+  }
+
+  function modelDistance(group) {
+    if (!group) return 0;
+    const box = new THREE.Box3().setFromObject(group);
+    if (box.isEmpty()) return 0;
+    return box.getCenter(new THREE.Vector3()).length();
+  }
+
+  function warnIfcDistance(group) {
+    if (ifcModels.size < 2) return;
+    const here = new THREE.Box3().setFromObject(group).getCenter(new THREE.Vector3());
+    for (const model of ifcModels.values()) {
+      if (model.group === group) continue;
+      const other = new THREE.Box3().setFromObject(model.group).getCenter(new THREE.Vector3());
+      if (here.distanceTo(other) > 1000) {
+        status('Os modelos estão a mais de 1 km. Confira se compartilham a mesma origem.');
+        return;
+      }
+    }
+  }
+
+  function publishIfcModels() {
+    hooks.onIfcModels?.([...ifcModels.entries()].map(([id, model]) => ({
+      id,
+      name: model.name,
+      visible: model.group.visible,
+      color: model.color || null,
+      distance: modelDistance(model.group),
+    })));
   }
 
   function removeIfc(modelId) {
@@ -687,11 +799,14 @@ export function mountViewer(host, hooks = {}) {
       originLocked = false;
       if (ifcRoot) ifcRoot.position.set(0, 0, 0);
       ifcTools?.setModel(null);
+      ifcWalk?.stop();
       setKind('empty');
+      publishIfcModels();
       return;
     }
     ifcTools?.setModel(ifcRoot);
     fit3d();
+    publishIfcModels();
   }
 
   const observer = new ResizeObserver(() => resize());
@@ -702,7 +817,12 @@ export function mountViewer(host, hooks = {}) {
     addIfc,
     showIfc,
     setIfcVisible,
+    setIfcColor,
     removeIfc,
+    toggleWalk() {
+      ifcWalk?.toggle();
+      return !!ifcWalk?.walking;
+    },
     async open(file) {
       const ext = (file.name.split('.').pop() || '').toLowerCase();
       if (ext === 'pdf') {
@@ -729,7 +849,10 @@ export function mountViewer(host, hooks = {}) {
     async fit() {
       if (kind === 'pdf') await pdfViewer?.fit();
       else if (kind === 'dwg') cadRenderer?.fitToView(0.9);
-      else if (kind === 'ifc') fit3d();
+      else if (kind === 'ifc') {
+        ifcWalk?.stop();
+        fit3d();
+      }
     },
     async rotate() {
       if (kind === 'pdf') await pdfViewer?.rotate();
@@ -786,6 +909,7 @@ export function mountViewer(host, hooks = {}) {
       alive = false;
       observer.disconnect();
       renderer?.setAnimationLoop(null);
+      try { ifcWalk?.stop(); } catch { /* caminhar já encerrado */ }
       try { measureTool?.reset(); cadRenderer?.destroy(); clearDwgPreview(); } catch { /* leitor DWG já liberado */ }
       try { clear3d(); } catch { /* a cena pode já ter saído da página */ }
       pdfViewer?.close().catch(() => {});

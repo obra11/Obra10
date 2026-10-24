@@ -13,4 +13,7 @@ docs
 *.tmp
 *.bak
 obra10-backend/uploads
+obra10-backend/scratch
+obra10-backend/client (1)
+obra10-backend/python/__pycache__
 .tmp-brand

@@ -9,7 +9,7 @@ export class IfcMeshBuilder{
    const buffer=new T.InterleavedBuffer(vertices,6);geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.InterleavedBufferAttribute(buffer,3,0));geometry.setAttribute('normal',new T.InterleavedBufferAttribute(buffer,3,3));geometry.setIndex(new T.BufferAttribute(indices,1));geometry.computeBoundingBox();geometry.computeBoundingSphere();this.geometries.set(key,geometry);
   }finally{geom.delete();}}
   const c=placed.color,colorKey=[c.x,c.y,c.z,c.w].join('/');let material=this.materials.get(colorKey);
-  if(!material){material=new T.MeshStandardMaterial({color:new T.Color(c.x,c.y,c.z),opacity:c.w,transparent:c.w<1,side:T.DoubleSide,roughness:.75});this.materials.set(colorKey,material);}
+  if(!material){material=new T.MeshLambertMaterial({color:new T.Color(c.x,c.y,c.z),opacity:c.w,transparent:c.w<1,side:T.DoubleSide});material.userData.prumoOriginal={color:material.color.clone(),opacity:c.w,transparent:c.w<1};this.materials.set(colorKey,material);}
   // Transparent objects remain separate so Three can sort them by depth.
   const batchKey=key+':'+colorKey+(c.w<1?':'+this.instances:'');let batch=this.batches.get(batchKey);
   if(!batch){batch={geometry,material,matrices:[]};this.batches.set(batchKey,batch);}
@@ -23,7 +23,7 @@ export class IfcMeshBuilder{
    else{mesh=new T.InstancedMesh(batch.geometry,batch.material,matrices.length);matrices.forEach((m,i)=>mesh.setMatrixAt(i,m));mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingBox();mesh.computeBoundingSphere();}
    mesh.matrixAutoUpdate=false;group.add(mesh);
   }
-  group.userData.renderStats={instances:this.instances,geometries:this.geometries.size,materials:this.materials.size,drawObjects:group.children.length};this.batches.clear();return group;
+  group.userData.ifcModel=true;group.userData.renderStats={instances:this.instances,geometries:this.geometries.size,materials:this.materials.size,drawObjects:group.children.length};this.batches.clear();return group;
  }
  dispose(){for(const g of this.geometries.values())g.dispose();for(const m of this.materials.values())m.dispose();this.batches.clear();}
 }
