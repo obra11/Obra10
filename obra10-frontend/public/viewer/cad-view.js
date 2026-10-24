@@ -5,21 +5,22 @@ import { CadCanvasRenderer, normalizeDwgDatabase, resolveCadColor, cadEntityWorl
 export function prepareDrawing(database, name) {
   const doc = normalizeDwgDatabase(database, name, undefined, { keepRaw: false });
   doc.measurementUnit = Number(database.header?.INSUNITS || 0);
+  doc.drawingScales = collectDrawingScales(database);
   doc.displayLineweights = database.header?.LWDISPLAY !== 0;
-  const styles = new Map((database.tables.STYLE?.entries || []).filter(s => s?.name).map(s => [s.name, s]));
+  const styles = new Map((database.tables.STYLE?.entries || []).map(s => [s.name, s]));
   const raw = new Map();
-  for (const block of database.tables?.BLOCK_RECORD?.entries || []) for (const e of block?.entities || []) if (e) raw.set(e.handle, e);
-  for (const e of database.entities || []) if (e) raw.set(e.handle, e);
+  for (const block of database.tables.BLOCK_RECORD.entries) for (const e of block.entities) raw.set(e.handle, e);
+  for (const e of database.entities) raw.set(e.handle, e);
   const lineweights = [0,5,9,13,15,18,20,25,30,35,40,50,53,60,70,80,90,100,106,120,140,158,200,211];
   const decodeWeight = value => value === 29 ? -1 : value === 30 ? -2 : value === 31 ? -3 : lineweights[value] ?? value;
-  for(const layer of database.tables?.LAYER?.entries || []) if(layer?.name) {
+  for(const layer of database.tables.LAYER.entries) {
     for(const key of [layer.name, layer.name.toLowerCase()]) if(doc.layers[key]) doc.layers[key].lineweight = decodeWeight(layer.lineweight);
   }
   const substitutions = new Set();
   const visited = new Set();
   function decorate(entities) {
-    for (const entity of entities || []) {
-      if (!entity || visited.has(entity)) continue;
+    for (const entity of entities) {
+      if (visited.has(entity)) continue;
       visited.add(entity);
       const source = raw.get(entity.handle);
       if (!source) continue;
@@ -64,7 +65,6 @@ export function prepareDrawing(database, name) {
         entity.hatch = source;
         // Bounds only; actual contours below use exact Canvas arcs/ellipses.
         entity.loops = (source.boundaryPaths || []).map(p => {
-          if (!p) return {vertices:[]};
           const vertices = [...(p.vertices || [])].map(v=>({x:v.x,y:v.y}));
           const extent=(c,r)=>{vertices.push({x:c.x-r,y:c.y-r},{x:c.x+r,y:c.y+r});};
           for(let i=0;i<(p.vertices?.length||0);i++) {
@@ -72,7 +72,6 @@ export function prepareDrawing(database, name) {
             if(Math.abs(bulge)>1e-12){const dx=b.x-a.x,dy=b.y-a.y,k=(1-bulge*bulge)/(4*bulge),c={x:(a.x+b.x)/2-dy*k,y:(a.y+b.y)/2+dx*k};extent(c,Math.hypot(a.x-c.x,a.y-c.y));}
           }
           for(const edge of p.edges||[]) {
-            if(!edge) continue;
             if(edge.type===1)vertices.push(edge.start,edge.end);
             else if(edge.type===2)extent(edge.center,edge.radius);
             else if(edge.type===3)extent(edge.center,Math.hypot(edge.end.x,edge.end.y));
@@ -98,13 +97,13 @@ export function prepareDrawing(database, name) {
     }
   }
   decorate(doc.entities);
-  for (const block of Object.values(doc.blocks || {})) decorate(block?.entities);
+  for (const block of Object.values(doc.blocks || {})) decorate(block.entities);
   const orderTables = new Map((database.drawOrders || []).map(t=>[String(t.blockHandle).toUpperCase(),t.entries]));
-  const blocksByName = new Map((database.tables?.BLOCK_RECORD?.entries || []).filter(b => b?.name).map(b=>[b.name.toLowerCase(),b]));
+  const blocksByName = new Map(database.tables.BLOCK_RECORD.entries.map(b=>[b.name.toLowerCase(),b]));
   function sortEntities(entities, blockHandle) {
     const entries=orderTables.get(String(blockHandle).toUpperCase());
     if(!entries)return;
-    const key=e=>{if(!e)return 0n;const handle=String(e.handle||'0').toUpperCase(),value=entries[handle]??handle;return /^[0-9A-F]+$/.test(value)?BigInt('0x'+value):0n;};
+    const key=e=>{const handle=String(e.handle||'0').toUpperCase(),value=entries[handle]??handle;return /^[0-9A-F]+$/.test(value)?BigInt('0x'+value):0n;};
     const keys=new Map(entities.map(e=>[e,key(e)]));
     entities.sort((a,b)=>keys.get(a)<keys.get(b)?-1:keys.get(a)>keys.get(b)?1:0);
   }
@@ -112,6 +111,35 @@ export function prepareDrawing(database, name) {
   sortEntities(doc.entities,model?.handle || raw.get(doc.entities[0]?.handle)?.ownerBlockRecordSoftId);
   for(const block of new Set(Object.values(doc.blocks||{})))sortEntities(block.entities,blocksByName.get(block.name.toLowerCase())?.handle);
   return { document: doc, substitutedFonts: [...substitutions] };
+}
+
+// Dimension blocks keep the value printed by the author. Comparing it with the
+// geometric measurement reveals details drawn enlarged or reduced in model space.
+function collectDrawingScales(database) {
+  const blocks = new Map(database.tables.BLOCK_RECORD.entries.map(b => [b.name, b]));
+  const clean = text => String(text || '').replace(/\\[Pp]/g, ' ').replace(/\\[A-Za-z][^;\\{}]*;/g, '').replace(/[{}]/g, '').replace(/%%[cdpCDP]/g, '');
+  const number = text => { const s = clean(text); if (/['"]/.test(s)) return NaN; const m = s.match(/\d+(?:[.,]\d+)?/); return m ? Number(m[0].replace(',', '.')) : NaN; };
+  const nice = []; for (let e = -4; e <= 4; e++) for (const m of [1, 2, 2.5, 4, 5]) nice.push(m * 10 ** e);
+  const dims = [], notes = [];
+  for (const e of database.entities) {
+    if (e.type === 'DIMENSION') {
+      // Linear, aligned, diameter and radius dimensions measure lengths; angular and ordinate do not.
+      if (![0, 1, 3, 4].includes((e.dimensionType || 0) & 7)) continue;
+      const user = String(e.text || ''); if (user && !user.includes('<>')) continue;
+      const measured = Number(e.measurement), at = e.textPoint || e.definitionPoint; if (!(measured > 1e-9) || !at) continue;
+      let shown = NaN, height = 0;
+      for (const t of blocks.get(e.name)?.entities || []) if ((t.type === 'MTEXT' || t.type === 'TEXT') && Number.isFinite(shown = number(t.text))) { height = t.textHeight || 0; break; }
+      if (!(shown > 0)) continue;
+      // Printed values are rounded, so short dimensions get a wider tolerance.
+      let ratio = shown / measured; const tolerance = Math.max(.01, .6 / shown), snap = nice.find(n => Math.abs(ratio / n - 1) <= tolerance); if (snap) ratio = snap;
+      dims.push({ x: at.x, y: at.y, ratio, height });
+    } else if (e.type === 'TEXT' || e.type === 'MTEXT') {
+      const m = clean(e.text).match(/(?:ESC(?:ALA)?|SCALE)\.?\s*:?\s*1\s*[:/]\s*(\d+(?:[.,]\d+)?)/i), at = e.insertionPoint || e.startPoint;
+      const denominator = m ? Number(m[1].replace(',', '.')) : 0;
+      if (denominator > 0 && at) notes.push({ x: at.x, y: at.y, denominator, height: e.textHeight || 0 });
+    }
+  }
+  return { dims, notes };
 }
 
 // Bounds of visible model geometry, independent of paper sizes and saved views.
@@ -308,7 +336,6 @@ export class CrispCadRenderer extends CadCanvasRenderer {
   }
 
   drawEntityTracked(entity, depth) {
-    if(!entity) return;
     if(this.captureChildren && depth===this.captureChildren.depth+1) this.captureChildren.items.push(entity);
     if (depth > 0 && (!entity.layer || entity.layer === '0') && this.insertLayer) {
       let inherited=this.layerEntityCache?.get(entity);
@@ -418,7 +445,6 @@ export class CrispCadRenderer extends CadCanvasRenderer {
         } else if(p.edges?.length) {
           for(let i=0;i<p.edges.length;i++) {
             const e=p.edges[i];
-            if(!e) continue;
             if(e.type===1) {point(e.start);point(e.end);if(i===0)path.moveTo(e.start.x,e.start.y);path.lineTo(e.end.x,e.end.y);}
             else if(e.type===2 || e.type===3) {
               const rx=e.type===2?e.radius:Math.hypot(e.end.x,e.end.y),ry=e.type===2?rx:rx*e.lengthOfMinorAxis,rot=e.type===2?0:Math.atan2(e.end.y,e.end.x);

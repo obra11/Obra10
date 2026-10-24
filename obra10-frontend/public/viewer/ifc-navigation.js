@@ -1,3 +1,15 @@
+function visibleSceneBounds(T,root){
+ const box=new T.Box3();
+ root.traverse(object=>{
+  if(object.userData?.prumoSection||!object.geometry)return;
+  for(let node=object;node&&node!==root;node=node.parent)if(node.visible===false)return;
+  let local=object.boundingBox!==undefined?object.boundingBox:object.geometry.boundingBox;
+  if(!local&&object.computeBoundingBox){object.computeBoundingBox();local=object.boundingBox;}
+  if(!local){if(!object.geometry.boundingBox)object.geometry.computeBoundingBox();local=object.geometry.boundingBox;}
+  if(local&&!local.isEmpty())box.union(local.clone().applyMatrix4(object.matrixWorld));
+ });
+ return box.isEmpty()?new T.Box3().setFromObject(root):box;
+}
 // Navigation is relative to the visible model and a movable point of interest.
 export class IfcNavigation{
  constructor(THREE,camera,controls,canvas,onHint){
@@ -12,11 +24,11 @@ export class IfcNavigation{
  }
  setModel(group){
   this.group=group;if(!group)return;
-  const box=new this.THREE.Box3().setFromObject(group);box.getCenter(this.center);this.radius=Math.max(box.getSize(new this.THREE.Vector3()).length()/2,1e-6);
+  const box=visibleSceneBounds(this.THREE,group);box.getCenter(this.center);this.radius=Math.max(box.getSize(new this.THREE.Vector3()).length()/2,1e-6);
   this.controls.minDistance=Math.max(this.radius*1e-8,1e-9);this.updateClipping();
  }
  setPan(enabled){this.pan=enabled;this.controls.mouseButtons.LEFT=enabled?this.THREE.MOUSE.PAN:this.THREE.MOUSE.ROTATE;this.controls.touches.ONE=enabled?this.THREE.TOUCH.PAN:this.THREE.TOUCH.ROTATE;}
- armFocus(enabled){this.focusArmed=enabled;this.onHint?.(enabled?'Toque no modelo para definir o centro de rotação.':this.pan?'Arraste para mover · dois dedos aproximam e deslocam.':'Arraste para orbitar · dois dedos aproximam e deslocam.');}
+ armFocus(enabled){this.focusArmed=enabled;this.onHint?.(enabled?'Toque no modelo para definir o centro de rotação.':this.pan?'Arraste para mover · dois dedos aproximam e deslocam. Toque para ver o nome.':'Arraste para orbitar · dois dedos aproximam e deslocam. Toque para ver o nome.');}
  extendTarget(){
   // Keep a useful navigation distance ahead of the eye, so dollying can pass
   // through the former orbit center instead of asymptotically stopping there.
@@ -25,7 +37,7 @@ export class IfcNavigation{
  }
  zoom(factor){if(!Number.isFinite(factor)||factor<=0)return;this.extendTarget();const offset=this.camera.position.clone().sub(this.controls.target);offset.multiplyScalar(1/factor);this.camera.position.copy(this.controls.target).add(offset);this.controls.update();}
  updateClipping(){
-  const distance=this.camera.position.distanceTo(this.controls.target),near=Math.max(1e-8,Math.min(this.radius*1e-4,distance*1e-3));
+  const distance=this.camera.position.distanceTo(this.controls.target),near=Math.max(1e-8,Math.min(this.radius*1e-3,distance*1e-2));
   const far=Math.max(this.radius*4,this.camera.position.distanceTo(this.center)+this.radius*3,near*1000);
   if(Math.abs(this.camera.near-near)>near*.05||Math.abs(this.camera.far-far)>far*.05){this.camera.near=near;this.camera.far=far;this.camera.updateProjectionMatrix();}
  }

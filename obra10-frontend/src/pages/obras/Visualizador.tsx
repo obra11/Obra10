@@ -20,7 +20,6 @@ interface IfcModel {
 }
 
 const IFC_WORKSPACE = 'ifc-workspace';
-const MODEL_COLORS = ['#E5192C', '#2563EB', '#059669', '#D97706', '#7C3AED', '#0891B2', '#DB2777', '#65A30D', '#CA8A04', '#0F766E', '#9333EA', '#EA580C'];
 
 interface PdfState {
   page: number;
@@ -83,7 +82,6 @@ export const Visualizador: React.FC = () => {
   const [query, setQuery] = useState('');
   const [officeText, setOfficeText] = useState('');
   const [officeSource, setOfficeSource] = useState<File | null>(null);
-  const [colorFor, setColorFor] = useState<string | null>(null);
   const active = tabs.find((tab) => tab.id === activeId) || null;
   const ifcActive = activeId === IFC_WORKSPACE && ifcModels.length > 0;
 
@@ -108,6 +106,9 @@ export const Visualizador: React.FC = () => {
             const current = prev.find((item) => item.id === model.id);
             return { ...model, name: current?.name || model.name };
           }));
+          if (!models.length) {
+            setActiveId((current) => current === IFC_WORKSPACE ? null : current);
+          }
         },
         onWalk: ({ active, placing }: { active: boolean; placing: boolean; through: boolean }) => {
           if (placing) {
@@ -218,32 +219,6 @@ export const Visualizador: React.FC = () => {
     } finally {
       setBusy(false);
     }
-  };
-
-  const toggleIfc = (id: string) => {
-    const model = ifcModels.find((item) => item.id === id);
-    if (!model) return;
-    const visible = !model.visible;
-    viewerRef.current?.setIfcVisible(id, visible);
-    setIfcModels((prev) => prev.map((item) => item.id === id ? { ...item, visible } : item));
-  };
-
-  const removeIfc = (id: string) => {
-    viewerRef.current?.removeIfc(id);
-    setColorFor(null);
-    const next = ifcModels.filter((item) => item.id !== id);
-    setIfcModels(next);
-    if (!next.length && activeId === IFC_WORKSPACE) {
-      const fallback = tabs[tabs.length - 1];
-      if (fallback) show(fallback);
-      else setActiveId(null);
-    }
-  };
-
-  const paintIfc = (id: string, color: string | null) => {
-    viewerRef.current?.setIfcColor(id, color);
-    setIfcModels((prev) => prev.map((item) => item.id === id ? { ...item, color } : item));
-    setColorFor(null);
   };
 
   const addFiles = async (list: FileList | File[]) => {
@@ -364,51 +339,8 @@ export const Visualizador: React.FC = () => {
       )}
 
       {ifcActive && (
-        <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-gray-200 bg-white px-3 py-2">
-          {ifcModels.map((model, index) => (
-            <div key={model.id} className={`relative flex shrink-0 items-center gap-2 rounded-full border px-2 py-1 text-xs ${model.visible ? 'border-gray-300 bg-white' : 'border-gray-200 bg-gray-100 text-gray-400'}`}>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={model.visible}
-                  onChange={() => toggleIfc(model.id)}
-                  aria-label={`Mostrar ${model.name}`}
-                />
-                <button
-                  type="button"
-                  className="ifc-swatch h-3.5 w-3.5 rounded-sm border border-gray-300"
-                  style={{ background: model.color || MODEL_COLORS[index % MODEL_COLORS.length] }}
-                  aria-label={`Cor de ${model.name}`}
-                  onClick={() => setColorFor((current) => current === model.id ? null : model.id)}
-                />
-                <span className="max-w-[160px] truncate font-semibold text-lunardeli-dark">{model.name}</span>
-              </label>
-              <button type="button" aria-label={`Remover ${model.name}`} onClick={() => removeIfc(model.id)} className="text-gray-500">
-                <X size={14} />
-              </button>
-              {colorFor === model.id && (
-                <div className="ifc-colors absolute left-0 top-full z-20 mt-1 flex w-52 flex-wrap gap-1.5 rounded-xl border border-gray-200 bg-white p-2 shadow-lg">
-                  {MODEL_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      className="h-5 w-5 rounded-sm border border-gray-200"
-                      style={{ background: color }}
-                      aria-label={`Pintar ${model.name} de ${color}`}
-                      onClick={() => paintIfc(model.id, color)}
-                    />
-                  ))}
-                  <label className="flex items-center gap-1 text-[10px] font-semibold text-lunardeli-dark">
-                    Outra
-                    <input type="color" className="h-5 w-5 cursor-pointer border-0 bg-transparent p-0" onChange={(event) => paintIfc(model.id, event.target.value)} />
-                  </label>
-                  <button type="button" className="rounded-md border border-gray-200 px-2 py-0.5 text-[10px] font-semibold" onClick={() => paintIfc(model.id, null)}>
-                    Original
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
+        <div className="flex shrink-0 items-center gap-2 border-b border-gray-200 bg-white px-3 py-2">
+          <p className="min-w-0 flex-1 truncate text-xs text-gray-500">Cor, corte, nível e caminhar ficam sobre o modelo. Dois IFCs abrem a lista com a paleta.</p>
           <button type="button" onClick={() => viewerRef.current?.fit()} className="shrink-0 rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold">
             Ajustar
           </button>

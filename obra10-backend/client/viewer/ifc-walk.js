@@ -1,359 +1,135 @@
-export class IfcWalk {
-  constructor(THREE, camera, controls, canvas, tools, navigation, onChange, root, onState) {
-    Object.assign(this, { THREE, camera, controls, canvas, tools, navigation, onChange, onState });
-    const scope = root || document;
-    this.$ = (id) => (scope.querySelector ? scope.querySelector('#' + id) : null);
-    this.ray = new THREE.Raycaster();
-    this.walking = false;
-    this.placing = false;
-    this.through = false;
-    this.eye = 1.6;
-    this.speed = 2.4;
-    this.runMul = 2.2;
-    this.keys = {};
-    this.pad = { x: 0, y: 0 };
-    this.lookDrag = null;
-    this.padDrag = null;
-    this.yaw = 0;
-    this.pitch = 0;
-    this.last = 0;
-    this.target = null;
-    this.saved = null;
-    this.bind();
+// First-person walk inside the IFC. Scene is Y-up and in metres: the eye stays a fixed height over the floor below it.
+export class IfcWalk{
+ constructor(T,camera,controls,canvas,tools,navigation,onChange){
+  Object.assign(this,{T,camera,controls,canvas,tools,navigation,onChange});
+  this.active=false;this.placing=false;this.eye=1.6;this.through=false;this.yaw=0;this.pitch=0;this.goal=null;this.last=0;
+  this.keys=new Set();this.stick={x:0,y:0};this.pointers=new Map();this.ray=new T.Raycaster();
+  const $=id=>document.getElementById(id);this.$=$;
+  $('ifc-walk').onclick=()=>this.active?this.stop():this.start();
+  $('ifc-walk-exit').onclick=()=>this.stop();
+  $('ifc-walk-through').onclick=()=>{this.through=!this.through;$('ifc-walk-through').setAttribute('aria-pressed',String(this.through));};
+  // Tools that drive the orbit camera end the walk first.
+  $('ifc-actions').addEventListener('click',e=>{if(this.active&&e.target.closest('#ifc-pan,#ifc-focus,#ifc-cut,#ifc-measure,#ifc-views,#ifc-rotate'))this.stop();},true);
+  const host=canvas.parentElement,own=e=>this.walking&&e.target===canvas;
+  // While choosing the floor the model still orbits; only a clean tap places the walker.
+  host.addEventListener('pointerdown',e=>{if(this.active&&this.placing&&e.target===canvas)this.placeTap=this.placeTap?null:{id:e.pointerId,x:e.clientX,y:e.clientY,t:performance.now()};},true);
+  host.addEventListener('pointerup',e=>{const tap=this.placeTap;if(!tap||tap.id!==e.pointerId)return;this.placeTap=null;if(this.active&&this.placing&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)<=8&&performance.now()-tap.t<500&&this.tapAt(e.clientX,e.clientY)){this.swallow(e);this.tools.tap=null;}},true);
+  host.addEventListener('pointerdown',e=>{if(!own(e))return;this.swallow(e);this.pointers.set(e.pointerId,{x:e.clientX,y:e.clientY,x0:e.clientX,y0:e.clientY,t:performance.now()});try{canvas.setPointerCapture(e.pointerId);}catch{}},true);
+  host.addEventListener('pointermove',e=>{if(!own(e))return;const p=this.pointers.get(e.pointerId);if(!p)return;this.swallow(e);this.drag(e,p);},true);
+  for(const name of ['pointerup','pointercancel'])host.addEventListener(name,e=>{if(!own(e))return;const p=this.pointers.get(e.pointerId);if(!p)return;this.swallow(e);this.pointers.delete(e.pointerId);
+   if(name==='pointerup'&&!this.pointers.size&&!p.multi&&Math.hypot(e.clientX-p.x0,e.clientY-p.y0)<=8&&performance.now()-p.t<500)this.tapAt(e.clientX,e.clientY);},true);
+  for(const name of ['dblclick','click','contextmenu'])host.addEventListener(name,e=>{if(own(e))this.swallow(e);},true);
+  host.addEventListener('wheel',e=>{if(!own(e))return;this.swallow(e);this.nudge(e.deltaY<0?.4:-.4);},{capture:true,passive:false});
+  const pad=$('ifc-walk-pad'),knob=pad.firstElementChild;
+  const setStick=e=>{const r=pad.getBoundingClientRect(),radius=r.width/2-8;let x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2;const len=Math.hypot(x,y);if(len>radius){x*=radius/len;y*=radius/len;}this.stick={x:x/radius,y:y/radius};knob.style.transform=`translate(${x}px,${y}px)`;};
+  pad.addEventListener('pointerdown',e=>{e.preventDefault();this.padId=e.pointerId;try{pad.setPointerCapture(e.pointerId);}catch{}setStick(e);});
+  pad.addEventListener('pointermove',e=>{if(e.pointerId===this.padId)setStick(e);});
+  for(const name of ['pointerup','pointercancel'])pad.addEventListener(name,e=>{if(e.pointerId!==this.padId)return;this.padId=null;this.stick={x:0,y:0};knob.style.transform='';});
+  const typing=e=>e.target.closest?.('input,textarea,select,[contenteditable]');
+  window.addEventListener('keydown',e=>{if(!this.active||typing(e)||e.ctrlKey||e.metaKey||e.altKey)return;const k=this.key(e);if(!k||k!=='Escape'&&!this.walking)return;e.preventDefault();e.stopImmediatePropagation();if(k==='Escape'){this.stop();return;}this.keys.add(k);},true);
+  window.addEventListener('keyup',e=>{const k=this.key(e);if(k)this.keys.delete(k);},true);
+  window.addEventListener('blur',()=>this.keys.clear());
+ }
+ get walking(){return this.active&&!this.placing;}
+ key(e){const map={KeyW:'f',ArrowUp:'f',KeyS:'b',ArrowDown:'b',KeyA:'l',KeyD:'r',ArrowLeft:'tl',ArrowRight:'tr',KeyQ:'tl',KeyE:'tr',ShiftLeft:'run',ShiftRight:'run',Escape:'Escape'};return map[e.code]||null;}
+ swallow(e){e.preventDefault();e.stopImmediatePropagation();}
+ start(){
+  if(!this.tools.group)return;
+  const tools=this.tools;tools.measuring=false;tools.choosingFace=false;tools.sync();this.navigation.armFocus(false);tools.setParallel?.(null);tools.toggleViews?.(false);
+  this.active=true;this.group=tools.group;this.goal=null;this.keys.clear();this.pointers.clear();this.placeTap=null;
+  this.camera.up.set(0,1,0);const dir=this.camera.getWorldDirection(new this.T.Vector3());this.yaw=Math.atan2(-dir.x,-dir.z);this.pitch=0;
+  this.camera.near=.05;this.camera.updateProjectionMatrix();
+  // Already inside the model: stand on the floor right below. Otherwise wait for a tap on the floor.
+  const inside=tools.bounds?.containsPoint(this.camera.position),floor=inside?this.floorBelow(this.camera.position,6):null;
+  this.placing=!floor;this.controls.enabled=this.placing;
+  if(floor){this.camera.position.set(this.camera.position.x,floor.y+this.eye,this.camera.position.z);this.apply();}
+  this.ui();this.onChange?.();
+ }
+ stop(){
+  if(!this.active)return;const walked=this.walking;this.active=false;this.placing=false;this.goal=null;this.keys.clear();this.pointers.clear();this.stick={x:0,y:0};this.placeTap=null;
+  this.controls.enabled=true;
+  if(walked){const forward=this.camera.getWorldDirection(new this.T.Vector3());this.controls.target.copy(this.camera.position).addScaledVector(forward,2);this.controls.update();this.navigation.updateClipping();}
+  this.ui();this.onChange?.();
+ }
+ ui(){
+  const $=this.$;$('ifc-walk').setAttribute('aria-pressed',String(this.active));$('ifc-walk-info').hidden=!this.active;$('ifc-walk-pad').hidden=!this.active||this.placing;
+  const knob=$('ifc-walk-pad').firstElementChild;knob.style.transform='';
+  $('ifc-walk-text').textContent=this.placing?'Toque no piso onde quer ficar':matchMedia('(pointer:fine)').matches?'Arraste para olhar · W A S D ou o círculo andam · toque no piso para ir':'Arraste para olhar · o círculo anda · toque no piso para ir';
+ }
+ apply(){this.camera.quaternion.setFromEuler(new this.T.Euler(this.pitch,this.yaw,0,'YXZ'));this.camera.updateMatrixWorld();}
+ drag(e,p){
+  const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;
+  if(this.pointers.size>1){
+   // Two fingers: spreading them walks forward, pinching walks back.
+   for(const q of this.pointers.values())q.multi=true;
+   const [a,b]=[...this.pointers.values()],now=Math.hypot(a.x-b.x,a.y-b.y);if(this.pinch!=null)this.nudge((now-this.pinch)*.01);this.pinch=now;return;
   }
-
-  group() {
-    return this.tools?.group || this.navigation?.group || null;
+  this.pinch=null;if(this.placing)return;
+  const k=1.8/Math.max(1,Math.min(this.canvas.clientWidth,this.canvas.clientHeight));
+  this.yaw+=dx*k;this.pitch=Math.max(-1.45,Math.min(1.45,this.pitch+dy*k));this.goal=null;this.apply();this.onChange?.();
+ }
+ nudge(metres){if(!this.active||this.placing)return;const f=this.forward();if(this.move(f.multiplyScalar(metres))){this.settle(1);this.onChange?.();}}
+ forward(){return new this.T.Vector3(-Math.sin(this.yaw),0,-Math.cos(this.yaw));}
+ tapAt(x,y){
+  const hit=this.tools.hitAt(x,y);if(!hit)return false;
+  const p=hit.point.clone(),floor=this.floorBelow(p.clone().add(new this.T.Vector3(0,.3,0)),.4);
+  // A tap on a wall goes to the floor just in front of it.
+  let spot=floor&&Math.abs(floor.y-p.y)<.05?p:null;
+  if(!spot){const back=p.clone().sub(this.camera.position).setY(0);if(back.lengthSq()<1e-8)return false;back.normalize();const near=p.clone().addScaledVector(back,-.4),below=this.floorBelow(near,4);if(!below)return false;spot=below;}
+  if(this.placing){
+   this.placing=false;this.controls.enabled=false;this.tools.showSelection?.(null);this.camera.up.set(0,1,0);
+   const dir=this.camera.getWorldDirection(new this.T.Vector3());this.yaw=Math.atan2(-dir.x,-dir.z);this.pitch=0;
+   this.camera.position.set(spot.x,spot.y+this.eye,spot.z);this.camera.near=.05;this.camera.updateProjectionMatrix();this.apply();this.ui();this.onChange?.();return true;
   }
-
-  bind() {
-    const btn = this.$('ifc-walk');
-    const exit = this.$('ifc-walk-exit');
-    const through = this.$('ifc-walk-through');
-    const pad = this.$('ifc-walk-pad');
-    if (btn) btn.onclick = () => this.toggle();
-    if (exit) exit.onclick = () => this.stop();
-    if (through) {
-      through.onclick = () => {
-        this.through = !this.through;
-        through.setAttribute('aria-pressed', String(this.through));
-        through.textContent = this.through ? 'Atravessar ligado' : 'Atravessar';
-        this.hint();
-        this.onState?.({ active: this.walking, placing: this.placing, through: this.through });
-      };
-    }
-    if (pad) {
-      const start = (event) => {
-        if (!this.walking || event.button > 0) return;
-        event.preventDefault();
-        event.stopPropagation();
-        this.padDrag = { id: event.pointerId };
-        pad.setPointerCapture(event.pointerId);
-        this.updatePad(event);
-      };
-      pad.addEventListener('pointerdown', start);
-      pad.addEventListener('pointermove', (event) => {
-        if (this.padDrag?.id === event.pointerId) this.updatePad(event);
-      });
-      for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-        pad.addEventListener(name, (event) => {
-          if (this.padDrag?.id !== event.pointerId) return;
-          this.padDrag = null;
-          this.pad.x = 0;
-          this.pad.y = 0;
-          this.syncPad();
-        });
-      }
-    }
-    this.canvas.addEventListener('pointerdown', (event) => {
-      if (!this.walking && !this.placing) return;
-      if (event.button > 0 || event.target.closest?.('button,select,input,#ifc-walk-pad,#ifc-tools')) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      this.lookDrag = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
-      this.canvas.setPointerCapture(event.pointerId);
-    }, true);
-    this.canvas.addEventListener('pointermove', (event) => {
-      if (this.lookDrag?.id !== event.pointerId) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const dx = event.clientX - this.lookDrag.x;
-      const dy = event.clientY - this.lookDrag.y;
-      if (Math.hypot(dx, dy) > 4) this.lookDrag.moved = true;
-      if (this.walking) {
-        this.yaw -= dx * 0.005;
-        this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch - dy * 0.005));
-        this.applyLook();
-        this.lookDrag.x = event.clientX;
-        this.lookDrag.y = event.clientY;
-        this.onChange?.();
-      }
-    }, true);
-    this.canvas.addEventListener('pointerup', (event) => {
-      if (this.lookDrag?.id !== event.pointerId) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const drag = this.lookDrag;
-      this.lookDrag = null;
-      if (!drag.moved) this.tapFloor(event.clientX, event.clientY);
-    }, true);
-    window.addEventListener('keydown', (event) => {
-      if (!this.walking) return;
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        this.stop();
-        return;
-      }
-      this.keys[event.code] = true;
-      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyQ', 'KeyE', 'ShiftLeft', 'ShiftRight'].includes(event.code)) {
-        event.preventDefault();
-      }
-    });
-    window.addEventListener('keyup', (event) => {
-      this.keys[event.code] = false;
-    });
-    for (const id of ['ifc-pan', 'ifc-focus', 'ifc-cut', 'ifc-measure', 'ifc-measure-level', 'ifc-views', 'ifc-hide']) {
-      this.$(id)?.addEventListener('click', () => {
-        if (this.walking || this.placing) this.stop();
-      });
-    }
+  this.goal=spot;return true;
+ }
+ step(){
+  if(!this.active)return false;if(this.group!==this.tools.group){this.stop();return false;}
+  const now=performance.now(),dt=Math.min(.05,(now-(this.last||now))/1000);this.last=now;if(this.placing||!dt)return false;
+  const k=this.keys;let f=-this.stick.y,s=this.stick.x,turn=0,changed=false;
+  if(k.has('f'))f+=1;if(k.has('b'))f-=1;if(k.has('l'))s-=1;if(k.has('r'))s+=1;if(k.has('tl'))turn+=1;if(k.has('tr'))turn-=1;
+  if(turn){this.yaw+=turn*1.8*dt;this.apply();changed=true;}
+  const len=Math.hypot(f,s);if(len>1){f/=len;s/=len;}
+  const speed=1.5*(k.has('run')?2:1);
+  if(f||s){this.goal=null;const fwd=this.forward(),right=new this.T.Vector3(Math.cos(this.yaw),0,-Math.sin(this.yaw));changed=this.move(fwd.multiplyScalar(f*speed*dt).addScaledVector(right,s*speed*dt))||changed;}
+  else if(this.goal){
+   const to=this.goal.clone().sub(this.camera.position).setY(0),d=to.length();
+   if(d<.05)this.goal=null;else if(!this.move(to.multiplyScalar(Math.min(d,2.5*dt)/d)))this.goal=null;else changed=true;
   }
-
-  updatePad(event) {
-    const pad = this.$('ifc-walk-pad');
-    if (!pad) return;
-    const rect = pad.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / rect.width * 2 - 1;
-    const y = (event.clientY - rect.top) / rect.height * 2 - 1;
-    const len = Math.hypot(x, y);
-    const scale = len > 1 ? 1 / len : 1;
-    this.pad.x = x * scale;
-    this.pad.y = -y * scale;
-    this.syncPad();
-  }
-
-  syncPad() {
-    const knob = this.$('ifc-walk-knob');
-    if (!knob) return;
-    knob.style.transform = `translate(${this.pad.x * 22}px, ${-this.pad.y * 22}px)`;
-  }
-
-  toggle() {
-    if (this.walking || this.placing) this.stop();
-    else this.begin();
-  }
-
-  begin() {
-    const group = this.group();
-    if (!group) return;
-    this.tools?.activate?.(true);
-    this.navigation?.armFocus?.(false);
-    this.saved = {
-      enabled: this.controls.enabled,
-      position: this.camera.position.clone(),
-      target: this.controls.target.clone(),
-      up: this.camera.up.clone(),
-    };
-    const box = new this.THREE.Box3().setFromObject(group);
-    const inside = !box.isEmpty() && box.containsPoint(this.camera.position);
-    if (inside) {
-      this.enter(this.camera.position.clone());
-    } else {
-      this.placing = true;
-      this.walking = false;
-      this.controls.enabled = false;
-      this.sync();
-      this.hint();
-    }
-  }
-
-  enter(from) {
-    const group = this.group();
-    if (!group) return;
-    const origin = from.clone();
-    const floor = this.groundAt(origin) ?? origin;
-    this.camera.position.set(floor.x, floor.y + this.eye, floor.z);
-    const dir = this.controls.target.clone().sub(this.camera.position);
-    if (dir.lengthSq() < 1e-6) dir.set(0, 0, -1);
-    dir.y = 0;
-    if (dir.lengthSq() < 1e-6) dir.set(0, 0, -1);
-    dir.normalize();
-    this.yaw = Math.atan2(-dir.x, -dir.z);
-    this.pitch = 0;
-    this.applyLook();
-    this.walking = true;
-    this.placing = false;
-    this.target = null;
-    this.last = performance.now();
-    this.controls.enabled = false;
-    this.sync();
-    this.hint();
-    this.onChange?.();
-  }
-
-  stop() {
-    const was = this.walking || this.placing;
-    this.walking = false;
-    this.placing = false;
-    this.target = null;
-    this.lookDrag = null;
-    this.padDrag = null;
-    this.pad.x = 0;
-    this.pad.y = 0;
-    this.keys = {};
-    this.syncPad();
-    if (this.saved) {
-      this.controls.enabled = this.saved.enabled;
-      if (!was) {
-        this.camera.position.copy(this.saved.position);
-        this.controls.target.copy(this.saved.target);
-      } else {
-        const look = new this.THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
-        this.controls.target.copy(this.camera.position).addScaledVector(look, 4);
-      }
-      this.camera.up.copy(this.saved.up);
-      this.controls.update();
-      this.saved = null;
-    } else {
-      this.controls.enabled = true;
-    }
-    this.sync();
-    this.onChange?.();
-  }
-
-  applyLook() {
-    const q = new this.THREE.Quaternion().setFromEuler(new this.THREE.Euler(this.pitch, this.yaw, 0, 'YXZ'));
-    this.camera.quaternion.copy(q);
-    this.camera.up.set(0, 1, 0);
-    const look = new this.THREE.Vector3(0, 0, -1).applyQuaternion(q);
-    this.controls.target.copy(this.camera.position).add(look);
-  }
-
-  tapFloor(x, y) {
-    const hit = this.hit(x, y);
-    if (!hit) {
-      this.hint('Toque no piso para caminhar.');
-      return;
-    }
-    if (this.placing && !this.walking) {
-      this.enter(hit.point);
-      return;
-    }
-    this.target = hit.point.clone();
-  }
-
-  hit(clientX, clientY) {
-    const group = this.group();
-    if (!group) return null;
-    const rect = this.canvas.getBoundingClientRect();
-    this.camera.updateMatrixWorld();
-    group.updateMatrixWorld(true);
-    this.ray.setFromCamera({
-      x: (clientX - rect.left) / rect.width * 2 - 1,
-      y: 1 - (clientY - rect.top) / rect.height * 2,
-    }, this.camera);
-    return this.ray.intersectObject(group, true).find((item) => !this.tools?.isVisible || this.tools.isVisible(item.point)) || null;
-  }
-
-  groundAt(point) {
-    const group = this.group();
-    if (!group) return null;
-    group.updateMatrixWorld(true);
-    const origin = point.clone();
-    origin.y += 8;
-    this.ray.set(origin, new this.THREE.Vector3(0, -1, 0));
-    this.ray.far = 40;
-    const hit = this.ray.intersectObject(group, true).find((item) => !this.tools?.isVisible || this.tools.isVisible(item.point));
-    this.ray.far = Infinity;
-    return hit ? hit.point : null;
-  }
-
-  blocked(from, direction, distance) {
-    if (this.through) return false;
-    const group = this.group();
-    if (!group || direction.lengthSq() < 1e-8) return false;
-    group.updateMatrixWorld(true);
-    const dir = direction.clone().normalize();
-    for (const lift of [0.35, 0.95, 1.45]) {
-      const origin = from.clone();
-      origin.y = from.y - this.eye + lift;
-      this.ray.set(origin, dir);
-      this.ray.far = distance + 0.28;
-      const hit = this.ray.intersectObject(group, true)[0];
-      this.ray.far = Infinity;
-      if (hit && hit.distance < distance + 0.22) return true;
-    }
-    return false;
-  }
-
-  step() {
-    if (!this.walking) return;
-    const now = performance.now();
-    const dt = Math.min(0.05, (now - this.last) / 1000 || 0.016);
-    this.last = now;
-    if (this.keys.KeyQ) this.yaw += 1.4 * dt;
-    if (this.keys.KeyE) this.yaw -= 1.4 * dt;
-    this.applyLook();
-    const forward = new this.THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(-1);
-    const right = new this.THREE.Vector3(forward.z, 0, -forward.x);
-    let mx = this.pad.x;
-    let my = this.pad.y;
-    if (this.keys.KeyW || this.keys.ArrowUp) my += 1;
-    if (this.keys.KeyS || this.keys.ArrowDown) my -= 1;
-    if (this.keys.KeyD || this.keys.ArrowRight) mx += 1;
-    if (this.keys.KeyA || this.keys.ArrowLeft) mx -= 1;
-    if (this.target) {
-      const to = this.target.clone().sub(this.camera.position);
-      to.y = 0;
-      const dist = to.length();
-      if (dist < 0.18) this.target = null;
-      else {
-        to.normalize();
-        my += 1;
-        forward.copy(to);
-        right.set(forward.z, 0, -forward.x);
-      }
-    }
-    const len = Math.hypot(mx, my);
-    if (len > 1) {
-      mx /= len;
-      my /= len;
-    }
-    const run = this.keys.ShiftLeft || this.keys.ShiftRight;
-    const step = this.speed * (run ? this.runMul : 1) * dt;
-    const wish = forward.multiplyScalar(my).add(right.multiplyScalar(mx));
-    if (wish.lengthSq() > 1e-8) {
-      wish.normalize().multiplyScalar(step);
-      const next = this.camera.position.clone();
-      const lateral = new this.THREE.Vector3(wish.x, 0, 0);
-      const depth = new this.THREE.Vector3(0, 0, wish.z);
-      if (!this.blocked(next, lateral, Math.abs(wish.x))) next.add(lateral);
-      if (!this.blocked(next, depth, Math.abs(wish.z))) next.add(depth);
-      const floor = this.groundAt(next);
-      if (floor) next.y = floor.y + this.eye;
-      this.camera.position.copy(next);
-      this.applyLook();
-    }
-    this.onChange?.();
-  }
-
-  sync() {
-    const btn = this.$('ifc-walk');
-    const pad = this.$('ifc-walk-pad');
-    const info = this.$('ifc-walk-info');
-    if (btn) btn.setAttribute('aria-pressed', String(this.walking || this.placing));
-    if (pad) pad.hidden = !this.walking;
-    if (info) info.hidden = !(this.walking || this.placing);
-    this.onState?.({ active: this.walking, placing: this.placing, through: this.through });
-  }
-
-  hint(text) {
-    const node = this.$('ifc-hint');
-    if (!node) return;
-    node.textContent = text || (this.placing
-      ? 'Toque no piso para começar a caminhar.'
-      : this.walking
-        ? (this.through ? 'Atravessar ligado. Esc ou Sair volta à órbita.' : 'Arraste para olhar. O círculo anda. Esc ou Sair volta à órbita.')
-        : 'Arraste para orbitar. Dois dedos aproximam e deslocam.');
-  }
+  return this.settle(dt)||changed;
+ }
+ // Slides along walls by trying the move, then each horizontal axis alone.
+ move(delta){
+  if(delta.lengthSq()<1e-12)return false;
+  const options=this.through?[delta]:[delta,new this.T.Vector3(delta.x,0,0),new this.T.Vector3(0,0,delta.z)];
+  for(const d of options){const len=d.length();if(len<1e-6)continue;if(!this.through&&this.blocked(d.clone().divideScalar(len),len))continue;this.camera.position.add(d);this.camera.updateMatrixWorld();return true;}
+  return false;
+ }
+ blocked(dir,len){
+  const feet=this.camera.position.y-this.eye;
+  return [.55,1.05,1.5].some(h=>{const origin=new this.T.Vector3(this.camera.position.x,feet+h,this.camera.position.z),hit=this.cast(origin,dir,len+.25);return hit&&!this.insideSolid(origin,dir,hit);});
+ }
+ // Seeing the back of faces both ahead and behind means the walker started inside a wall: let it step out.
+ insideSolid(origin,dir,hit){
+  if(!this.backFace(hit,dir))return false;
+  const back=dir.clone().negate(),behind=this.cast(origin,back,.6);
+  return !!behind&&this.backFace(behind,back);
+ }
+ backFace(hit,dir){
+  const n=hit.face?.normal;if(!n)return false;const m=new this.T.Matrix4();
+  if(hit.object.isBatchedMesh&&hit.batchId!=null)hit.object.getMatrixAt(hit.batchId,m);m.premultiply(hit.object.matrixWorld);
+  return n.clone().applyNormalMatrix(new this.T.Matrix3().getNormalMatrix(m)).dot(dir)>0;
+ }
+ // Climbs steps up to 50 cm and eases down onto lower floors.
+ settle(dt){
+  const feet=this.camera.position.y-this.eye,floor=this.floorBelow(new this.T.Vector3(this.camera.position.x,feet+.5,this.camera.position.z),5);
+  if(!floor)return false;const diff=floor.y-feet;if(Math.abs(diff)<.001)return false;
+  this.camera.position.y+=Math.abs(diff)<.01?diff:diff*Math.min(1,dt*12);this.camera.updateMatrixWorld();return true;
+ }
+ floorBelow(point,far){return this.cast(point,new this.T.Vector3(0,-1,0),far)?.point||null;}
+ cast(origin,dir,far){
+  const group=this.tools.group;if(!group)return null;this.ray.set(origin,dir);this.ray.far=far;
+  const hits=this.ray.intersectObject(group,true);if(hits.length>1)hits.sort((a,b)=>a.distance-b.distance);
+  return hits.find(h=>!h.object.userData?.prumoSection&&!h.object.isLine&&!h.object.isPoints&&!this.tools.isHiddenHit(h)&&this.tools.isVisible(h.point))||null;
+ }
 }

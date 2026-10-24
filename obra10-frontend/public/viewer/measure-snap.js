@@ -5,7 +5,7 @@ export function collectSegments(doc){
  const segments=[];
  function visit(entities,m,parent='0',depth=0){
   if(depth>16)return;
-  for(const e of entities){if(!e)continue;
+  for(const e of entities){
    const layerName=!e.layer||e.layer==='0'?parent:e.layer,layer=doc.layers[layerName]||doc.layers[layerName?.toLowerCase()];
    if(e.isVisible===false||layer?.isVisible===false||layer?.isFrozen)continue;
    if(e.kind==='insert'){

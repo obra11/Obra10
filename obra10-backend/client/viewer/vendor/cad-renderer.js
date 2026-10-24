@@ -1143,7 +1143,6 @@ function gr(t, e, n = 0) {
 }
 function br(t, e, n, s) {
   var r, a, c, l, h, u, f, d, m, p, g, b, y, v, x;
-  if (!e) return;
   const i = String((r = e.type) != null ? r : "").toUpperCase(), o = (a = e.kind) != null ? a : ot(i);
   if (o === "insert") {
     const w = Il(n.document, (c = e.blockName) != null ? c : e.name);
@@ -1596,7 +1595,6 @@ var yo = class {
   }
   drawEntityTracked(e, n) {
     var o, r;
-    if (!e) return;
     this.stats.total++;
     const s = String((o = e.type) != null ? o : "UNKNOWN").toUpperCase();
     this.stats.byType[s] = ((r = this.stats.byType[s]) != null ? r : 0) + 1;
@@ -1713,7 +1711,6 @@ var yo = class {
     if (s && n < this.opts.maxInsertDepth) {
       const l = kn(e, (c = s.basePoint) != null ? c : { x: 0, y: 0 });
       for (const h of s.entities) {
-        if (!h) continue;
         const u = hr(h, e, this.document, { foreground: this.opts.foreground, background: this.opts.background, trueColorByteOrder: this.opts.trueColorByteOrder, contrastMode: this.opts.contrastMode, minColorContrast: this.opts.minColorContrast }), f = xr(u, e, this.document);
         this.drawEntityTracked(Ye(f, l), n + 1);
       }

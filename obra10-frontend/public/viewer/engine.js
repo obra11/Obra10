@@ -1,3 +1,5 @@
+import { markup } from './viewer-tools.js';
+
 const VIEWER_BASE = new URL('./', import.meta.url);
 
 function asset(path) {
@@ -5,21 +7,26 @@ function asset(path) {
   return new URL(rel, VIEWER_BASE).href;
 }
 
-globalThis.PrumoAssets = new Proxy(
-  {},
-  {
-    get(_target, prop) {
-      if (typeof prop !== 'string') return undefined;
-      return asset(prop);
-    },
+globalThis.PrumoAssets = new Proxy({}, {
+  get(_target, prop) {
+    if (typeof prop !== 'string') return undefined;
+    return asset(prop);
   },
-);
+});
 
 const PDF_LIMIT = 100 * 1024 * 1024;
 const DWG_LIMIT = 100 * 1024 * 1024;
 const IFC_LIMIT = 300 * 1024 * 1024;
+const IFC_PALETTE = ['#e0c46d', '#7dcea0', '#85c1e9', '#f0b27a', '#d7bde2', '#f1948a', '#e74c3c', '#2e86de', '#27ae60', '#8e44ad', '#95a5a6', '#f5f5f5'];
 
 function ensureStyle() {
+  if (!document.getElementById('obra10-viewer-tools')) {
+    const link = document.createElement('link');
+    link.id = 'obra10-viewer-tools';
+    link.rel = 'stylesheet';
+    link.href = asset('./viewer-tools.css');
+    document.head.appendChild(link);
+  }
   let style = document.getElementById('obra10-viewer-style');
   if (!style) {
     style = document.createElement('style');
@@ -27,176 +34,143 @@ function ensureStyle() {
     document.head.appendChild(style);
   }
   style.textContent = `
-    .obra10-stage { position:absolute; inset:0; background:#1B1B1B; overflow:hidden; color:#fff; font-family:Inter,system-ui,sans-serif; }
-    .obra10-stage .layer { position:absolute; inset:0; }
-    .obra10-stage [hidden] { display: none !important; }
-    .obra10-stage #pdf, .obra10-stage #cad { touch-action:none; }
-    .obra10-stage #cad { background:#172334; }
-    .obra10-stage #cad-canvas { display:block; width:100%; height:100%; }
-    .obra10-stage #measure-overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:2; }
-    .obra10-stage #measure-panel { position:absolute; z-index:3; top:12px; left:12px; right:12px; display:flex; align-items:center; justify-content:space-between; gap:12px; margin:auto; max-width:720px; padding:10px 14px; background:#102d3ef2; border:1px solid #4ba6ad; border-radius:12px; }
-    .obra10-stage #measure-result { font-size:13px; color:#8bf5e8; }
-    .obra10-stage #measure-panel small { display:block; font-size:10px; color:#a7bfce; margin-top:4px; }
-    .obra10-stage #measure-clear { font-size:12px; padding:8px 10px; border-radius:8px; border:0; background:#E5192C; color:#fff; font-weight:700; }
-    .obra10-stage .measure-units { display:flex; align-items:center; flex-wrap:wrap; gap:6px; font-size:11px; margin-top:6px; color:#d4fff7; }
-    .obra10-stage #measure-unit, .obra10-stage #measure-scale, .obra10-stage #measure-scale-custom, .obra10-stage #measure-known, .obra10-stage #measure-known-unit { background:#11283b; color:#fff; border:1px solid #548594; border-radius:6px; padding:4px 6px; font-size:12px; }
-    .obra10-stage #measure-scale-custom, .obra10-stage #measure-known { width:80px; }
-    .obra10-stage #measure-calibrate { font-size:11px; padding:6px 10px; border-radius:8px; border:0; background:#4ba6ad; color:#102d3e; font-weight:700; }
-    .obra10-stage #measure-loupe { position:absolute; z-index:4; top:188px; left:16px; width:154px; border:2px solid #63f0e5; border-radius:14px; overflow:hidden; background:#102539; pointer-events:none; }
-    .obra10-stage #measure-loupe canvas { display:block; width:150px; height:150px; }
-    .obra10-stage #measure-target { display:block; font-size:10px; text-align:center; padding:6px; color:#d4fff7; }
-    .obra10-stage.measuring, .obra10-stage #cad.measuring { cursor:crosshair; }
-    .obra10-stage #layers-dialog { width:min(420px, calc(100vw - 24px)); max-height:min(70vh, 560px); border:0; border-radius:16px; padding:0; color:#1B1B1B; background:#fff; }
-    .obra10-stage #layers-dialog::backdrop { background:rgba(0,0,0,.45); }
-    .obra10-stage .layer-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:14px 14px 8px; }
-    .obra10-stage .layer-heading h2 { margin:0; font-size:16px; }
-    .obra10-stage .layer-heading button, .obra10-stage .layer-actions button { border:1px solid #e6e8ec; background:#fff; border-radius:8px; padding:6px 10px; font-size:12px; font-weight:700; }
-    .obra10-stage #layer-search { display:block; width:calc(100% - 28px); margin:0 14px 8px; border:1px solid #e6e8ec; border-radius:8px; padding:8px 10px; }
-    .obra10-stage .layer-actions { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 8px; }
-    .obra10-stage #layer-list { overflow:auto; max-height:360px; padding:0 14px 14px; display:flex; flex-direction:column; gap:4px; }
-    .obra10-stage #layer-list label { display:flex; align-items:center; gap:8px; font-size:13px; }
+    .obra10-stage { position:absolute; inset:0; min-height:0; }
     .obra10-stage #pdf-measure { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:3; }
-    .obra10-stage #three { touch-action:none; }
-    .obra10-stage #three canvas { display:block; }
-    .obra10-stage #ifc-tools { position:absolute; left:8px; right:8px; bottom:8px; z-index:5; display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px; border-radius:12px; background:rgba(27,27,27,.88); border:1px solid rgba(255,255,255,.12); }
-    .obra10-stage #ifc-tools button, .obra10-stage #ifc-tools select { background:#E5192C; color:#fff; border:0; border-radius:8px; padding:8px 10px; font-size:13px; font-weight:600; }
-    .obra10-stage #ifc-tools button[aria-pressed="true"] { outline:2px solid #fff; }
-    .obra10-stage #ifc-tools small, .obra10-stage #ifc-tools strong { color:#fff; font-size:12px; }
-    .obra10-stage #ifc-cut-controls, .obra10-stage #ifc-measure-info { display:flex; flex-wrap:wrap; gap:6px; align-items:center; width:100%; }
-    .obra10-stage #ifc-cut-overlay, .obra10-stage #ifc-measure-overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:4; }
-    .obra10-stage #ifc-cut-handle { position:absolute; z-index:6; transform:translate(-50%,-50%); background:#E5192C; color:#fff; border:0; border-radius:999px; padding:8px 12px; font-size:12px; font-weight:700; }
-    .obra10-stage #ifc-views-panel { display:flex; flex-wrap:wrap; gap:6px; width:100%; }
-    .obra10-stage #ifc-walk-pad { position:absolute; z-index:6; left:16px; bottom:88px; width:92px; height:92px; border-radius:50%; background:rgba(27,27,27,.72); border:2px solid rgba(255,255,255,.28); touch-action:none; }
-    .obra10-stage #ifc-walk-knob { position:absolute; left:50%; top:50%; width:36px; height:36px; margin:-18px 0 0 -18px; border-radius:50%; background:#E5192C; pointer-events:none; }
-    .obra10-stage #ifc-walk-info { position:absolute; z-index:6; right:12px; bottom:88px; display:flex; gap:6px; align-items:center; padding:8px 10px; border-radius:12px; background:rgba(27,27,27,.88); }
-    .obra10-stage #ifc-walk-info button { background:#E5192C; color:#fff; border:0; border-radius:8px; padding:8px 10px; font-size:12px; font-weight:700; }
-    .obra10-stage #ifc-walk-info button[aria-pressed="true"] { outline:2px solid #fff; }
-    .obra10-stage #ifc-hidden { width:100%; display:flex; align-items:center; gap:8px; color:#fff; font-size:12px; }
+    .obra10-stage #ifc-add, .obra10-stage #ifc-pan, .obra10-stage #ifc-focus, .obra10-stage #ifc-cut,
+    .obra10-stage #ifc-measure, .obra10-stage #ifc-walk, .obra10-stage #ifc-views, .obra10-stage #ifc-storeys,
+    .obra10-stage #ifc-capture, .obra10-stage #ifc-show-hidden { background:#E5192C; border-color:#c41426; color:#fff; }
+    .obra10-stage #ifc-walk-pad i { position:absolute; left:50%; top:50%; width:36px; height:36px; margin:-18px 0 0 -18px; border-radius:50%; background:#E5192C; pointer-events:none; }
   `;
+}
+
+function ifcText(value) {
+  const text = typeof value === 'string' ? value : value?.value;
+  return typeof text === 'string' ? text.trim() : '';
+}
+
+function ifcTypeName(code) {
+  const types = { IFCWALL: 'Parede', IFCWALLSTANDARDCASE: 'Parede', IFCSLAB: 'Laje', IFCDOOR: 'Porta', IFCWINDOW: 'Janela', IFCCOLUMN: 'Pilar', IFCBEAM: 'Viga', IFCROOF: 'Telhado', IFCSTAIR: 'Escada', IFCSTAIRFLIGHT: 'Lance de escada', IFCRAILING: 'Guarda-corpo', IFCCOVERING: 'Revestimento', IFCPLATE: 'Placa', IFCMEMBER: 'Barra', IFCFOOTING: 'Fundação', IFCPILE: 'Estaca', IFCCURTAINWALL: 'Parede cortina', IFCSPACE: 'Ambiente', IFCBUILDINGELEMENTPROXY: 'Elemento', IFCOPENINGELEMENT: 'Abertura', IFCFURNISHINGELEMENT: 'Mobiliário', IFCFLOWSEGMENT: 'Trecho', IFCFLOWFITTING: 'Conexão', IFCFLOWTERMINAL: 'Terminal', IFCSITE: 'Terreno', IFCBUILDING: 'Edificação', IFCBUILDINGSTOREY: 'Pavimento', IFCPROJECT: 'Projeto' };
+  const key = String(code || '').toUpperCase();
+  return types[key.startsWith('IFC') || !key ? key : 'IFC' + key] || key.replace(/^IFC/, '');
+}
+
+function ifcLengthScale(api, modelID) {
+  const prefix = { MILLI: 1e-3, CENTI: 1e-2, DECI: 1e-1, DECA: 10, HECTO: 100, KILO: 1e3, MICRO: 1e-6 };
+  let ids;
+  try {
+    ids = api.GetLineIDsWithType(modelID, 180925521);
+    for (let i = 0; i < ids.size(); i++) {
+      const assignment = api.GetLine(modelID, ids.get(i), true);
+      for (const ref of assignment?.Units || []) {
+        const unit = ref?.UnitType ? ref : api.GetLine(modelID, ref?.value, true);
+        const kind = unit?.UnitType?.value || unit?.UnitType;
+        if (kind !== 'LENGTHUNIT') continue;
+        const code = api.GetNameFromTypeCode(unit.type) || '';
+        if (code === 'IFCSIUNIT') return prefix[unit.Prefix?.value || unit.Prefix] ?? 1;
+      }
+    }
+  } catch { /* unidade padrão em metros */ }
+  finally { try { ids?.delete(); } catch { /* wasm já liberou */ } }
+  return 1;
+}
+
+function ifcElementLabel(api, modelID, expressID) {
+  try {
+    const line = api.GetLine(modelID, expressID);
+    const name = ifcText(line?.Name) || ifcText(line?.Tag) || ifcText(line?.LongName);
+    let code = '';
+    try { code = api.GetNameFromTypeCode(line?.type) || ''; } catch { /* tipo desconhecido */ }
+    const type = ifcTypeName(code);
+    return { name: name || type || 'Elemento', type: name ? type : '' };
+  } catch { return { name: 'Elemento', type: '' }; }
+}
+
+function readIfcStoreys(api, modelID) {
+  const ref = (value) => value == null ? null : typeof value === 'number' ? value : typeof value.value === 'number' ? value.value : typeof value.expressID === 'number' ? value.expressID : null;
+  const refs = (value) => {
+    if (value == null) return [];
+    if (typeof value.size === 'function' && typeof value.get === 'function') {
+      const out = [];
+      for (let i = 0; i < value.size(); i++) {
+        const id = ref(value.get(i));
+        if (id != null) out.push(id);
+      }
+      return out;
+    }
+    return (Array.isArray(value) ? value : [value]).map(ref).filter((id) => id != null);
+  };
+  const lines = (type) => {
+    const ids = api.GetLineIDsWithType(modelID, type);
+    const out = [];
+    try {
+      for (let i = 0; i < ids.size(); i++) {
+        try { out.push(api.GetLine(modelID, ids.get(i))); } catch { /* linha ilegível */ }
+      }
+    } finally { try { ids.delete(); } catch { /* wasm já liberou */ } }
+    return out;
+  };
+  const storeyLines = lines(3124254112);
+  if (!storeyLines.length) return null;
+  const storeySet = new Set(storeyLines.map((line) => line.expressID));
+  const parent = new Map();
+  for (const line of lines(160246688)) {
+    const from = ref(line.RelatingObject);
+    if (from == null) continue;
+    for (const child of refs(line.RelatedObjects)) parent.set(child, from);
+  }
+  const owner = (id) => {
+    const seen = new Set();
+    while (id != null && !seen.has(id)) {
+      if (storeySet.has(id)) return id;
+      seen.add(id);
+      id = parent.get(id) ?? null;
+    }
+    return null;
+  };
+  const members = new Map([...storeySet].map((id) => [id, []]));
+  const assign = (element, storey) => {
+    if (element == null || storey == null || !members.has(storey)) return;
+    const list = members.get(storey);
+    if (!list.includes(element)) list.push(element);
+  };
+  for (const line of lines(3242617779)) {
+    const storey = owner(ref(line.RelatingStructure));
+    for (const element of refs(line.RelatedElements)) assign(element, storey);
+  }
+  for (const [child, from] of parent) assign(child, owner(from));
+  const storeys = storeyLines.map((line) => {
+    const elevation = Number(line.Elevation?.value ?? line.Elevation);
+    return { id: line.expressID, name: ifcText(line.Name) || ifcText(line.LongName) || '', elevation: Number.isFinite(elevation) ? elevation : null };
+  }).sort((a, b) => a.elevation == null ? 1 : b.elevation == null ? -1 : a.elevation - b.elevation || a.id - b.id);
+  const nameCount = new Map();
+  for (const storey of storeys) if (storey.name) nameCount.set(storey.name, (nameCount.get(storey.name) || 0) + 1);
+  const seen = new Map();
+  const storeyOf = {};
+  storeys.forEach((storey, index) => {
+    if (!storey.name) storey.label = storeys.length > 1 ? 'Pavimento ' + (index + 1) : 'Pavimento';
+    else if (nameCount.get(storey.name) > 1) {
+      const n = (seen.get(storey.name) || 0) + 1;
+      seen.set(storey.name, n);
+      storey.label = storey.name + ' ' + n;
+    } else storey.label = storey.name;
+    for (const element of members.get(storey.id) || []) storeyOf[element] = storey.id;
+  });
+  return { storeys: storeys.map(({ id, label, elevation }) => ({ id, label, elevation })), storeyOf };
 }
 
 export function mountViewer(host, hooks = {}) {
   ensureStyle();
   host.replaceChildren();
   const stage = document.createElement('div');
-  stage.className = 'obra10-stage';
+  stage.className = 'obra10-stage prumo-engine';
   stage.innerHTML = `
-    <div id="pdf" class="layer" hidden><canvas aria-label="Página PDF"></canvas><svg id="pdf-measure" aria-hidden="true"></svg></div>
-    <div id="cad" class="layer" hidden>
-      <canvas id="cad-canvas" aria-label="Desenho CAD vetorial"></canvas>
-      <svg id="measure-overlay" aria-hidden="true"></svg>
-      <div id="measure-panel" hidden>
-        <div>
-          <strong id="measure-result"></strong>
-          <small id="measure-hint">Arraste uma ponta para ajustar. Dois dedos navegam.</small>
-          <label class="measure-units">Unidade do DWG:
-            <select id="measure-unit">
-              <option value="">Confirmar unidade…</option>
-              <option value="4">Milímetros</option>
-              <option value="5">Centímetros</option>
-              <option value="6">Metros</option>
-              <option value="1">Polegadas</option>
-              <option value="2">Pés</option>
-              <option value="7">Quilômetros</option>
-              <option value="10">Jardas</option>
-              <option value="14">Decímetros</option>
-            </select>
-          </label>
-          <label class="measure-units">Escala:
-            <select id="measure-scale">
-              <option value="1">1:1 — cotas do modelo</option>
-              <option value="20">1:20</option>
-              <option value="25">1:25</option>
-              <option value="50">1:50</option>
-              <option value="75">1:75 — só prancha em papel</option>
-              <option value="100">1:100</option>
-              <option value="125">1:125</option>
-              <option value="200">1:200</option>
-              <option value="250">1:250</option>
-              <option value="500">1:500</option>
-              <option value="custom">Fator…</option>
-            </select>
-            <input id="measure-scale-custom" type="number" min="0.0001" step="any" placeholder="1,52" hidden>
-          </label>
-          <label class="measure-units" id="measure-calibrate-row" hidden>
-            Esta cota mede
-            <input id="measure-known" type="text" inputmode="decimal" placeholder="365,5">
-            <select id="measure-known-unit">
-              <option value="cm">cm</option>
-              <option value="m">m</option>
-              <option value="mm">mm</option>
-            </select>
-            <button id="measure-calibrate" type="button">Calibrar</button>
-          </label>
-        </div>
-        <button id="measure-clear" type="button">Limpar</button>
-      </div>
-      <div id="measure-loupe" hidden><canvas width="300" height="300"></canvas><span id="measure-target"></span></div>
-      <button id="measure" type="button" hidden aria-pressed="false">Medir</button>
-    </div>
-    <dialog id="layers-dialog">
-      <div class="layer-heading"><h2>Layers do desenho</h2><button id="layers-close" type="button" aria-label="Fechar layers">Fechar</button></div>
-      <input id="layer-search" type="search" placeholder="Buscar layer…" aria-label="Buscar layer">
-      <div class="layer-actions">
-        <button id="layers-all" type="button">Mostrar todas</button>
-        <button id="layers-original" type="button">Estado original</button>
-        <button id="layers-dimensions" type="button">Mostrar cotas</button>
-      </div>
-      <div id="layer-list"></div>
-    </dialog>
-    <div id="three" class="layer" hidden></div>
-    <svg id="ifc-cut-overlay" aria-hidden="true"></svg>
-    <button id="ifc-cut-handle" hidden type="button" role="slider" aria-label="Posição do corte IFC" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">Corte</button>
-    <svg id="ifc-measure-overlay" aria-hidden="true"></svg>
-    <div id="ifc-tools" hidden>
-      <button id="ifc-pan" type="button" aria-pressed="false">Mover</button>
-      <button id="ifc-focus" type="button" aria-pressed="false">Focar ponto</button>
-      <button id="ifc-cut" type="button" aria-pressed="false">Corte</button>
-      <button id="ifc-measure" type="button" aria-pressed="false">Medir</button>
-      <button id="ifc-measure-level" type="button" aria-pressed="false">Nível</button>
-      <button id="ifc-views" type="button" aria-pressed="false">Vistas</button>
-      <button id="ifc-walk" type="button" aria-pressed="false">Caminhar</button>
-      <button id="ifc-hide" type="button" aria-pressed="false">Ocultar</button>
-      <div id="ifc-cut-controls" hidden>
-        <label>Direção
-          <select id="ifc-cut-axis">
-            <option value="y">Horizontal</option>
-            <option value="x">Lateral</option>
-            <option value="z">Frontal</option>
-          </select>
-        </label>
-        <button id="ifc-cut-face" type="button">Face</button>
-        <button id="ifc-cut-side" type="button">Lado</button>
-        <button id="ifc-cut-rotate" type="button">Girar</button>
-        <input id="ifc-cut-position" type="range" min="0" max="100" value="50" aria-label="Posição do corte">
-        <span id="ifc-cut-value">50%</span>
-        <label><input id="ifc-cut-reverse" type="checkbox"> Inverter</label>
-      </div>
-      <div id="ifc-views-panel" hidden>
-        <button id="ifc-view-top" type="button">Topo</button>
-        <button id="ifc-view-front" type="button">Frente</button>
-        <button id="ifc-view-iso" type="button">Iso</button>
-        <button id="ifc-view-ortho" type="button">Paralela</button>
-      </div>
-      <div id="ifc-measure-info" hidden>
-        <strong id="ifc-measure-result"></strong>
-        <button id="ifc-measure-clear" type="button">Limpar</button>
-      </div>
-      <div id="ifc-hidden" hidden>
-        <span id="ifc-hidden-count"></span>
-        <button id="ifc-hide-clear" type="button">Mostrar</button>
-      </div>
-      <small id="ifc-hint">Arraste para orbitar. Dois dedos aproximam e deslocam.</small>
-    </div>
-    <div id="ifc-walk-pad" hidden><div id="ifc-walk-knob"></div></div>
-    <div id="ifc-walk-info" hidden>
-      <button id="ifc-walk-through" type="button" aria-pressed="false">Atravessar</button>
-      <button id="ifc-walk-exit" type="button">Sair</button>
-    </div>
+    <div id="pdf" hidden><canvas aria-label="Página PDF"></canvas><svg id="pdf-measure" aria-hidden="true"></svg></div>
+    <canvas id="cad" hidden aria-label="Desenho CAD vetorial"></canvas>
+    ${markup}
   `;
   host.appendChild(stage);
 
-  const $ = (id) => stage.querySelector('#' + id);
+  const $ = (id) => stage.querySelector('#' + id) || document.getElementById(id);
   let kind = 'empty';
   let pdfViewer = null;
   let THREE = null;
@@ -205,16 +179,17 @@ export function mountViewer(host, hooks = {}) {
   let renderer = null;
   let controls = null;
   let group = null;
-  let ifcRoot = null;
-  let originLocked = false;
-  const ifcModels = new Map();
   let ifcApi = null;
+  let IfcMeshBuilder = null;
   let ifcNavigation = null;
   let ifcTools = null;
   let ifcWalk = null;
   let disposeIfcGroup = null;
+  let originAxes = null;
   let ifcNeedsRender = false;
+  let ifcPick = null;
   let alive = true;
+  const modelIds = new WeakMap();
 
   function status(message, error = false) {
     hooks.onStatus?.({ message, error });
@@ -222,15 +197,18 @@ export function mountViewer(host, hooks = {}) {
 
   function setKind(next) {
     kind = next;
+    ifcWalk?.stop();
     $('pdf').hidden = next !== 'pdf';
     $('cad').hidden = next !== 'dwg';
     $('three').hidden = next !== 'ifc';
     $('ifc-tools').hidden = next !== 'ifc';
-    $('ifc-cut-overlay').style.visibility = next === 'ifc' ? 'visible' : 'hidden';
-    $('ifc-measure-overlay').style.visibility = next === 'ifc' ? 'visible' : 'hidden';
+    if ($('ifc-tab')) $('ifc-tab').hidden = next !== 'ifc';
+    if ($('ifc-info')) $('ifc-info').hidden = next !== 'ifc' || !group;
     if (next !== 'ifc') $('ifc-cut-handle').hidden = true;
-    if (next !== 'ifc') ifcWalk?.stop();
     ifcTools?.activate(next === 'ifc');
+    if (next === 'ifc' && group) ifcTools?.setModel(group);
+    if (controls) controls.enabled = next === 'ifc' && !ifcWalk?.walking;
+    publishFederation();
     hooks.onKind?.(next);
   }
 
@@ -245,9 +223,161 @@ export function mountViewer(host, hooks = {}) {
     return pdfViewer;
   }
 
+  function federationModels() {
+    return group ? [...group.children].filter((child) => child.userData?.ifcModel) : [];
+  }
+
+  function visibleFederationBounds() {
+    const box = new THREE.Box3();
+    for (const model of federationModels()) if (model.visible) box.union(new THREE.Box3().setFromObject(model));
+    return box;
+  }
+
+  function renderIfcInfo() {
+    const bar = $('ifc-info');
+    if (!bar) return;
+    const models = kind === 'ifc' && group ? federationModels() : [];
+    if (!models.length) {
+      bar.hidden = true;
+      return;
+    }
+    const pick = $('ifc-info-pick');
+    const origin = $('ifc-info-origin');
+    const distances = models.map((model) => Number.isFinite(model.userData.originDistance) ? model.userData.originDistance : null).filter((value) => value != null);
+    if (pick) {
+      const label = [ifcPick?.name, ifcPick?.type].filter(Boolean).join(' · ');
+      pick.textContent = label;
+      pick.hidden = !label;
+    }
+    if (origin) {
+      const bits = [];
+      if (distances.length) bits.push(Math.max(...distances).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' m');
+      bits.push('Origem 0, 0, 0');
+      origin.textContent = bits.join(' · ');
+    }
+    bar.hidden = false;
+  }
+
+  function setIfcModelColor(model, color) {
+    model.userData.color = color || null;
+    model.traverse((object) => {
+      if (object.userData?.prumoSection) return;
+      for (const material of [].concat(object.material || [])) {
+        if (!material.color) continue;
+        material.userData.prumoOriginal ??= material.color.clone();
+        if (color) material.color.set(color);
+        else material.color.copy(material.userData.prumoOriginal);
+      }
+    });
+    ifcNeedsRender = true;
+  }
+
+  function paintIfcSwatch(model, swatch) {
+    const color = model.userData.color;
+    swatch.style.background = color || 'conic-gradient(#e0c46d,#7dcea0,#85c1e9,#f1948a,#e0c46d)';
+    swatch.title = color ? 'Cor deste IFC: ' + color : 'Cores do arquivo';
+  }
+
+  function ifcColorPicker(model, swatch, row) {
+    const open = row.nextElementSibling?.classList.contains('ifc-colors');
+    for (const panel of stage.querySelectorAll('#ifc-model-list .ifc-colors')) panel.remove();
+    for (const button of stage.querySelectorAll('#ifc-model-list .ifc-swatch')) button.setAttribute('aria-expanded', 'false');
+    if (open) return;
+    const panel = document.createElement('div');
+    panel.className = 'ifc-colors';
+    const choose = (color) => {
+      setIfcModelColor(model, color);
+      paintIfcSwatch(model, swatch);
+      panel.remove();
+      swatch.setAttribute('aria-expanded', 'false');
+      publishFederation();
+    };
+    const original = document.createElement('button');
+    original.type = 'button';
+    original.className = 'ifc-color-original';
+    original.textContent = 'Original';
+    original.onclick = () => choose(null);
+    panel.append(original);
+    for (const color of IFC_PALETTE) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.style.background = color;
+      button.onclick = () => choose(color);
+      panel.append(button);
+    }
+    const other = document.createElement('label');
+    other.className = 'ifc-color-other';
+    other.textContent = 'Outra';
+    const input = document.createElement('input');
+    input.type = 'color';
+    input.value = model.userData.color || '#e0c46d';
+    input.onchange = () => choose(input.value);
+    other.append(input);
+    panel.append(other);
+    row.after(panel);
+    swatch.setAttribute('aria-expanded', 'true');
+  }
+
+  function publishFederation() {
+    const models = federationModels();
+    const panel = $('ifc-models');
+    if (panel) panel.hidden = kind !== 'ifc' || models.length < 2;
+    const list = $('ifc-model-list');
+    if (list) {
+      list.replaceChildren();
+      models.forEach((model) => {
+        const row = document.createElement('div');
+        row.className = 'ifc-model';
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.checked = model.visible;
+        check.setAttribute('aria-label', 'Mostrar ' + model.userData.fileName);
+        check.onchange = () => {
+          model.visible = check.checked;
+          ifcNavigation?.setModel(group);
+          if (ifcTools?.group === group) {
+            const box = visibleFederationBounds();
+            if (!box.isEmpty()) ifcTools.bounds = box;
+            if (ifcTools.state?.cut) ifcTools.applyCut();
+          }
+          ifcNeedsRender = true;
+          publishFederation();
+        };
+        const swatch = document.createElement('button');
+        swatch.type = 'button';
+        swatch.className = 'ifc-swatch';
+        swatch.setAttribute('aria-label', 'Cor de ' + model.userData.fileName);
+        paintIfcSwatch(model, swatch);
+        swatch.onclick = () => ifcColorPicker(model, swatch, row);
+        const name = document.createElement('span');
+        name.className = 'ifc-model-name';
+        name.textContent = model.userData.fileName;
+        const distance = document.createElement('small');
+        const center = new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3());
+        model.userData.originDistance = center.length();
+        distance.textContent = center.length().toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' m';
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = 'Remover';
+        remove.onclick = () => removeIfc(modelIds.get(model));
+        row.append(check, swatch, name, distance, remove);
+        list.append(row);
+      });
+    }
+    renderIfcInfo();
+    hooks.onIfcModels?.(models.map((model) => ({
+      id: modelIds.get(model),
+      name: model.userData.fileName,
+      visible: model.visible,
+      color: model.userData.color || null,
+      distance: model.userData.originDistance || 0,
+    })));
+    ifcNeedsRender = true;
+  }
+
   function resize() {
     ifcNeedsRender = true;
-    ifcTools?.draw();
+    ifcTools?.draw?.();
     if (pdfViewer && kind === 'pdf') pdfViewer.render().catch((e) => status(e.message, true));
     if (kind === 'dwg' && dwgMode === 'preview') drawDwgPreview();
     else if (cadRenderer && kind === 'dwg') cadRenderer.resize();
@@ -261,18 +391,11 @@ export function mountViewer(host, hooks = {}) {
   }
 
   function fit3d() {
-    if (!camera || !controls || !ifcModels.size) return;
-    const box = new THREE.Box3();
-    let any = false;
-    for (const model of ifcModels.values()) {
-      if (!model.group.visible) continue;
-      const part = new THREE.Box3().setFromObject(model.group);
-      if (part.isEmpty()) continue;
-      box.union(part);
-      any = true;
-    }
-    if (!any || box.isEmpty()) return;
-    ifcNavigation?.setModel(ifcRoot);
+    if (!camera || !controls || !group) return;
+    ifcWalk?.stop();
+    ifcNavigation?.setModel(group);
+    const box = visibleFederationBounds();
+    if (box.isEmpty()) return;
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const radius = size.length() / 2;
@@ -292,11 +415,13 @@ export function mountViewer(host, hooks = {}) {
     THREE = await import(asset('./vendor/three.module.js'));
     const { OrbitControls } = await import(asset('./vendor/OrbitControls.js'));
     scene = new THREE.Scene();
-    scene.background = new THREE.Color('#1B1B1B');
     camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100000);
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-    renderer.localClippingEnabled = true;
-    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    renderer = new THREE.WebGLRenderer({
+      antialias: !(matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 1),
+      alpha: false,
+      powerPreference: 'high-performance',
+    });
+    renderer.setClearColor('#172334');
     $('three').appendChild(renderer.domElement);
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -306,13 +431,17 @@ export function mountViewer(host, hooks = {}) {
       $('ifc-focus').setAttribute('aria-pressed', String(!!ifcNavigation?.focusArmed));
     });
     const { IfcTools } = await import(asset('./ifc-tools.js'));
-    ifcTools = new IfcTools(THREE, renderer, camera, controls, ifcNavigation, () => {
-      ifcNeedsRender = true;
-    }, stage);
+    ifcTools = new IfcTools(THREE, renderer, camera, controls, ifcNavigation, () => { ifcNeedsRender = true; });
+    ifcTools.onInfo = (info) => { ifcPick = info; renderIfcInfo(); };
     const { IfcWalk } = await import(asset('./ifc-walk.js'));
     ifcWalk = new IfcWalk(THREE, camera, controls, renderer.domElement, ifcTools, ifcNavigation, () => {
       ifcNeedsRender = true;
-    }, stage, (state) => hooks.onWalk?.(state));
+    });
+    const walkUi = ifcWalk.ui.bind(ifcWalk);
+    ifcWalk.ui = function ui() {
+      walkUi();
+      hooks.onWalk?.({ active: !!this.walking, placing: !!this.placing, through: !!this.through });
+    };
     $('ifc-pan').onclick = () => {
       const pressed = $('ifc-pan').getAttribute('aria-pressed') === 'true';
       ifcNavigation.setPan(!pressed);
@@ -323,49 +452,193 @@ export function mountViewer(host, hooks = {}) {
       ifcNavigation.armFocus(!pressed);
       $('ifc-focus').setAttribute('aria-pressed', String(!pressed));
     };
-    controls.addEventListener('change', () => {
-      ifcNeedsRender = true;
-    });
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x708090, 2.5));
-    const light = new THREE.DirectionalLight(0xffffff, 2);
+    $('ifc-add').onclick = () => $('ifc-add-file').click();
+    $('ifc-add-file').onchange = async (event) => {
+      const files = [...event.target.files || []];
+      event.target.value = '';
+      for (const file of files) {
+        try { await addIfc(file, file.name + ':' + file.size + ':' + file.lastModified); }
+        catch (error) { status(error.message, true); }
+      }
+    };
+    controls.addEventListener('change', () => { ifcNeedsRender = true; });
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x708090, 1.15));
+    const light = new THREE.DirectionalLight(0xffffff, 0.85);
     light.position.set(5, 10, 8);
     scene.add(light);
+    originAxes = new THREE.AxesHelper(1);
+    originAxes.raycast = () => {};
+    originAxes.visible = false;
+    scene.add(originAxes);
     resize();
     renderer.setAnimationLoop(() => {
       if (!alive || kind !== 'ifc') return;
-      if (ifcWalk?.walking) {
-        ifcWalk.step();
-        renderer.render(scene, camera);
-        ifcNeedsRender = false;
-        return;
-      }
-      const changed = ifcTools?.cutDrag ? false : controls.update();
+      const changed = ifcWalk?.walking ? ifcWalk.step() : ifcTools?.cutDrag ? false : controls.update();
       if (changed || ifcNeedsRender) {
         renderer.render(scene, camera);
+        ifcTools?.grabFrame?.();
         ifcNeedsRender = false;
       }
     });
   }
 
-  function clear3d() {
-    for (const model of ifcModels.values()) disposeIfcGroup?.(model.group);
-    ifcModels.clear();
-    if (ifcRoot) {
-      scene?.remove(ifcRoot);
-      ifcRoot = null;
+  async function ensureIfc() {
+    await init3d();
+    if (!ifcApi) {
+      const { IfcAPI } = await import(asset('./vendor/web-ifc-api.js'));
+      const api = new IfcAPI();
+      await api.Init(() => asset('./vendor/web-ifc.wasm'), true);
+      ifcApi = api;
     }
-    group = null;
-    originLocked = false;
-    ifcTools?.setModel(null);
+    if (!IfcMeshBuilder) {
+      const mod = await import(asset('./ifc-meshes.js'));
+      IfcMeshBuilder = mod.IfcMeshBuilder;
+      disposeIfcGroup = mod.disposeIfcGroup;
+    }
   }
 
-  function ensureIfcRoot() {
-    if (ifcRoot) return ifcRoot;
-    ifcRoot = new THREE.Group();
-    ifcRoot.name = 'ifc-root';
-    scene.add(ifcRoot);
-    group = ifcRoot;
-    return ifcRoot;
+  function ensureFederation() {
+    if (group) return group;
+    group = new THREE.Group();
+    group.name = 'ifc-federation';
+    group.position.set(0, 0, 0);
+    group.matrixAutoUpdate = false;
+    group.updateMatrix();
+    scene.add(group);
+    return group;
+  }
+
+  async function loadIfcModel(file) {
+    const data = new Uint8Array(await file.arrayBuffer());
+    const id = ifcApi.OpenModel(data, { COORDINATE_TO_ORIGIN: false });
+    if (id < 0) throw new Error('Arquivo IFC inválido.');
+    const builder = new IfcMeshBuilder(THREE);
+    let model;
+    try {
+      ifcApi.StreamAllMeshes(id, (flat) => {
+        const expressID = flat.expressID;
+        for (let i = 0; i < flat.geometries.size(); i++) builder.add(ifcApi, id, flat.geometries.get(i), expressID);
+      });
+      const meter = ifcLengthScale(ifcApi, id);
+      const factor = meter ** 3;
+      const labels = new Map();
+      for (const expressID of builder.elementIds) {
+        const label = ifcElementLabel(ifcApi, id, expressID);
+        label.volume = (builder.volumes.get(expressID) || 0) * factor;
+        labels.set(expressID, label);
+      }
+      model = builder.build(labels);
+      if (!model.children.length) throw new Error(file.name + ' não contém geometria 3D compatível.');
+      model.name = file.name;
+      model.userData.ifcModel = true;
+      model.userData.fileName = file.name;
+      model.userData.bytes = file.size;
+      try {
+        const spatial = readIfcStoreys(ifcApi, id);
+        if (spatial) {
+          model.userData.storeys = spatial.storeys;
+          model.userData.storeyOf = spatial.storeyOf;
+        }
+      } catch { /* pavimentos opcionais */ }
+      model.quaternion.identity();
+      model.scale.set(1, 1, 1);
+      model.updateMatrix();
+      model.matrixAutoUpdate = false;
+      return model;
+    } catch (error) {
+      if (model) disposeIfcGroup(model);
+      else builder.dispose();
+      throw error;
+    } finally {
+      if (id >= 0) ifcApi.CloseModel(id);
+    }
+  }
+
+  async function addIfc(file, modelId) {
+    if (file.size > IFC_LIMIT) throw new Error('O limite para IFC é 300 MB.');
+    const existing = federationModels().find((model) => modelIds.get(model) === modelId);
+    if (existing) {
+      setKind('ifc');
+      return modelId;
+    }
+    await ensureIfc();
+    const model = await loadIfcModel(file);
+    const root = ensureFederation();
+    const before = federationModels()[0];
+    root.add(model);
+    model.updateMatrixWorld(true);
+    modelIds.set(model, modelId);
+    if (before) {
+      const firstBox = new THREE.Box3().setFromObject(before);
+      const nextBox = new THREE.Box3().setFromObject(model);
+      if (!firstBox.isEmpty() && !nextBox.isEmpty() && !firstBox.intersectsBox(nextBox)) {
+        const gap = firstBox.clampPoint(nextBox.getCenter(new THREE.Vector3()), new THREE.Vector3()).distanceTo(nextBox.getCenter(new THREE.Vector3()));
+        if (gap > 1000) status(file.name + ' ficou a mais de 1 km do primeiro modelo. A origem não foi movida.', true);
+      }
+    }
+    camera.up.set(0, 1, 0);
+    ifcTools.setModel(root);
+    ifcTools.resetTab?.();
+    setKind('ifc');
+    resize();
+    fit3d();
+    publishFederation();
+    return modelId;
+  }
+
+  function showIfc() {
+    if (!federationModels().length) return false;
+    setKind('ifc');
+    resize();
+    ifcNeedsRender = true;
+    return true;
+  }
+
+  function setIfcVisible(modelId, visible) {
+    const model = federationModels().find((item) => modelIds.get(item) === modelId);
+    if (!model) return;
+    model.visible = !!visible;
+    ifcNeedsRender = true;
+    publishFederation();
+  }
+
+  function setIfcColor(modelId, color) {
+    const model = federationModels().find((item) => modelIds.get(item) === modelId);
+    if (!model) return;
+    setIfcModelColor(model, color);
+    publishFederation();
+  }
+
+  function removeIfc(modelId) {
+    const model = federationModels().find((item) => modelIds.get(item) === modelId);
+    if (!model || !group) return;
+    group.remove(model);
+    disposeIfcGroup?.(model);
+    ifcNeedsRender = true;
+    if (!federationModels().length) {
+      scene.remove(group);
+      group = null;
+      ifcTools?.setModel(null);
+      ifcWalk?.stop();
+      setKind('empty');
+      publishFederation();
+      return;
+    }
+    ifcTools?.setModel(group);
+    fit3d();
+    publishFederation();
+  }
+
+  function clear3d() {
+    ifcWalk?.stop();
+    ifcPick = null;
+    ifcTools?.setModel(null);
+    if (group) {
+      disposeIfcGroup?.(group);
+      scene?.remove(group);
+      group = null;
+    }
+    publishFederation();
   }
 
   let cadRenderer = null;
@@ -394,7 +667,7 @@ export function mountViewer(host, hooks = {}) {
 
   function refreshLayerView() {
     cadRenderer?.refreshLayers();
-    measureTool?.refreshSegments();
+    measureTool?.refreshSegments?.();
   }
 
   function renderLayers() {
@@ -478,7 +751,7 @@ export function mountViewer(host, hooks = {}) {
       cadRenderer.zoom(Math.exp(-event.deltaY * 0.001), { x: event.clientX - rect.left, y: event.clientY - rect.top });
     }, { passive: false });
     viewport.addEventListener('pointerdown', (event) => {
-      if (kind !== 'dwg' || event.target.closest('button,select,input')) return;
+      if (kind !== 'dwg' || event.target.closest?.('button,select,input')) return;
       viewport.setPointerCapture(event.pointerId);
       cadPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     });
@@ -488,9 +761,8 @@ export function mountViewer(host, hooks = {}) {
       const previous = cadPointers.get(event.pointerId);
       cadPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       const next = [...cadPointers.values()];
-      if (old.length === 1) {
-        cadRenderer.panByScreenDelta(event.clientX - previous.x, event.clientY - previous.y);
-      } else if (old.length === 2) {
+      if (old.length === 1) cadRenderer.panByScreenDelta(event.clientX - previous.x, event.clientY - previous.y);
+      else if (old.length === 2) {
         const distance = (points) => Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
         const rect = viewport.getBoundingClientRect();
         if (distance(old) > 0) {
@@ -506,7 +778,7 @@ export function mountViewer(host, hooks = {}) {
       viewport.addEventListener(eventName, (event) => cadPointers.delete(event.pointerId));
     }
     viewport.addEventListener('dblclick', (event) => {
-      if (event.target.closest('button,select,input') || measureTool?.active) return;
+      if (event.target.closest?.('button,select,input') || measureTool?.active) return;
       cadRenderer?.fitToView(0.9);
     });
   }
@@ -532,9 +804,9 @@ export function mountViewer(host, hooks = {}) {
 
   function drawDwgPreview() {
     if (!dwgPreview) return;
-    const canvas = $('cad-canvas');
-    const width = Math.max(1, $('cad').clientWidth);
-    const height = Math.max(1, $('cad').clientHeight);
+    const canvas = $('cad');
+    const width = Math.max(1, stage.clientWidth);
+    const height = Math.max(1, stage.clientHeight);
     const ratio = Math.min(devicePixelRatio || 1, 2);
     canvas.width = Math.floor(width * ratio);
     canvas.height = Math.floor(height * ratio);
@@ -543,9 +815,7 @@ export function mountViewer(host, hooks = {}) {
     ctx.fillStyle = '#172334';
     ctx.fillRect(0, 0, width, height);
     const scale = Math.min(width / dwgPreview.width, height / dwgPreview.height) * 0.96;
-    const dw = dwgPreview.width * scale;
-    const dh = dwgPreview.height * scale;
-    ctx.drawImage(dwgPreview, (width - dw) / 2, (height - dh) / 2, dw, dh);
+    ctx.drawImage(dwgPreview, (width - dwgPreview.width * scale) / 2, (height - dwgPreview.height * scale) / 2, dwgPreview.width * scale, dwgPreview.height * scale);
   }
 
   function clearDwgPreview() {
@@ -595,7 +865,7 @@ export function mountViewer(host, hooks = {}) {
     setKind('dwg');
     await new Promise((resolve) => requestAnimationFrame(resolve));
     if (!cadRenderer) {
-      cadRenderer = new CrispCadRenderer($('cad-canvas'), {
+      cadRenderer = new CrispCadRenderer($('cad'), {
         contrastMode: 'preserve',
         background: '#172334',
         foreground: '#ffffff',
@@ -608,7 +878,7 @@ export function mountViewer(host, hooks = {}) {
           lastDwgZoom = zoom;
           hooks.onDwgState?.({ zoom, measuring: !!measureTool?.active });
         }
-        measureTool?.draw();
+        measureTool?.draw?.();
       };
       bindCad();
       const { DwgMeasure } = await import(asset('./measure.js'));
@@ -626,20 +896,17 @@ export function mountViewer(host, hooks = {}) {
     try {
       cadRenderer.setDocument(prepared.document);
       setupLayers();
-      measureTool?.reset();
-    } catch (error) {
+      measureTool?.reset?.();
+    } catch {
       try { cadRenderer.fitToView(0.9); } catch { /* mantém o trecho já desenhado */ }
       status('A prancha abriu. Alguns elementos sem tipo foram ignorados.');
       publishDwg();
       return;
     }
-    const partial = result.unknown > 0 || Object.values(cadRenderer.getStats().unsupported || {}).some((count) => count > 0);
+    const partial = result.unknown > 0 || Object.values(cadRenderer.getStats?.().unsupported || {}).some((count) => count > 0);
     const fonts = prepared.substitutedFonts || [];
     const fontNote = fonts.length ? ' Fontes SHX substituídas por Arial: ' + fonts.join(', ') + '.' : '';
-    const opened = result.space === 'paper'
-      ? 'Prancha aberta a partir do espaço de papel.'
-      : 'Desenho vetorial aberto no aparelho.';
-    status((partial ? 'Prévia parcial: alguns elementos deste DWG não são suportados. ' + opened : opened) + fontNote);
+    status((partial ? 'Prévia parcial: alguns elementos deste DWG não são suportados. ' : '') + 'Desenho vetorial aberto no aparelho.' + fontNote);
     publishDwg();
   }
 
@@ -647,166 +914,6 @@ export function mountViewer(host, hooks = {}) {
     const viewer = await ensurePdf();
     setKind('pdf');
     await viewer.open(file);
-  }
-
-  async function addIfc(file, modelId) {
-    if (file.size > IFC_LIMIT) throw new Error('O limite para IFC é 300 MB.');
-    if (ifcModels.has(modelId)) {
-      setKind('ifc');
-      return modelId;
-    }
-    await init3d();
-    if (!ifcApi) {
-      const { IfcAPI } = await import(asset('./vendor/web-ifc-api.js'));
-      const api = new IfcAPI();
-      await api.Init(() => asset('./vendor/web-ifc.wasm'), true);
-      ifcApi = api;
-    }
-    const { IfcMeshBuilder, disposeIfcGroup: dispose } = await import(asset('./ifc-meshes.js'));
-    disposeIfcGroup = dispose;
-    const builder = new IfcMeshBuilder(THREE);
-    let id = -1;
-    let next = null;
-    try {
-      const data = new Uint8Array(await file.arrayBuffer());
-      id = ifcApi.OpenModel(data, { COORDINATE_TO_ORIGIN: false });
-      if (id < 0) throw new Error('Arquivo IFC inválido.');
-      ifcApi.StreamAllMeshes(id, (flat) => {
-        for (let i = 0; i < flat.geometries.size(); i++) builder.add(ifcApi, id, flat.geometries.get(i));
-      });
-      next = builder.build();
-      if (!next.children.length) throw new Error('Este IFC não contém geometria 3D compatível.');
-      next.name = file.name;
-      const root = ensureIfcRoot();
-      root.add(next);
-      if (!originLocked) {
-        const box = new THREE.Box3().setFromObject(next);
-        if (!box.isEmpty()) {
-          root.position.copy(box.getCenter(new THREE.Vector3())).multiplyScalar(-1);
-          originLocked = true;
-        }
-      }
-      ifcModels.set(modelId, { name: file.name, group: next, color: null });
-      camera.up.set(0, 1, 0);
-      ifcTools.setModel(root);
-      setKind('ifc');
-      resize();
-      fit3d();
-      warnIfcDistance(next);
-      publishIfcModels();
-      return modelId;
-    } catch (error) {
-      if (next) dispose(next);
-      else builder.dispose();
-      throw error;
-    } finally {
-      if (id >= 0) ifcApi.CloseModel(id);
-    }
-  }
-
-  function showIfc() {
-    if (!ifcModels.size) return false;
-    setKind('ifc');
-    resize();
-    ifcNeedsRender = true;
-    return true;
-  }
-
-  function setIfcVisible(modelId, visible) {
-    const model = ifcModels.get(modelId);
-    if (!model) return;
-    model.group.visible = !!visible;
-    ifcNeedsRender = true;
-    publishIfcModels();
-  }
-
-  function paintIfcGroup(group, color) {
-    group.traverse((object) => {
-      const materials = object.material ? (Array.isArray(object.material) ? object.material : [object.material]) : [];
-      for (const material of materials) {
-        if (!material?.color) continue;
-        if (!material.userData.prumoOriginal) {
-          material.userData.prumoOriginal = {
-            color: material.color.clone(),
-            opacity: material.opacity,
-            transparent: material.transparent,
-          };
-        }
-        const original = material.userData.prumoOriginal;
-        if (color == null) {
-          material.color.copy(original.color);
-          material.opacity = original.opacity;
-          material.transparent = original.transparent;
-        } else {
-          material.color.set(color);
-          if (original.transparent) {
-            material.transparent = true;
-            material.opacity = original.opacity;
-          }
-        }
-        material.needsUpdate = true;
-      }
-    });
-  }
-
-  function setIfcColor(modelId, color) {
-    const model = ifcModels.get(modelId);
-    if (!model) return;
-    model.color = color || null;
-    paintIfcGroup(model.group, color);
-    ifcNeedsRender = true;
-    publishIfcModels();
-  }
-
-  function modelDistance(group) {
-    if (!group) return 0;
-    const box = new THREE.Box3().setFromObject(group);
-    if (box.isEmpty()) return 0;
-    return box.getCenter(new THREE.Vector3()).length();
-  }
-
-  function warnIfcDistance(group) {
-    if (ifcModels.size < 2) return;
-    const here = new THREE.Box3().setFromObject(group).getCenter(new THREE.Vector3());
-    for (const model of ifcModels.values()) {
-      if (model.group === group) continue;
-      const other = new THREE.Box3().setFromObject(model.group).getCenter(new THREE.Vector3());
-      if (here.distanceTo(other) > 1000) {
-        status('Os modelos estão a mais de 1 km. Confira se compartilham a mesma origem.');
-        return;
-      }
-    }
-  }
-
-  function publishIfcModels() {
-    hooks.onIfcModels?.([...ifcModels.entries()].map(([id, model]) => ({
-      id,
-      name: model.name,
-      visible: model.group.visible,
-      color: model.color || null,
-      distance: modelDistance(model.group),
-    })));
-  }
-
-  function removeIfc(modelId) {
-    const model = ifcModels.get(modelId);
-    if (!model) return;
-    ifcRoot?.remove(model.group);
-    disposeIfcGroup?.(model.group);
-    ifcModels.delete(modelId);
-    ifcNeedsRender = true;
-    if (!ifcModels.size) {
-      originLocked = false;
-      if (ifcRoot) ifcRoot.position.set(0, 0, 0);
-      ifcTools?.setModel(null);
-      ifcWalk?.stop();
-      setKind('empty');
-      publishIfcModels();
-      return;
-    }
-    ifcTools?.setModel(ifcRoot);
-    fit3d();
-    publishIfcModels();
   }
 
   const observer = new ResizeObserver(() => resize());
@@ -820,7 +927,8 @@ export function mountViewer(host, hooks = {}) {
     setIfcColor,
     removeIfc,
     toggleWalk() {
-      ifcWalk?.toggle();
+      if (ifcWalk?.walking || ifcWalk?.placing || ifcWalk?.active) ifcWalk.stop();
+      else ifcWalk?.start?.();
       return !!ifcWalk?.walking;
     },
     async open(file) {
@@ -844,22 +952,22 @@ export function mountViewer(host, hooks = {}) {
     zoom(factor) {
       if (kind === 'pdf') pdfViewer?.zoom(factor);
       else if (kind === 'dwg') cadRenderer?.zoom(factor, { x: $('cad').clientWidth / 2, y: $('cad').clientHeight / 2 });
-      else if (kind === 'ifc') ifcNavigation?.zoom(factor);
+      else if (kind === 'ifc') {
+        if (ifcWalk?.walking) ifcWalk.nudge(factor > 1 ? 0.5 : -0.5);
+        else ifcNavigation?.zoom(factor);
+      }
     },
     async fit() {
       if (kind === 'pdf') await pdfViewer?.fit();
       else if (kind === 'dwg') cadRenderer?.fitToView(0.9);
-      else if (kind === 'ifc') {
-        ifcWalk?.stop();
-        fit3d();
-      }
+      else if (kind === 'ifc') fit3d();
     },
     async rotate() {
       if (kind === 'pdf') await pdfViewer?.rotate();
       else if (kind === 'dwg' && cadRenderer && cadSource) {
         const { rotatedDocument } = await import(asset('./cad-view.js'));
         quarterTurns = (quarterTurns + 1) % 4;
-        measureTool?.reset();
+        measureTool?.reset?.();
         cadRenderer.setDocument(rotatedDocument(cadSource, quarterTurns));
         renderLayers();
         publishDwg({ measuring: false });
@@ -872,12 +980,11 @@ export function mountViewer(host, hooks = {}) {
     },
     toggleBackground() {
       if (kind !== 'dwg' || !cadRenderer) return;
-      const light = cadRenderer.getOptions().background === '#e9edf1';
-      cadRenderer.setOptions({
+      const light = cadRenderer.getOptions?.().background === '#e9edf1';
+      cadRenderer.setOptions?.({
         background: light ? '#172334' : '#e9edf1',
         foreground: light ? '#ffffff' : '#111111',
       });
-      $('cad').style.background = light ? '#172334' : '#e9edf1';
     },
     async go(page) {
       if (kind === 'pdf') await pdfViewer?.go(page);
@@ -910,7 +1017,7 @@ export function mountViewer(host, hooks = {}) {
       observer.disconnect();
       renderer?.setAnimationLoop(null);
       try { ifcWalk?.stop(); } catch { /* caminhar já encerrado */ }
-      try { measureTool?.reset(); cadRenderer?.destroy(); clearDwgPreview(); } catch { /* leitor DWG já liberado */ }
+      try { measureTool?.reset?.(); cadRenderer?.destroy?.(); clearDwgPreview(); } catch { /* leitor DWG já liberado */ }
       try { clear3d(); } catch { /* a cena pode já ter saído da página */ }
       pdfViewer?.close().catch(() => {});
       try { renderer?.dispose(); } catch { /* renderer já liberado */ }
