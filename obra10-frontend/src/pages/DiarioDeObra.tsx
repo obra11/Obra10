@@ -777,6 +777,8 @@ export const DiarioDeObra: React.FC = () => {
   const [ordemMidia, setOrdemMidia] = useState<OrdemMidia>(ORDEM_MIDIA_VAZIA);
   const fotoListaRef = useRef<HTMLDivElement>(null);
   const fotosAntesRef = useRef(0);
+  const videosAntesRef = useRef(0);
+  const anexosAntesRef = useRef(0);
   const fotosRef = useRef(fotos);
   const videosRef = useRef(videos);
   const anexosRef = useRef(anexos);
@@ -808,10 +810,25 @@ export const DiarioDeObra: React.FC = () => {
 
   useEffect(() => {
     if (fotos.length > fotosAntesRef.current) {
+      setMidiaRecolhida((prev) => (prev.fotos ? { ...prev, fotos: false } : prev));
       fotoListaRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
     fotosAntesRef.current = fotos.length;
   }, [fotos.length]);
+
+  useEffect(() => {
+    if (videos.length > videosAntesRef.current) {
+      setMidiaRecolhida((prev) => (prev.videos ? { ...prev, videos: false } : prev));
+    }
+    videosAntesRef.current = videos.length;
+  }, [videos.length]);
+
+  useEffect(() => {
+    if (anexos.length > anexosAntesRef.current) {
+      setMidiaRecolhida((prev) => (prev.anexos ? { ...prev, anexos: false } : prev));
+    }
+    anexosAntesRef.current = anexos.length;
+  }, [anexos.length]);
 
   const moverMidia = (balde: BaldeMidia, chave: string, direcao: -1 | 1) => {
     setOrdemMidia((prev) => {
@@ -828,6 +845,14 @@ export const DiarioDeObra: React.FC = () => {
   const videoFilesInputRef = useRef<HTMLInputElement>(null);
   const anexoInputRef = useRef<HTMLInputElement>(null);
   const [mediaPicker, setMediaPicker] = useState<null | 'foto' | 'video'>(null);
+  const [midiaRecolhida, setMidiaRecolhida] = useState<Record<BaldeMidia, boolean>>({
+    fotos: false,
+    videos: false,
+    anexos: false,
+  });
+  const alternarMidia = (balde: BaldeMidia) => {
+    setMidiaRecolhida((prev) => ({ ...prev, [balde]: !prev[balde] }));
+  };
   const [annotateQueue, setAnnotateQueue] = useState<{ files: File[]; index: number } | null>(null);
   const [reeditFotoIndex, setReeditFotoIndex] = useState<number | null>(null);
 
@@ -2918,8 +2943,18 @@ export const DiarioDeObra: React.FC = () => {
                   onDragOver={onDragOver}
                   onDrop={(e) => { e.preventDefault(); if (isReadOnly) return; handleFotosDrop(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')), { copyToDevice: false, annotate: false }); }}
                >
-                  <div className="flex justify-between items-center mb-4 relative">
-                     <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><ImageIcon size={16}/> Fotos</h3>
+                  <div className={`flex justify-between items-center relative ${midiaRecolhida.fotos ? 'mb-0' : 'mb-4'}`}>
+                     <button
+                       type="button"
+                       onClick={() => alternarMidia('fotos')}
+                       className="font-bold text-gray-800 flex items-center gap-1.5"
+                       aria-expanded={!midiaRecolhida.fotos}
+                       title={midiaRecolhida.fotos ? 'Expandir fotos' : 'Recolher fotos'}
+                     >
+                       <ImageIcon size={16}/> Fotos
+                       <span className="text-[11px] font-semibold text-gray-400">{ordemFotos.length}</span>
+                       {midiaRecolhida.fotos ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronUp size={16} className="text-gray-400" />}
+                     </button>
                      <input type="file" accept="image/*" ref={fotoCameraInputRef} className="hidden" onChange={handleFotoCameraUpload} capture="environment" />
                      <input type="file" multiple accept="image/*" ref={fotoGalleryInputRef} className="hidden" onChange={handleFotoUpload} />
                      <input type="file" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.gif,image/*" ref={fotoFilesInputRef} className="hidden" onChange={handleFotoUpload} />
@@ -2972,6 +3007,8 @@ export const DiarioDeObra: React.FC = () => {
                        </>
                      )}
                   </div>
+                  {!midiaRecolhida.fotos && (
+                  <>
                   <p className="text-[11px] text-gray-500 -mt-2 mb-3">A mais recente fica no topo. As setas mudam a ordem, e o salvamento guarda.</p>
                   <div className="space-y-3" ref={fotoListaRef}>
                      {ordemFotos.map((chave, pos) => {
@@ -3080,6 +3117,8 @@ export const DiarioDeObra: React.FC = () => {
                         <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhuma foto</div>
                      )}
                   </div>
+                  </>
+                  )}
                </div>
 
                {/* Videos */}
@@ -3088,8 +3127,18 @@ export const DiarioDeObra: React.FC = () => {
                   onDragOver={onDragOver}
                   onDrop={(e) => { e.preventDefault(); if (isReadOnly) return; handleVideosDrop(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('video/'))); }}
                >
-                  <div className="flex justify-between items-center mb-4 relative">
-                     <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><Video size={16}/> Vídeos</h3>
+                  <div className={`flex justify-between items-center relative ${midiaRecolhida.videos ? 'mb-0' : 'mb-4'}`}>
+                     <button
+                       type="button"
+                       onClick={() => alternarMidia('videos')}
+                       className="font-bold text-gray-800 flex items-center gap-1.5"
+                       aria-expanded={!midiaRecolhida.videos}
+                       title={midiaRecolhida.videos ? 'Expandir vídeos' : 'Recolher vídeos'}
+                     >
+                       <Video size={16}/> Vídeos
+                       <span className="text-[11px] font-semibold text-gray-400">{ordemVideos.length}</span>
+                       {midiaRecolhida.videos ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronUp size={16} className="text-gray-400" />}
+                     </button>
                      <input type="file" accept="video/*" ref={videoCameraInputRef} className="hidden" onChange={handleVideoCameraUpload} capture="environment" />
                      <input type="file" multiple accept="video/*" ref={videoGalleryInputRef} className="hidden" onChange={handleVideoUpload} />
                      <input type="file" multiple accept=".mp4,.mov,.webm,.avi,.mkv,.3gp,video/*" ref={videoFilesInputRef} className="hidden" onChange={handleVideoUpload} />
@@ -3142,6 +3191,7 @@ export const DiarioDeObra: React.FC = () => {
                        </>
                      )}
                   </div>
+                  {!midiaRecolhida.videos && (
                   <div className="space-y-2">
                      {ordemVideos.map((chave, pos) => {
                        const setas = !isReadOnly && ordemVideos.length > 1 ? (
@@ -3240,6 +3290,7 @@ export const DiarioDeObra: React.FC = () => {
                         <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhum vídeo</div>
                      )}
                   </div>
+                  )}
                </div>
 
                {/* Documentos */}
@@ -3248,8 +3299,18 @@ export const DiarioDeObra: React.FC = () => {
                   onDragOver={onDragOver}
                   onDrop={(e) => { e.preventDefault(); if (isReadOnly) return; handleAnexosDrop(Array.from(e.dataTransfer.files)); }}
                >
-                  <div className="flex justify-between items-center mb-4">
-                     <h3 className="font-bold text-gray-800 flex items-center gap-1.5"><FileText size={16}/> Outros anexos</h3>
+                  <div className={`flex justify-between items-center ${midiaRecolhida.anexos ? 'mb-0' : 'mb-4'}`}>
+                     <button
+                       type="button"
+                       onClick={() => alternarMidia('anexos')}
+                       className="font-bold text-gray-800 flex items-center gap-1.5"
+                       aria-expanded={!midiaRecolhida.anexos}
+                       title={midiaRecolhida.anexos ? 'Expandir anexos' : 'Recolher anexos'}
+                     >
+                       <FileText size={16}/> Outros anexos
+                       <span className="text-[11px] font-semibold text-gray-400">{ordemAnexos.length}</span>
+                       {midiaRecolhida.anexos ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronUp size={16} className="text-gray-400" />}
+                     </button>
                      <input
                        type="file"
                        multiple
@@ -3260,6 +3321,7 @@ export const DiarioDeObra: React.FC = () => {
                      />
                      <button onClick={() => anexoInputRef.current?.click()} className="text-xs font-semibold text-lunardeli-red hover:underline disabled:opacity-50" disabled={isReadOnly}>+ Upload</button>
                   </div>
+                  {!midiaRecolhida.anexos && (
                   <div className="space-y-2">
                      {ordemAnexos.map((chave, pos) => {
                        const setas = !isReadOnly && ordemAnexos.length > 1 ? (
@@ -3362,6 +3424,7 @@ export const DiarioDeObra: React.FC = () => {
                         <div className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-gray-200 rounded-lg">Nenhum anexo</div>
                      )}
                   </div>
+                  )}
                </div>
             </div>
 
