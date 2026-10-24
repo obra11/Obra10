@@ -69,6 +69,11 @@ import { ApiVersionMiddleware } from './core/middlewares/api-version.middleware'
               if (p.endsWith('/manifest.json')) {
                 res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
               }
+            } else if (p.includes('/viewer/')) {
+              res.setHeader(
+                'Cache-Control',
+                'no-store, no-cache, must-revalidate, proxy-revalidate',
+              );
             } else if (p.includes('/assets/')) {
               // hashed assets can be cached long
               res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');

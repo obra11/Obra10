@@ -1,10 +1,13 @@
 import { markup } from './viewer-tools.js';
 
 const VIEWER_BASE = new URL('./', import.meta.url);
+const VIEWER_REV = new URL(import.meta.url).searchParams.get('v') || '';
 
 function asset(path) {
   const rel = String(path).replace(/^\.\//, '');
-  return new URL(rel, VIEWER_BASE).href;
+  const url = new URL(rel, VIEWER_BASE);
+  if (VIEWER_REV) url.searchParams.set('v', VIEWER_REV);
+  return url.href;
 }
 
 globalThis.PrumoAssets = new Proxy({}, {
