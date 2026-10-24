@@ -16,10 +16,11 @@ interface IfcModel {
   id: string;
   name: string;
   visible: boolean;
+  color?: string | null;
 }
 
 const IFC_WORKSPACE = 'ifc-workspace';
-const MODEL_COLORS = ['#E5192C', '#2563EB', '#059669', '#D97706', '#7C3AED', '#0891B2'];
+const MODEL_COLORS = ['#E5192C', '#2563EB', '#059669', '#D97706', '#7C3AED', '#0891B2', '#DB2777', '#65A30D', '#CA8A04', '#0F766E', '#9333EA', '#EA580C'];
 
 interface PdfState {
   page: number;
@@ -82,6 +83,7 @@ export const Visualizador: React.FC = () => {
   const [query, setQuery] = useState('');
   const [officeText, setOfficeText] = useState('');
   const [officeSource, setOfficeSource] = useState<File | null>(null);
+  const [colorFor, setColorFor] = useState<string | null>(null);
   const active = tabs.find((tab) => tab.id === activeId) || null;
   const ifcActive = activeId === IFC_WORKSPACE && ifcModels.length > 0;
 
@@ -101,6 +103,23 @@ export const Visualizador: React.FC = () => {
         },
         onPdfState: (state: PdfState) => setPdfState(state),
         onDwgState: (state: DwgState) => setDwgState((prev) => ({ ...prev, ...state })),
+        onIfcModels: (models: IfcModel[]) => {
+          setIfcModels((prev) => models.map((model) => {
+            const current = prev.find((item) => item.id === model.id);
+            return { ...model, name: current?.name || model.name };
+          }));
+        },
+        onWalk: ({ active, placing }: { active: boolean; placing: boolean; through: boolean }) => {
+          if (placing) {
+            setNotice('Toque no piso para começar a caminhar.');
+            setNoticeError(false);
+          } else if (active) {
+            setNotice('Caminhando: arraste para olhar, use o círculo ou W A S D. Esc ou Sair volta à órbita.');
+            setNoticeError(false);
+          } else {
+            setNotice('');
+          }
+        },
       });
       viewerRef.current = viewer;
     }).catch((error) => {
@@ -187,7 +206,7 @@ export const Visualizador: React.FC = () => {
     setNoticeError(false);
     try {
       await viewer.addIfc(file, id);
-      setIfcModels((prev) => prev.some((model) => model.id === id) ? prev : [...prev, { id, name: file.name, visible: true }]);
+      setIfcModels((prev) => prev.some((model) => model.id === id) ? prev : [...prev, { id, name: file.name, visible: true, color: null }]);
       setActiveId(IFC_WORKSPACE);
       setNotice('Modelos sobrepostos no mesmo ambiente. Desmarque um modelo para ocultá-lo.');
       setNoticeError(false);
@@ -211,6 +230,7 @@ export const Visualizador: React.FC = () => {
 
   const removeIfc = (id: string) => {
     viewerRef.current?.removeIfc(id);
+    setColorFor(null);
     const next = ifcModels.filter((item) => item.id !== id);
     setIfcModels(next);
     if (!next.length && activeId === IFC_WORKSPACE) {
@@ -218,6 +238,12 @@ export const Visualizador: React.FC = () => {
       if (fallback) show(fallback);
       else setActiveId(null);
     }
+  };
+
+  const paintIfc = (id: string, color: string | null) => {
+    viewerRef.current?.setIfcColor(id, color);
+    setIfcModels((prev) => prev.map((item) => item.id === id ? { ...item, color } : item));
+    setColorFor(null);
   };
 
   const addFiles = async (list: FileList | File[]) => {
@@ -288,7 +314,7 @@ export const Visualizador: React.FC = () => {
       <div className="flex shrink-0 items-center gap-2 border-b border-gray-200 bg-white px-3 py-2 sm:px-4">
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-display text-base font-bold text-lunardeli-dark sm:text-lg">Visualizador de arquivos</h1>
-          <p className="truncate text-xs text-gray-500">IFCs se sobrepõem. PDF, DWG, Word e Excel abrem em abas.</p>
+          <p className="truncate text-xs text-gray-500">IFCs se sobrepõem, com cor, corte e caminhar. PDF, DWG, Word e Excel abrem em abas.</p>
         </div>
         <button
           type="button"
@@ -340,7 +366,7 @@ export const Visualizador: React.FC = () => {
       {ifcActive && (
         <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-gray-200 bg-white px-3 py-2">
           {ifcModels.map((model, index) => (
-            <div key={model.id} className={`flex shrink-0 items-center gap-2 rounded-full border px-2 py-1 text-xs ${model.visible ? 'border-gray-300 bg-white' : 'border-gray-200 bg-gray-100 text-gray-400'}`}>
+            <div key={model.id} className={`relative flex shrink-0 items-center gap-2 rounded-full border px-2 py-1 text-xs ${model.visible ? 'border-gray-300 bg-white' : 'border-gray-200 bg-gray-100 text-gray-400'}`}>
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -348,12 +374,39 @@ export const Visualizador: React.FC = () => {
                   onChange={() => toggleIfc(model.id)}
                   aria-label={`Mostrar ${model.name}`}
                 />
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: MODEL_COLORS[index % MODEL_COLORS.length] }} />
+                <button
+                  type="button"
+                  className="ifc-swatch h-3.5 w-3.5 rounded-sm border border-gray-300"
+                  style={{ background: model.color || MODEL_COLORS[index % MODEL_COLORS.length] }}
+                  aria-label={`Cor de ${model.name}`}
+                  onClick={() => setColorFor((current) => current === model.id ? null : model.id)}
+                />
                 <span className="max-w-[160px] truncate font-semibold text-lunardeli-dark">{model.name}</span>
               </label>
               <button type="button" aria-label={`Remover ${model.name}`} onClick={() => removeIfc(model.id)} className="text-gray-500">
                 <X size={14} />
               </button>
+              {colorFor === model.id && (
+                <div className="ifc-colors absolute left-0 top-full z-20 mt-1 flex w-52 flex-wrap gap-1.5 rounded-xl border border-gray-200 bg-white p-2 shadow-lg">
+                  {MODEL_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className="h-5 w-5 rounded-sm border border-gray-200"
+                      style={{ background: color }}
+                      aria-label={`Pintar ${model.name} de ${color}`}
+                      onClick={() => paintIfc(model.id, color)}
+                    />
+                  ))}
+                  <label className="flex items-center gap-1 text-[10px] font-semibold text-lunardeli-dark">
+                    Outra
+                    <input type="color" className="h-5 w-5 cursor-pointer border-0 bg-transparent p-0" onChange={(event) => paintIfc(model.id, event.target.value)} />
+                  </label>
+                  <button type="button" className="rounded-md border border-gray-200 px-2 py-0.5 text-[10px] font-semibold" onClick={() => paintIfc(model.id, null)}>
+                    Original
+                  </button>
+                </div>
+              )}
             </div>
           ))}
           <button type="button" onClick={() => viewerRef.current?.fit()} className="shrink-0 rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold">
@@ -375,7 +428,7 @@ export const Visualizador: React.FC = () => {
             <div>
               <p className="font-display text-lg font-bold text-lunardeli-dark">Abra um PDF, DWG, IFC, Word ou Excel</p>
               <p className="mt-2 max-w-md text-sm text-gray-600">
-                O DWG abre como desenho vetorial, com layers e medição. IFCs entram juntos, um sobre o outro.
+                O DWG abre como desenho vetorial, com layers e medição. IFCs entram juntos, com cor, corte, nível e caminhar.
               </p>
             </div>
           </div>
