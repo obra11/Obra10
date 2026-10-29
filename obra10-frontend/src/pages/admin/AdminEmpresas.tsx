@@ -37,6 +37,8 @@ export const AdminEmpresas: React.FC = () => {
   const [empresas, setEmpresas] = useState<EmpresaGridItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [filterPagamento, setFilterPagamento] = useState('ALL');
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
   const [saving, setSaving] = useState(false);
@@ -94,12 +96,26 @@ export const AdminEmpresas: React.FC = () => {
   };
 
   const filtered = empresas.filter(emp => {
-    const term = search.toLowerCase();
-    return (
+    const term = search.trim().toLowerCase();
+    const digits = term.replace(/\D/g, '');
+    const matchSearch = !term || (
       emp.razaoSocial?.toLowerCase().includes(term) ||
       emp.nomeFantasia?.toLowerCase().includes(term) ||
-      emp.cnpj?.replace(/\D/g, '').includes(term.replace(/\D/g, ''))
+      (digits.length > 0 && !!emp.cnpj?.replace(/\D/g, '').includes(digits))
     );
+
+    const matchStatus =
+      filterStatus === 'ALL' ||
+      (filterStatus === 'ATIVA' ? emp.ativo : !emp.ativo);
+
+    const pagamento = (emp.statusPagamento || 'SEM COBRANCA').toUpperCase();
+    const matchPagamento =
+      filterPagamento === 'ALL' ||
+      (filterPagamento === 'PENDENTE'
+        ? ['PENDENTE', 'VENCIDO', 'OVERDUE'].includes(pagamento)
+        : pagamento === filterPagamento);
+
+    return Boolean(matchSearch) && matchStatus && matchPagamento;
   });
 
   const handleAvisarGestor = async (empresaId: string, e: React.MouseEvent) => {
@@ -132,14 +148,14 @@ export const AdminEmpresas: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Locatários</h1>
           <p className="text-sm text-gray-500 mt-1">Gerencie as construtoras cadastradas na plataforma.</p>
         </div>
         
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-72">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 w-full lg:w-auto">
+          <div className="relative flex-1 sm:w-64">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search size={18} className="text-gray-400" />
             </div>
@@ -151,6 +167,27 @@ export const AdminEmpresas: React.FC = () => {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500"
+            aria-label="Filtrar por status"
+          >
+            <option value="ALL">Todos os status</option>
+            <option value="ATIVA">Ativas</option>
+            <option value="BLOQUEADA">Bloqueadas</option>
+          </select>
+          <select
+            value={filterPagamento}
+            onChange={(e) => setFilterPagamento(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500"
+            aria-label="Filtrar por pagamento"
+          >
+            <option value="ALL">Todos os pagamentos</option>
+            <option value="PAGO">Pago</option>
+            <option value="PENDENTE">Pendente</option>
+            <option value="SEM COBRANCA">Sem cobrança</option>
+          </select>
           <button
             onClick={() => setShowModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg font-semibold text-sm hover:bg-red-700 transition-colors shadow-sm whitespace-nowrap"
