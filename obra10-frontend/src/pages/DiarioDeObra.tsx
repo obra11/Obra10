@@ -23,6 +23,14 @@ import {
 import { compressImageFile } from '../utils/compressImage';
 import { mapWithConcurrency, RDO_UPLOAD_CONCURRENCY } from '../utils/uploadQueue';
 import {
+  tipoDeExtras,
+  rotuloTipoRelatorio,
+  tituloTipoRelatorio,
+  devePedirTipoRelatorio,
+  devePersistirRascunhoLocal,
+  type TipoRelatorio,
+} from '../utils/tipoRelatorioRdo';
+import {
   generateUUID,
   saveOfflineAttachment,
   getOfflineAttachments,
@@ -227,17 +235,10 @@ interface AtividadePendenteItem {
   status: 'pendente' | 'finalizada';
 }
 
-type TipoRelatorio = 'DIA' | 'PERIODO';
-
 function isoDateOnly(value: any, fallback: string): string {
   if (!value) return fallback;
   const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
   return match ? match[1] : fallback;
-}
-
-function tipoDeExtras(extras: any, rdo?: any): TipoRelatorio {
-  const raw = String(extras?.tipoRelatorio || rdo?.tipoRelatorio || 'DIA').toUpperCase();
-  return raw === 'PERIODO' ? 'PERIODO' : 'DIA';
 }
 
 /** Move item uma posição para cima (-1) ou para baixo (+1). */
@@ -468,6 +469,8 @@ export const DiarioDeObra: React.FC = () => {
   const mediaUploadLockRef = useRef<Promise<void> | null>(null);
   const autoUploadFnRef = useRef<() => Promise<void>>(async () => {});
   const rdoIdAtualRef = useRef<string | null>(rdoId || null);
+  const pendingNewDraftRef = useRef<OfflineRdoDraft | null>(null);
+  const [tipoRascunhoLocal, setTipoRascunhoLocal] = useState<TipoRelatorio | null>(null);
 
   const [status, setStatus] = useState<RdoStatus>('rascunho');
   const [toast, setToast] = useState<string | null>(null);
@@ -698,32 +701,10 @@ export const DiarioDeObra: React.FC = () => {
         try {
           const local = await getOfflineRdoDraft(offlineDraftKey(obraId, null));
           if (local?.dadosExtras) {
-            const le = local.dadosExtras;
-            setData(le.data || today);
-            setTipoRelatorio(tipoDeExtras(le));
-            setDataFim(isoDateOnly(le.dataFim, le.data || today));
-            setDiasChuva(String(le.diasChuva ?? 0));
-            setResponsavel(le.responsavel || '');
-            setClimaManha(le.climaManha || '');
-            setClimaTarde(le.climaTarde || '');
-            setClimaNoite(le.climaNoite || '');
-            setTempMin(le.tempMin || '');
-            setTempMax(le.tempMax || '');
-            setPessoas(le.pessoas?.length ? le.pessoas : [{ nome: '', funcao: '', empresa: '' }]);
-            setProfissionais(le.profissionais || []);
-            setMateriais(le.materiais || []);
-            setEquipamentos(le.equipamentos || []);
-            if (Array.isArray(le.atividadesExecutadas)) setAtividadesExecutadas(le.atividadesExecutadas);
-            setAtividadesPendentes(parseAtividadesPendentes(le.atividadesPendentes));
-            setObservacoes(parseObservacoes(le.observacoes || le.observacoesGerais));
-            if (local.aprovadorId) setAprovadorIdSelecionado(local.aprovadorId);
-            if (le.ordemMidia) setOrdemMidia(normalizarOrdemMidia(le.ordemMidia));
-            if (local.rdoNumberStr) setRdoNumberStr(local.rdoNumberStr);
-            if (local.nomeObra) setNomeObra(local.nomeObra);
-            if (local.tempId) tempRdoId.current = local.tempId;
-            setDraftPendingSync(!!local.pendingSync);
-            setLastLocalSaveAt(local.updatedAt);
-            setToast('📴 Rascunho local restaurado neste aparelho.');
+            // Nunca pular a escolha dia/período num RDO novo: rascunho local
+            // (inclusive o gravado ao trocar de aba) assumia DIA e escondia o seletor.
+            pendingNewDraftRef.current = local;
+            setTipoRascunhoLocal(tipoDeExtras(local.dadosExtras));
           }
         } catch { /* ignore */ }
         setInitLoading(false);
@@ -1596,7 +1577,7 @@ export const DiarioDeObra: React.FC = () => {
   };
 
   const persistDraftLocal = useCallback(async (opts?: { pendingSync?: boolean }) => {
-    if (!obraId || isReadOnly || status !== 'rascunho') return;
+    if (!obraId || !devePersistirRascunhoLocal({ tipoRelatorio, status, isReadOnly })) return;
     const pendingSync = opts?.pendingSync ?? draftPendingSync;
     const localKey = offlineDraftKey(obraId, rdoIdAtual);
     const draft: OfflineRdoDraft = {
@@ -1622,6 +1603,48 @@ export const DiarioDeObra: React.FC = () => {
     atividadesExecutadas, atividadesPendentes, observacoes,
     ordemMidia, fotos, videos, anexos, savedFiles,
   ]);
+
+  const aplicarRascunhoNovo = (local: OfflineRdoDraft) => {
+    const le = local.dadosExtras || {};
+    setData(le.data || today);
+    setDataFim(isoDateOnly(le.dataFim, le.data || today));
+    setDiasChuva(String(le.diasChuva ?? 0));
+    setResponsavel(le.responsavel || '');
+    setClimaManha(le.climaManha || '');
+    setClimaTarde(le.climaTarde || '');
+    setClimaNoite(le.climaNoite || '');
+    setTempMin(le.tempMin || '');
+    setTempMax(le.tempMax || '');
+    setPessoas(le.pessoas?.length ? le.pessoas : [{ nome: '', funcao: '', empresa: '' }]);
+    setProfissionais(le.profissionais || []);
+    setMateriais(le.materiais || []);
+    setEquipamentos(le.equipamentos || []);
+    if (Array.isArray(le.atividadesExecutadas)) setAtividadesExecutadas(le.atividadesExecutadas);
+    setAtividadesPendentes(parseAtividadesPendentes(le.atividadesPendentes));
+    setObservacoes(parseObservacoes(le.observacoes || le.observacoesGerais));
+    if (local.aprovadorId) setAprovadorIdSelecionado(local.aprovadorId);
+    if (le.ordemMidia) setOrdemMidia(normalizarOrdemMidia(le.ordemMidia));
+    if (local.rdoNumberStr) setRdoNumberStr(local.rdoNumberStr);
+    if (local.nomeObra) setNomeObra(local.nomeObra);
+    if (local.tempId) tempRdoId.current = local.tempId;
+    setDraftPendingSync(!!local.pendingSync);
+    setLastLocalSaveAt(local.updatedAt);
+  };
+
+  const escolherTipoRelatorio = (tipo: TipoRelatorio) => {
+    const local = pendingNewDraftRef.current;
+    pendingNewDraftRef.current = null;
+    if (local?.dadosExtras && tipoDeExtras(local.dadosExtras) === tipo) {
+      aplicarRascunhoNovo(local);
+      setToast(
+        local.pendingSync
+          ? '📴 Rascunho local restaurado neste aparelho.'
+          : 'Rascunho local restaurado neste aparelho.',
+      );
+    }
+    setTipoRelatorio(tipo);
+    setTipoRascunhoLocal(null);
+  };
 
   const ensureRdoIdOnServer = async (): Promise<string | null> => {
     if (!obraId || !navigator.onLine) return null;
@@ -2060,6 +2083,10 @@ export const DiarioDeObra: React.FC = () => {
   // ── Salvar Rascunho ──
   const handleSalvarRascunho = async () => {
     if (!obraId) return;
+    if (!tipoRelatorio) {
+      showToast('Escolha se este relatório é do dia ou de período.');
+      return;
+    }
     if (!validarPeriodo()) return;
     setSaving(true);
     let releaseLock: (() => void) | undefined;
@@ -2161,6 +2188,10 @@ export const DiarioDeObra: React.FC = () => {
   // ── Enviar para aprovação ──
   const handleEnviar = async () => {
     if (!obraId) return;
+    if (!tipoRelatorio) {
+      showToast('Escolha se este relatório é do dia ou de período.');
+      return;
+    }
     if (!validarPeriodo()) return;
     if (!navigator.onLine) {
       await flushPendingMediaToIdb();
@@ -2341,9 +2372,18 @@ export const DiarioDeObra: React.FC = () => {
             </button>
             <div className="min-w-0">
               <h1 className="text-lg md:text-2xl font-bold text-gray-900 tracking-tight truncate">
-                {tipoRelatorio === 'PERIODO' ? 'Relatório de período' : 'Diário de Obra'}
+                {tituloTipoRelatorio(tipoRelatorio)}
               </h1>
               <p className="text-xs md:text-sm text-gray-500 font-medium truncate">{initLoading ? 'Carregando...' : `${rdoNumberStr}`}</p>
+              {status === 'rascunho' && !isReadOnly && tipoRelatorio && (
+                <button
+                  type="button"
+                  onClick={() => setTipoRelatorio(null)}
+                  className="text-xs font-semibold text-lunardeli-red hover:underline mt-0.5"
+                >
+                  Trocar tipo (dia ou período)
+                </button>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -2384,15 +2424,26 @@ export const DiarioDeObra: React.FC = () => {
 
       <div className="max-w-4xl mx-auto px-3 md:px-8 py-5 md:py-8 space-y-4 md:space-y-6">
 
-        {!initLoading && tipoRelatorio === null ? (
+        {initLoading ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 md:p-8 text-sm text-gray-500">
+            Carregando...
+          </div>
+        ) : devePedirTipoRelatorio({ initLoading, tipoRelatorio }) ? (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 md:p-8">
             <h2 className="text-xl font-bold text-gray-900 mb-1">Que tipo de relatório?</h2>
-            <p className="text-sm text-gray-500 mb-6">Escolha se este documento cobre um dia ou um prazo entre duas datas.</p>
+            <p className="text-sm text-gray-500 mb-4">Escolha se este documento cobre um dia ou um prazo entre duas datas.</p>
+            {tipoRascunhoLocal && (
+              <p className="mb-6 text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-xl px-3 py-2">
+                Há um rascunho de {rotuloTipoRelatorio(tipoRascunhoLocal)} neste aparelho. Escolha o mesmo tipo para continuar, ou o outro para começar um relatório novo.
+              </p>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <button
                 type="button"
-                onClick={() => setTipoRelatorio('DIA')}
-                className="text-left p-5 rounded-xl border-2 border-gray-200 hover:border-lunardeli-red hover:bg-red-50/50 active:bg-red-50 transition-colors"
+                onClick={() => escolherTipoRelatorio('DIA')}
+                className={`text-left p-5 rounded-xl border-2 hover:border-lunardeli-red hover:bg-red-50/50 active:bg-red-50 transition-colors ${
+                  tipoRascunhoLocal === 'DIA' ? 'border-lunardeli-red bg-red-50/40' : 'border-gray-200'
+                }`}
               >
                 <span className="flex items-center gap-2 text-lunardeli-red font-bold mb-2">
                   <Calendar size={20} /> Relatório do dia
@@ -2403,14 +2454,16 @@ export const DiarioDeObra: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setTipoRelatorio('PERIODO')}
-                className="text-left p-5 rounded-xl border-2 border-gray-200 hover:border-lunardeli-red hover:bg-red-50/50 active:bg-red-50 transition-colors"
+                onClick={() => escolherTipoRelatorio('PERIODO')}
+                className={`text-left p-5 rounded-xl border-2 hover:border-lunardeli-red hover:bg-red-50/50 active:bg-red-50 transition-colors ${
+                  tipoRascunhoLocal === 'PERIODO' ? 'border-lunardeli-red bg-red-50/40' : 'border-gray-200'
+                }`}
               >
                 <span className="flex items-center gap-2 text-lunardeli-red font-bold mb-2">
                   <Calendar size={20} /> Relatório de período
                 </span>
                 <span className="block text-sm text-gray-600 leading-relaxed">
-                  Um prazo entre duas datas: você informa quantos dias choveu, o efetivo e as mesmas seções do diário.
+                  Semana, mês (ex.: dezembro) ou qualquer intervalo: informe a data de início, a data de fim e quantos dias choveu.
                 </span>
               </button>
             </div>
