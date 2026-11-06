@@ -8,6 +8,7 @@
     "build": "node scripts/emit-version.cjs && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:unit": "node --experimental-strip-types --test src/utils/tipoRelatorioRdo.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },
