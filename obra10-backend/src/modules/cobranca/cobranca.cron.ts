@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CobrancaService } from './cobranca.service';
@@ -11,7 +11,7 @@ import {
 } from './pacotes-obras';
 
 @Injectable()
-export class CobrancaCron {
+export class CobrancaCron implements OnModuleInit {
   private readonly logger = new Logger(CobrancaCron.name);
 
   constructor(
@@ -22,10 +22,19 @@ export class CobrancaCron {
     private readonly cupomService: CupomService,
   ) {}
 
+  onModuleInit() {
+    void this.cobrancaService.encerrarFaturasIndevidas().catch((err: any) => {
+      this.logger.error(
+        `Falha ao encerrar faturas indevidas: ${err?.message || err}`,
+      );
+    });
+  }
+
   // Day 1 at 08:00 — generate monthly charges
   @Cron('0 8 1 * *')
   async handleMonthlyBilling() {
     this.logger.log('💳 Iniciando cobrança mensal automática...');
+    await this.cobrancaService.encerrarFaturasIndevidas();
     const now = new Date();
     const mesRef = new Date(now.getFullYear(), now.getMonth(), 1);
     const anoMes = mesRef.toISOString().slice(0, 7);
@@ -49,6 +58,13 @@ export class CobrancaCron {
         const existente = await this.prisma.cobranca.findUnique({
           where: { idempotencyKey },
         });
+        if (!empresa.ativo) {
+          this.logger.log(
+            `⏭ ${empresa.razaoSocial || empresa.id} — bloqueada, sem cobrança`,
+          );
+          continue;
+        }
+
         if (existente) {
           await this.prisma.auditLog.create({
             data: {
@@ -271,6 +287,7 @@ export class CobrancaCron {
     });
 
     for (const c of vencidas) {
+      if (!c.empresa.ativo) continue;
       const novoDias = c.empresa.diasInadimplente + 1;
       await this.prisma.empresa.update({
         where: { id: c.empresaId },
@@ -292,6 +309,7 @@ export class CobrancaCron {
   /** Diário 06:00 — promove PENDENTE vencidas para VENCIDO */
   @Cron('0 6 * * *')
   async marcarCobrancasVencidas() {
+    await this.cobrancaService.encerrarFaturasIndevidas();
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     const result = await this.prisma.cobranca.updateMany({

@@ -23,6 +23,7 @@ import {
   erroAsaasSemDocumento,
   normalizarDocumentoFiscal,
 } from '../../core/utils/documento-fiscal';
+import { motivoEncerrarFatura } from './cobranca-fatura';
 
 const PLANO_PRECOS: Record<string, number> = {};
 
@@ -55,6 +56,11 @@ export class CobrancaService {
       include: { cartaoSalvo: true },
     });
     if (!empresa) throw new NotFoundException('Empresa não encontrada.');
+    if (!empresa.ativo) {
+      throw new ForbiddenException(
+        'Empresa bloqueada. Nenhuma cobrança foi enviada à Asaas.',
+      );
+    }
     if (!empresa.emailVerificado)
       throw new ForbiddenException(
         'E-mail não verificado. Verifique sua caixa de entrada.',
@@ -94,6 +100,14 @@ export class CobrancaService {
 
       // Increment first month usage
       await this.cupomService.incrementarMesEExpirar(dto.empresaId);
+    } else {
+      const desconto = await this.cupomService.calcularDesconto(
+        dto.empresaId,
+        valorBase,
+      );
+      valorFinal = desconto.valorFinal;
+      pularAsaas = desconto.pularAsaas;
+      cupomAplicado = desconto.cupomAplicado;
     }
 
     const valor = valorFinal;
@@ -167,7 +181,7 @@ export class CobrancaService {
           empresaId: dto.empresaId,
           valor: 0,
           status: 'PAGO',
-          formaPagamento: dto.formaPagamento,
+          formaPagamento: cupomAplicado ? 'CUPOM' : dto.formaPagamento,
           periodicidade,
           pacoteObras,
           modulosSlugs,
@@ -851,13 +865,31 @@ export class CobrancaService {
     const pularAsaas = desconto.pularAsaas;
 
     if (pularAsaas || novoValor <= 0) {
-      // Se zerou, ativa os módulos e marca como paga
+      if (cobranca.idAsaas) {
+        const removida = await this.removerFaturaAsaas(cobranca.idAsaas);
+        if (removida === 'ja_pago') {
+          throw new BadRequestException(
+            'A Asaas já recebeu este pagamento. O cupom não cancela uma fatura paga.',
+          );
+        }
+        if (removida === 'erro') {
+          throw new BadRequestException(
+            'Não foi possível cancelar a fatura na Asaas. Tente de novo em instantes.',
+          );
+        }
+      }
+      // Se zerou, ativa os módulos e marca como paga — sem fatura na Asaas
       await this.prisma.cobranca.update({
         where: { id: cobrancaId },
         data: {
           valor: 0,
           status: 'PAGO',
+          formaPagamento: 'CUPOM',
           dataPagamento: new Date(),
+          idAsaas: null,
+          linkPagamento: null,
+          qrCode: null,
+          qrCodeBase64: null,
         },
       });
 
@@ -886,6 +918,9 @@ export class CobrancaService {
         mensagem: 'Cupom de 100% aplicado! Cobrança quitada com sucesso.',
       };
     } else {
+      if (cobranca.idAsaas) {
+        await this.asaas.atualizarValorPagamento(cobranca.idAsaas, novoValor);
+      }
       // Se apenas reduziu, atualiza o valor da cobrança local
       await this.prisma.cobranca.update({
         where: { id: cobrancaId },
@@ -924,12 +959,31 @@ export class CobrancaService {
       ? 'PAGAMENTO_CONFIRMADO_BONIFICACAO'
       : 'PAGAMENTO_CONFIRMADO_MANUAL';
 
+    let limparAsaas = false;
+    if (isBonificacao && cobranca.idAsaas) {
+      const removida = await this.removerFaturaAsaas(cobranca.idAsaas);
+      if (removida === 'ja_pago') {
+        throw new BadRequestException(
+          'A Asaas já recebeu este pagamento. Não dá para registrar como bonificação.',
+        );
+      }
+      limparAsaas = removida === 'ok';
+    }
+
     await this.prisma.cobranca.update({
       where: { id: cobrancaId },
       data: {
         status: 'PAGO',
         dataPagamento: new Date(),
         formaPagamento,
+        ...(limparAsaas
+          ? {
+              idAsaas: null,
+              linkPagamento: null,
+              qrCode: null,
+              qrCodeBase64: null,
+            }
+          : {}),
       },
     });
 
@@ -989,5 +1043,143 @@ export class CobrancaService {
     );
 
     return { success: true, formaPagamento, tipoConfirmacao };
+  }
+
+  /**
+   * Tira da Asaas faturas que não são dívida de verdade:
+   * bonificação, cupom integral ou empresa bloqueada.
+   */
+  async encerrarFaturasIndevidas(empresaId?: string) {
+    if (!this.asaas.configured) return { canceladas: 0 };
+
+    const empresaFilter = empresaId ? { empresaId } : {};
+    const aberta = { in: ['PENDENTE', 'VENCIDO', 'OVERDUE'] };
+    const [cortesias, bloqueadas, comCupom] = await Promise.all([
+      this.prisma.cobranca.findMany({
+        where: {
+          ...empresaFilter,
+          idAsaas: { not: null },
+          status: 'PAGO',
+          formaPagamento: { in: ['BONIFICACAO', 'CUPOM'] },
+        },
+      }),
+      this.prisma.cobranca.findMany({
+        where: {
+          ...empresaFilter,
+          idAsaas: { not: null },
+          status: aberta,
+          empresa: { ativo: false },
+        },
+      }),
+      this.prisma.cobranca.findMany({
+        where: {
+          ...empresaFilter,
+          idAsaas: { not: null },
+          status: aberta,
+          empresa: { ativo: true, cupons: { some: { ativo: true } } },
+        },
+      }),
+    ]);
+
+    const vistas = new Set<string>();
+    const mesesContados = new Set<string>();
+    let canceladas = 0;
+
+    const fila: Array<{
+      id: string;
+      idAsaas: string | null;
+      empresaId: string;
+      status: string;
+      formaPagamento: string;
+      valor: unknown;
+      dataPagamento: Date | null;
+      empresaAtiva: boolean;
+    }> = [
+      ...cortesias.map((c) => ({ ...c, empresaAtiva: true })),
+      ...bloqueadas.map((c) => ({ ...c, empresaAtiva: false })),
+      ...comCupom.map((c) => ({ ...c, empresaAtiva: true })),
+    ];
+
+    for (const c of fila) {
+      if (!c.idAsaas || vistas.has(c.id)) continue;
+      let cupomCobreTudo = false;
+      if (c.empresaAtiva && c.status !== 'PAGO') {
+        const desconto = await this.cupomService.calcularDesconto(
+          c.empresaId,
+          Number(c.valor),
+        );
+        cupomCobreTudo = desconto.pularAsaas || desconto.valorFinal <= 0;
+      }
+      const motivo = motivoEncerrarFatura({
+        status: c.status,
+        formaPagamento: c.formaPagamento,
+        empresaAtiva: c.empresaAtiva,
+        cupomCobreTudo,
+      });
+      if (!motivo) continue;
+      vistas.add(c.id);
+
+      const removida = await this.removerFaturaAsaas(c.idAsaas);
+      if (removida !== 'ok') continue;
+
+      if (motivo === 'cortesia') {
+        await this.prisma.cobranca.update({
+          where: { id: c.id },
+          data: {
+            idAsaas: null,
+            linkPagamento: null,
+            qrCode: null,
+            qrCodeBase64: null,
+          },
+        });
+      } else if (motivo === 'bloqueio') {
+        await this.prisma.cobranca.update({
+          where: { id: c.id },
+          data: {
+            status: 'CANCELADO',
+            idAsaas: null,
+            linkPagamento: null,
+            qrCode: null,
+            qrCodeBase64: null,
+          },
+        });
+      } else {
+        await this.prisma.cobranca.update({
+          where: { id: c.id },
+          data: {
+            status: 'PAGO',
+            formaPagamento: 'CUPOM',
+            valor: 0,
+            dataPagamento: c.dataPagamento ?? new Date(),
+            idAsaas: null,
+            linkPagamento: null,
+            qrCode: null,
+            qrCodeBase64: null,
+          },
+        });
+        if (!mesesContados.has(c.empresaId)) {
+          await this.cupomService.incrementarMesEExpirar(c.empresaId);
+          mesesContados.add(c.empresaId);
+        }
+      }
+      canceladas++;
+      this.logger.log(
+        `Fatura Asaas encerrada (${motivo}) empresa ${c.empresaId}`,
+      );
+    }
+
+    return { canceladas };
+  }
+
+  private async removerFaturaAsaas(
+    idAsaas: string,
+  ): Promise<'ok' | 'ja_pago' | 'erro'> {
+    const resultado = await this.asaas.cancelarPagamentoSeAberto(idAsaas);
+    if (resultado === 'ja_pago') {
+      this.logger.warn(`Asaas ${idAsaas} já estava pago — fatura mantida`);
+      return 'ja_pago';
+    }
+    if (resultado === 'erro') return 'erro';
+    return 'ok';
   }
 }

@@ -477,6 +477,69 @@ export class AsaasService implements OnModuleInit {
   }
 
   /**
+   * Remove uma fatura que não deve existir (cupom, bonificação ou empresa bloqueada).
+   * Não mexe em pagamento já recebido.
+   */
+  async cancelarPagamentoSeAberto(
+    idAsaas: string,
+  ): Promise<'cancelado' | 'ja_pago' | 'ausente' | 'erro'> {
+    if (!idAsaas || idAsaas.startsWith('mock-')) return 'ausente';
+    if (this.mockMode) return 'cancelado';
+
+    const pagos = new Set([
+      'RECEIVED',
+      'CONFIRMED',
+      'RECEIVED_IN_CASH',
+      'DUNNING_RECEIVED',
+    ]);
+    try {
+      const { data } = await axios.get(`${this.baseUrl}/payments/${idAsaas}`, {
+        headers: this.headers,
+      });
+      if (pagos.has(String(data?.status || ''))) return 'ja_pago';
+    } catch (err: any) {
+      if (err?.response?.status === 404) return 'ausente';
+      this.logger.warn(`Asaas consultar ${idAsaas}: ${asaasApiMessage(err)}`);
+      return 'erro';
+    }
+
+    try {
+      await axios.put(
+        `${this.baseUrl}/payments/${idAsaas}`,
+        { notificationDisabled: true },
+        { headers: this.headers },
+      );
+    } catch (err: any) {
+      this.logger.warn(`Asaas silenciar ${idAsaas}: ${asaasApiMessage(err)}`);
+    }
+
+    try {
+      await axios.delete(`${this.baseUrl}/payments/${idAsaas}`, {
+        headers: this.headers,
+      });
+      return 'cancelado';
+    } catch (err: any) {
+      if (err?.response?.status === 404) return 'ausente';
+      this.logger.warn(`Asaas cancelar ${idAsaas}: ${asaasApiMessage(err)}`);
+      return 'erro';
+    }
+  }
+
+  async atualizarValorPagamento(idAsaas: string, valor: number): Promise<void> {
+    if (!idAsaas || idAsaas.startsWith('mock-') || this.mockMode) return;
+    try {
+      await axios.put(
+        `${this.baseUrl}/payments/${idAsaas}`,
+        { value: valor, notificationDisabled: true },
+        { headers: this.headers },
+      );
+    } catch (err: any) {
+      this.logger.warn(`Asaas atualizar ${idAsaas}: ${asaasApiMessage(err)}`);
+      throw new BadRequestException(asaasApiMessage(err));
+    }
+  }
+
+  /**
    * Agenda NFS-e atrelada a um payment Asaas.
    * Requer ASAAS_NF_ENABLED=true e serviço municipal configurado.
    */

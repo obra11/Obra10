@@ -5,13 +5,15 @@ import { SuperAdminGuard } from '../../core/guards/super-admin.guard';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { CriarCupomAdminDto, AtualizarCupomAdminDto, EnviarCupomAdminDto } from './dto/admin.dto';
 import { parseDataBrasilFimDoDia } from '../cupom/cupom-data';
+import { CobrancaService } from '../cobranca/cobranca.service';
 
 @Controller('admin/cupons')
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
 export class AdminCuponsController {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cryptoService: CryptoService
+    private readonly cryptoService: CryptoService,
+    private readonly cobrancaService: CobrancaService,
   ) {}
 
   @Get()
@@ -146,7 +148,9 @@ export class AdminCuponsController {
       });
     }
 
-    return { message: 'Cupom vinculado à conta e notificado à empresa (simulação).' };
+    await this.cobrancaService.encerrarFaturasIndevidas(empresa.id);
+
+    return { message: 'Cupom vinculado. Faturas cobertas pelo cupom foram retiradas da Asaas.' };
   }
 
   @Delete('empresa/:empresaId/cupom/:cupomId')

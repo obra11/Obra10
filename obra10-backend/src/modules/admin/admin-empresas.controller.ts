@@ -378,10 +378,14 @@ export class AdminEmpresasController {
     const empresa = await this.prisma.empresa.findUnique({ where: { id } });
     if (!empresa) throw new NotFoundException('Empresa não encontrada');
 
-    return this.prisma.empresa.update({
+    const atualizada = await this.prisma.empresa.update({
       where: { id },
       data: { ativo: !empresa.ativo }
     });
+    if (!atualizada.ativo) {
+      await this.cobrancaService.encerrarFaturasIndevidas(id);
+    }
+    return atualizada;
   }
 
   @Post(':id/avisar-gestor')
@@ -390,6 +394,11 @@ export class AdminEmpresasController {
       where: { id: empresaId }
     });
     if (!empresa) throw new NotFoundException('Empresa não encontrada.');
+    if (!empresa.ativo) {
+      throw new BadRequestException(
+        'Empresa bloqueada. Nenhuma cobrança é enviada.',
+      );
+    }
 
     // Buscar cobranças pendentes/vencidas não notificadas
     const cobrancasPendentes = await this.prisma.cobranca.findMany({
@@ -454,7 +463,8 @@ export class AdminEmpresasController {
     const cobrancasPendentes = await this.prisma.cobranca.findMany({
       where: {
         status: { in: ['PENDENTE', 'VENCIDO', 'OVERDUE'] },
-        notificadoEm: null
+        notificadoEm: null,
+        empresa: { ativo: true },
       },
       include: {
         empresa: {

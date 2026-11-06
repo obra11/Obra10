@@ -194,6 +194,9 @@ export class CupomService {
     }
 
     const cupom = vinculo.cupom;
+    if (!cupom.ativo || (cupom.expiraEm && cupom.expiraEm < new Date())) {
+      return { valorFinal: valorBase, pularAsaas: false, cupomAplicado: null };
+    }
 
     switch (cupom.tipo) {
       case 'GRATUIDADE': {
