@@ -16,7 +16,18 @@ export class IfcTools{
  constructor(T,renderer,camera,controls,navigation,onChange){
   Object.assign(this,{T,renderer,camera,controls,navigation,onChange});this.ray=new T.Raycaster();this.active=false;this.measuring=false;
   this.bindParallel();
-  this.$=id=>document.getElementById(id);this.overlay=this.$('ifc-measure-overlay');this.cutOverlay=this.$('ifc-cut-overlay');this.cutHandle=this.$('ifc-cut-handle');  this.bindCutDrag();
+  this.$=id=>document.getElementById(id);this.overlay=this.$('ifc-measure-overlay');this.cutOverlay=this.$('ifc-cut-overlay');this.cutHandle=this.$('ifc-cut-handle');
+  if(!this.cutHandle){
+    this.cutHandle=document.createElement('button');
+    this.cutHandle.id='ifc-cut-handle';
+    this.cutHandle.type='button';
+    this.cutHandle.hidden=true;
+    this.cutHandle.setAttribute('role','slider');
+    this.cutHandle.setAttribute('aria-label','Posição do corte IFC');
+    this.cutHandle.textContent='↕ Corte · 50%';
+    (this.overlay?.parentElement||document.body).appendChild(this.cutHandle);
+  }
+  this.bindCutDrag();
   this.choosingFace=false;this.rotating=false;this.hidden=new Map();this.capMeshes=[];this.views=new WeakMap();
   this.$('ifc-cut').onclick=()=>{if(!this.state)return;this.state.cut=!this.state.cut;this.choosingFace=false;this.rotating=false;this.applyCut();};
   this.$('ifc-cut-face').onclick=()=>{if(!this.state?.cut)return;this.choosingFace=!this.choosingFace;this.rotating=false;this.sync();};

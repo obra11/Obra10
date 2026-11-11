@@ -185,6 +185,7 @@ export function mountViewer(host, hooks = {}) {
     <input id="pdf-page" type="number" hidden>
     <span id="pdf-total" hidden></span>
     ${markup}
+    <button type="button" id="ifc-cut-handle" hidden role="slider" aria-label="Posição do corte IFC" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">↕ Corte · 50%</button>
     <dialog id="archive-dialog">
       <div class="layer-heading"><h2 id="archive-title">Compactado</h2><button type="button" id="archive-back" hidden>Voltar</button><button type="button" id="archive-close">Fechar</button></div>
       <p>Toque um arquivo para abrir. Imagens, textos, DWG, IFC, SKP, PDF, Word, SVG e outros compactados.</p>

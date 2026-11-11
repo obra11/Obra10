@@ -1,12 +1,12 @@
 ﻿# ============================================
-# Obra 10 â€” Production Dockerfile
-# Force rebuild: 2026-11-11-visualizador-prumo-2.9.50
+# Obra 10 — Production Dockerfile
+# Force rebuild: 2026-11-11-viewer-dwg-ifc-2.9.52
 # ============================================
 
 # --- Build stage ---
 FROM node:22-bookworm-slim AS builder
 
-ARG OBRA10_BUILD_ID=2.9.50-20261111
+ARG OBRA10_BUILD_ID=2.9.52-20261111
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 
 # Install build tools for native modules (bcrypt)
@@ -36,7 +36,7 @@ ENV PRISMA_BUILD_PLACEHOLDER=
 # --- Production stage ---
 FROM node:22-bookworm-slim
 
-ARG OBRA10_BUILD_ID=2.9.50-20261111
+ARG OBRA10_BUILD_ID=2.9.52-20261111
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 ENV NODE_ENV=production
 
@@ -59,11 +59,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 python3
   && rm -rf /var/lib/apt/lists/*
 ENV PYTHON=/opt/aspose/bin/python
 
-# Create uploads directory for runtime (dev/local only; produÃ§Ã£o usa R2)
+# Create uploads directory for runtime (dev/local only; produção usa R2)
 RUN mkdir -p uploads && chmod +x scripts/railway-start.sh
-# Guarda: contexto de build nÃ£o deve trazer mÃ­dia de usuÃ¡rio
+# Guarda: contexto de build não deve trazer mídia de usuário
 RUN if [ -d uploads ] && [ "$(find uploads -type f 2>/dev/null | head -1)" ]; then \
-      echo "ERRO: arquivos em uploads/ no contexto Docker â€” remova do Git/.dockerignore"; \
+      echo "ERRO: arquivos em uploads/ no contexto Docker — remova do Git/.dockerignore"; \
       exit 1; \
     fi
 

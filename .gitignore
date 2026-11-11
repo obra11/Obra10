@@ -7,6 +7,9 @@ node_modules/
 
 # Build outputs
 dist/
+# O JS do LibreDWG do visualizador mora em vendor/.../dist/ — não é artefato de build
+!obra10-frontend/public/viewer/vendor/libredwg/dist/
+!obra10-backend/client/viewer/vendor/libredwg/dist/
 build/
 *.tsbuildinfo
 
