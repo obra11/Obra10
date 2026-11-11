@@ -1,4 +1,3 @@
-(()=>{const add=Ctor=>{if(!Ctor?.prototype||typeof Ctor.prototype.getOrInsertComputed==="function")return;Ctor.prototype.getOrInsert=function(key,value){if(this.has(key))return this.get(key);this.set(key,value);return value};Ctor.prototype.getOrInsertComputed=function(key,callback){if(this.has(key))return this.get(key);const value=callback(key);this.set(key,value);return value}};add(Map);add(WeakMap);})();
 /**
  * @licstart The following is the entire license notice for the
  * JavaScript code in this page

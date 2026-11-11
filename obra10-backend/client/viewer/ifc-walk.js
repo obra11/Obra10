@@ -2,14 +2,40 @@
 export class IfcWalk{
  constructor(T,camera,controls,canvas,tools,navigation,onChange){
   Object.assign(this,{T,camera,controls,canvas,tools,navigation,onChange});
-  this.active=false;this.placing=false;this.eye=1.6;this.through=false;this.yaw=0;this.pitch=0;this.goal=null;this.last=0;
-  this.keys=new Set();this.stick={x:0,y:0};this.pointers=new Map();this.ray=new T.Raycaster();
+  this.active=false;this.placing=false;this.mouseSteer=false;this.eye=1.6;this.through=false;this.yaw=0;this.pitch=0;this.goal=null;this.last=0;
+  this.keys=new Set();this.stick={x:0,y:0};this.pointers=new Map();this.ray=new T.Raycaster();this.lastMouse=null;
   const $=id=>document.getElementById(id);this.$=$;
-  $('ifc-walk').onclick=()=>this.active?this.stop():this.start();
+  const btn=$('ifc-walk');
+  // Hold Caminhar and drag anywhere: analog walk follows the pointer. A tap still enters or leaves.
+  btn.addEventListener('pointerdown',e=>{
+   if(e.button&&e.button!==0)return;
+   e.preventDefault();e.stopPropagation();
+   this.btnSteer={id:e.pointerId,x:e.clientX,y:e.clientY,moved:false,wasActive:this.active};
+   try{btn.setPointerCapture(e.pointerId);}catch{}
+   if(!this.active)this.start();
+  });
+  const onSteerMove=e=>{
+   const s=this.btnSteer;if(!s||s.id!==e.pointerId)return;
+   e.preventDefault();
+   if(Math.hypot(e.clientX-s.x,e.clientY-s.y)>10)s.moved=true;
+   if(this.walking&&s.moved){this.aimStick(e,s,64);btn.classList.add('steering');this.onChange?.();}
+  };
+  const endSteer=e=>{
+   const s=this.btnSteer;if(!s||s.id!==e.pointerId)return;
+   const moved=s.moved,wasActive=s.wasActive;
+   this.btnSteer=null;btn.classList.remove('steering');
+   if(this.padId==null&&!this.mouseSteer)this.stick={x:0,y:0};
+   try{if(btn.hasPointerCapture(e.pointerId))btn.releasePointerCapture(e.pointerId);}catch{}
+   if(!moved&&wasActive)this.stop();
+  };
+  window.addEventListener('pointermove',onSteerMove,{passive:false});
+  for(const name of ['pointerup','pointercancel'])window.addEventListener(name,endSteer);
+  btn.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();});
+  btn.addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;e.preventDefault();this.active?this.stop():this.start();});
   $('ifc-walk-exit').onclick=()=>this.stop();
   $('ifc-walk-through').onclick=()=>{this.through=!this.through;$('ifc-walk-through').setAttribute('aria-pressed',String(this.through));};
   // Tools that drive the orbit camera end the walk first.
-  $('ifc-actions').addEventListener('click',e=>{if(this.active&&e.target.closest('#ifc-pan,#ifc-focus,#ifc-cut,#ifc-measure,#ifc-views,#ifc-rotate'))this.stop();},true);
+  $('ifc-actions').addEventListener('click',e=>{if(this.active&&e.target.closest('#ifc-focus,#ifc-cut,#ifc-measure,#ifc-views,#ifc-rotate'))this.stop();},true);
   const host=canvas.parentElement,own=e=>this.walking&&e.target===canvas;
   // While choosing the floor the model still orbits; only a clean tap places the walker.
   host.addEventListener('pointerdown',e=>{if(this.active&&this.placing&&e.target===canvas)this.placeTap=this.placeTap?null:{id:e.pointerId,x:e.clientX,y:e.clientY,t:performance.now()};},true);
@@ -21,10 +47,64 @@ export class IfcWalk{
   for(const name of ['dblclick','click','contextmenu'])host.addEventListener(name,e=>{if(own(e))this.swallow(e);},true);
   host.addEventListener('wheel',e=>{if(!own(e))return;this.swallow(e);this.nudge(e.deltaY<0?.4:-.4);},{capture:true,passive:false});
   const pad=$('ifc-walk-pad'),knob=pad.firstElementChild;
-  const setStick=e=>{const r=pad.getBoundingClientRect(),radius=r.width/2-8;let x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2;const len=Math.hypot(x,y);if(len>radius){x*=radius/len;y*=radius/len;}this.stick={x:x/radius,y:y/radius};knob.style.transform=`translate(${x}px,${y}px)`;};
-  pad.addEventListener('pointerdown',e=>{e.preventDefault();this.padId=e.pointerId;try{pad.setPointerCapture(e.pointerId);}catch{}setStick(e);});
-  pad.addEventListener('pointermove',e=>{if(e.pointerId===this.padId)setStick(e);});
-  for(const name of ['pointerup','pointercancel'])pad.addEventListener(name,e=>{if(e.pointerId!==this.padId)return;this.padId=null;this.stick={x:0,y:0};knob.style.transform='';});
+  const paintKnob=()=>{const radius=pad.getBoundingClientRect().width/2-8;knob.style.transform=`translate(${this.stick.x*radius}px,${this.stick.y*radius}px)`;};
+  // Stick relative to the pad centre (pad sits bottom-centre by default and can be dragged).
+  const setStickFromPad=(e,soft=false)=>{
+   const r=pad.getBoundingClientRect(),base=r.width/2-8,radius=soft?Math.max(base,Math.min(host.clientWidth,host.clientHeight)*.18):base;
+   let x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2;const len=Math.hypot(x,y);if(len>radius){x*=radius/len;y*=radius/len;}
+   this.stick={x:x/radius,y:y/radius};paintKnob();this.onChange?.();
+  };
+  const placePad=(left,top)=>{
+   const box=host.getBoundingClientRect(),size=pad.offsetWidth||116;
+   const x=Math.max(8,Math.min(box.width-size-8,left)),y=Math.max(8,Math.min(box.height-size-8,top));
+   pad.classList.add('pad-moved');pad.style.left=`${x}px`;pad.style.top=`${y}px`;pad.style.right='auto';pad.style.bottom='auto';pad.style.marginLeft='0';
+  };
+  const resetPadPlace=()=>{pad.classList.remove('pad-moved','pad-dragging');pad.style.left='';pad.style.top='';pad.style.right='';pad.style.bottom='';pad.style.marginLeft='';};
+  this.resetPadPlace=resetPadPlace;
+  const finePointer=()=>matchMedia('(pointer:fine)').matches;
+  const setMouseSteer=(on,e)=>{
+   this.mouseSteer=!!on;this.lastMouse=null;
+   pad.classList.toggle('mouse-steer',this.mouseSteer);
+   pad.setAttribute('aria-pressed',String(this.mouseSteer));
+   if(!this.mouseSteer&&!this.btnSteer&&this.padId==null){this.stick={x:0,y:0};knob.style.transform='';}
+   else if(this.mouseSteer&&e)setStickFromPad(e,true);
+   this.ui();
+  };
+  pad.addEventListener('pointerdown',e=>{
+   if(e.button&&e.button!==0)return;
+   e.preventDefault();this.padId=e.pointerId;this.padTap={x:e.clientX,y:e.clientY,moved:false};
+   this.padMove=null;
+   // Hold briefly then drag to reposition the yellow pad; tap still toggles mouse steer.
+   this.padHold=setTimeout(()=>{
+    if(this.padId!==e.pointerId||this.padTap?.moved)return;
+    const r=pad.getBoundingClientRect(),hb=host.getBoundingClientRect();
+    this.padMove={id:e.pointerId,ox:e.clientX,oy:e.clientY,left:r.left-hb.left,top:r.top-hb.top};
+    pad.classList.add('pad-dragging');
+   },320);
+   try{pad.setPointerCapture(e.pointerId);}catch{}
+   if(!this.mouseSteer)setStickFromPad(e);
+  });
+  pad.addEventListener('pointermove',e=>{
+   if(e.pointerId!==this.padId)return;
+   if(this.padTap&&Math.hypot(e.clientX-this.padTap.x,e.clientY-this.padTap.y)>8)this.padTap.moved=true;
+   if(this.padMove&&this.padMove.id===e.pointerId){
+    placePad(this.padMove.left+(e.clientX-this.padMove.ox),this.padMove.top+(e.clientY-this.padMove.oy));return;
+   }
+   if(!this.mouseSteer)setStickFromPad(e);
+  });
+  for(const name of ['pointerup','pointercancel'])pad.addEventListener(name,e=>{
+   if(e.pointerId!==this.padId)return;this.padId=null;
+   clearTimeout(this.padHold);this.padHold=null;pad.classList.remove('pad-dragging');
+   const movedPad=!!this.padMove;this.padMove=null;
+   const tap=this.padTap;this.padTap=null;
+   if(movedPad){if(!this.mouseSteer&&!this.btnSteer){this.stick={x:0,y:0};knob.style.transform='';}return;}
+   if(finePointer()&&tap&&!tap.moved){setMouseSteer(!this.mouseSteer,e);return;}
+   if(!this.mouseSteer){if(!this.btnSteer)this.stick={x:0,y:0};knob.style.transform='';}
+  });
+  window.addEventListener('pointermove',e=>{
+   if(!this.walking||!this.mouseSteer||this.padId!=null)return;
+   setStickFromPad(e,true);
+  },{passive:true});
   const typing=e=>e.target.closest?.('input,textarea,select,[contenteditable]');
   window.addEventListener('keydown',e=>{if(!this.active||typing(e)||e.ctrlKey||e.metaKey||e.altKey)return;const k=this.key(e);if(!k||k!=='Escape'&&!this.walking)return;e.preventDefault();e.stopImmediatePropagation();if(k==='Escape'){this.stop();return;}this.keys.add(k);},true);
   window.addEventListener('keyup',e=>{const k=this.key(e);if(k)this.keys.delete(k);},true);
@@ -33,6 +113,11 @@ export class IfcWalk{
  get walking(){return this.active&&!this.placing;}
  key(e){const map={KeyW:'f',ArrowUp:'f',KeyS:'b',ArrowDown:'b',KeyA:'l',KeyD:'r',ArrowLeft:'tl',ArrowRight:'tr',KeyQ:'tl',KeyE:'tr',ShiftLeft:'run',ShiftRight:'run',Escape:'Escape'};return map[e.code]||null;}
  swallow(e){e.preventDefault();e.stopImmediatePropagation();}
+ aimStick(e,origin,radius){
+  let x=e.clientX-origin.x,y=e.clientY-origin.y;const len=Math.hypot(x,y);
+  if(len>radius){x*=radius/len;y*=radius/len;}
+  this.stick={x:x/radius,y:y/radius};
+ }
  start(){
   if(!this.tools.group)return;
   const tools=this.tools;tools.measuring=false;tools.choosingFace=false;tools.sync();this.navigation.armFocus(false);tools.setParallel?.(null);tools.toggleViews?.(false);
@@ -43,18 +128,21 @@ export class IfcWalk{
   const inside=tools.bounds?.containsPoint(this.camera.position),floor=inside?this.floorBelow(this.camera.position,6):null;
   this.placing=!floor;this.controls.enabled=this.placing;
   if(floor){this.camera.position.set(this.camera.position.x,floor.y+this.eye,this.camera.position.z);this.apply();}
-  this.ui();this.onChange?.();
+  this.resetPadPlace?.();this.ui();this.onChange?.();
  }
  stop(){
-  if(!this.active)return;const walked=this.walking;this.active=false;this.placing=false;this.goal=null;this.keys.clear();this.pointers.clear();this.stick={x:0,y:0};this.placeTap=null;
+  if(!this.active)return;const walked=this.walking;this.active=false;this.placing=false;this.mouseSteer=false;this.steerOrigin=null;this.goal=null;this.keys.clear();this.pointers.clear();this.stick={x:0,y:0};this.btnSteer=null;this.placeTap=null;this.lastMouse=null;this.$('ifc-walk').classList.remove('steering');
+  const pad=this.$('ifc-walk-pad');pad.classList.remove('mouse-steer');pad.setAttribute('aria-pressed','false');this.resetPadPlace?.();
   this.controls.enabled=true;
   if(walked){const forward=this.camera.getWorldDirection(new this.T.Vector3());this.controls.target.copy(this.camera.position).addScaledVector(forward,2);this.controls.update();this.navigation.updateClipping();}
   this.ui();this.onChange?.();
  }
  ui(){
   const $=this.$;$('ifc-walk').setAttribute('aria-pressed',String(this.active));$('ifc-walk-info').hidden=!this.active;$('ifc-walk-pad').hidden=!this.active||this.placing;
-  const knob=$('ifc-walk-pad').firstElementChild;knob.style.transform='';
-  $('ifc-walk-text').textContent=this.placing?'Toque no piso onde quer ficar':matchMedia('(pointer:fine)').matches?'Arraste para olhar · W A S D ou o círculo andam · toque no piso para ir':'Arraste para olhar · o círculo anda · toque no piso para ir';
+  const pad=$('ifc-walk-pad'),knob=pad.firstElementChild;
+  pad.classList.toggle('mouse-steer',this.mouseSteer);pad.setAttribute('aria-pressed',String(this.mouseSteer));
+  if(!this.mouseSteer)knob.style.transform='';
+  $('ifc-walk-text').textContent=this.placing?'Toque no piso onde quer ficar':this.mouseSteer?'Bolinha ativa: mouse cima/baixo anda · lados giram · clique de novo para soltar · Esc sai':matchMedia('(pointer:fine)').matches?'Clique na bolinha para andar com o mouse · segure e arraste para mover a bolinha · W A S D':'Segure a bolinha para andar · segure um pouco e arraste para movê-la';
  }
  apply(){this.camera.quaternion.setFromEuler(new this.T.Euler(this.pitch,this.yaw,0,'YXZ'));this.camera.updateMatrixWorld();}
  drag(e,p){
@@ -87,6 +175,8 @@ export class IfcWalk{
   if(!this.active)return false;if(this.group!==this.tools.group){this.stop();return false;}
   const now=performance.now(),dt=Math.min(.05,(now-(this.last||now))/1000);this.last=now;if(this.placing||!dt)return false;
   const k=this.keys;let f=-this.stick.y,s=this.stick.x,turn=0,changed=false;
+  // Sticky yellow pad: left/right turns the view; up/down walks. Keys still strafe with A/D.
+  if(this.mouseSteer){turn-=this.stick.x;s=0;}
   if(k.has('f'))f+=1;if(k.has('b'))f-=1;if(k.has('l'))s-=1;if(k.has('r'))s+=1;if(k.has('tl'))turn+=1;if(k.has('tr'))turn-=1;
   if(turn){this.yaw+=turn*1.8*dt;this.apply();changed=true;}
   const len=Math.hypot(f,s);if(len>1){f/=len;s/=len;}

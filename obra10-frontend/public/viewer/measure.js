@@ -77,7 +77,13 @@ export class DwgMeasure {
    this.previewPoints=null;this.editingIndex=null;this.touches.delete(e.pointerId);if(!this.touches.size)this.multitouch=false;this.update();
   },true);
   for(const event of ['pointercancel','lostpointercapture'])viewport.addEventListener(event,e=>{this.touches.delete(e.pointerId);if(!this.touches.size){this.multitouch=false;this.previewPoints=null;this.editingIndex=null;this.update();}},true);
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'){this.active=false;this.previewPoints=null;this.editingIndex=null;this.aim=null;this.update();}});
+  document.addEventListener('keydown',e=>{
+   if(e.key!=='Escape'||!this.active||e.ctrlKey||e.metaKey||e.altKey||e.repeat)return;
+   if(e.target?.closest?.('input,textarea,select,[contenteditable="true"]'))return;
+   if(!this.previewPoints&&this.editingIndex==null&&!this.aim&&!this.points.length)return;
+   e.preventDefault();e.stopPropagation();this.previewPoints=null;this.editingIndex=null;this.aim=null;
+   if(this.points.length)this.points.pop();this.update();
+  },true);
   this.resizeObserver=new ResizeObserver(()=>this.draw());this.resizeObserver.observe(viewport);
  }
  moveAim(e,immediate=false){const r=this.viewport.getBoundingClientRect();this.pending={x:e.clientX-r.left,y:e.clientY-r.top,radius:e.pointerType==='touch'?24:14};const run=()=>{this.aimFrame=0;const p=this.pending;if(!this.active||!p)return;const world=this.renderer.screenToWorld(p),snap=snapToSegments(this.segments||[],world,p.radius/this.renderer.getViewState().scale);this.aim={screen:p,point:snap?.point||world,snap};this.previewPoints=null;

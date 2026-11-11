@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FolderOpen, Layers, Loader2, Minus, Plus, RotateCw, Ruler, Search, X } from 'lucide-react';
 import { APP_VERSION } from '../../appVersion';
-import api from '../../services/api';
 import { OfficePreview } from './OfficePreview';
 
-type Kind = 'pdf' | 'ifc' | 'dwg' | 'doc' | 'docx' | 'xls' | 'xlsx';
+type Kind = 'pdf' | 'ifc' | 'skp' | 'dwg' | 'doc' | 'docx' | 'txt' | 'xls' | 'xlsx' | 'svg' | 'img' | 'zip';
 
 interface TabItem {
   id: string;
@@ -33,10 +32,14 @@ interface PdfState {
 }
 
 const PDF_LIMIT = 100 * 1024 * 1024;
-const IFC_LIMIT = 300 * 1024 * 1024;
+const IFC_LIMIT = 1024 * 1024 * 1024;
 const DWG_LIMIT = 100 * 1024 * 1024;
 const OFFICE_LIMIT = 30 * 1024 * 1024;
-const OFFICE_KINDS = new Set<Kind>(['doc', 'docx', 'xls', 'xlsx']);
+const EXCEL_KINDS = new Set<Kind>(['xls', 'xlsx']);
+const WORD_KINDS = new Set<Kind>(['doc', 'docx', 'txt']);
+const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif', 'ico', 'tif', 'tiff', 'heic', 'heif']);
+const ARCHIVE_EXTS = new Set(['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'tbz', 'tbz2', 'xz', 'txz', 'lzma', 'cab', 'cbz', 'cbr', 'zst', 'tzst']);
+const FILE_ACCEPT = '.pdf,.dwg,.ifc,.skp,.doc,.docx,.txt,.xls,.xlsx,.svg,.jpg,.jpeg,.png,.gif,.webp,.bmp,.zip,.rar,.7z,.tar,.gz';
 interface DwgState {
   zoom: number;
   measuring: boolean;
@@ -49,7 +52,9 @@ function extOf(name: string) {
 function kindOf(name: string): Kind | null {
   const ext = extOf(name);
   if (ext === 'docs') return 'docx';
-  if (ext === 'pdf' || ext === 'ifc' || ext === 'dwg' || ext === 'doc' || ext === 'docx' || ext === 'xls' || ext === 'xlsx') return ext;
+  if (ext === 'pdf' || ext === 'ifc' || ext === 'skp' || ext === 'dwg' || ext === 'doc' || ext === 'docx' || ext === 'txt' || ext === 'xls' || ext === 'xlsx' || ext === 'svg') return ext;
+  if (IMAGE_EXTS.has(ext)) return 'img';
+  if (ARCHIVE_EXTS.has(ext)) return 'zip';
   return null;
 }
 
@@ -145,22 +150,13 @@ export const Visualizador: React.FC = () => {
       return;
     }
     setBusy(true);
-    setNotice(tab.kind === 'dwg' ? 'Lendo DWG no dispositivo…' : tab.kind === 'doc' ? `Lendo ${tab.name}…` : `Abrindo ${tab.name}…`);
+    setNotice(tab.kind === 'dwg' ? 'Lendo DWG no dispositivo…' : `Abrindo ${tab.name}…`);
     setNoticeError(false);
     try {
-      if (OFFICE_KINDS.has(tab.kind)) {
-        setOfficeSource(tab.kind === 'doc' || tab.kind === 'xls' ? null : tab.file);
-        if (tab.kind === 'doc') {
-          const form = new FormData();
-          form.append('file', tab.file, tab.file.name);
-          const response = await api.post('/visualizador/doc', form, { timeout: 60000 });
-          setOfficeText(String(response.data?.text || ''));
-          setNotice('Arquivo .doc antigo: o texto abre, mas a formatação completa fica no .docx.');
-          setNoticeError(false);
-        } else {
-          setOfficeText('');
-          setNotice('');
-        }
+      if (EXCEL_KINDS.has(tab.kind)) {
+        setOfficeSource(tab.kind === 'xls' ? null : tab.file);
+        setOfficeText('');
+        setNotice('');
         viewer.blank?.();
         setActiveId(tab.id);
         return;
@@ -230,18 +226,18 @@ export const Visualizador: React.FC = () => {
     for (const file of incoming) {
       const kind = kindOf(file.name);
       if (!kind) {
-        setNotice('Escolha um PDF, DWG, IFC, Word ou Excel.');
+        setNotice('Escolha um PDF, DWG, IFC, SKP, Word, Excel, imagem ou compactado.');
         setNoticeError(true);
         continue;
       }
-      const limit = kind === 'ifc' ? IFC_LIMIT : kind === 'dwg' ? DWG_LIMIT : OFFICE_KINDS.has(kind) ? OFFICE_LIMIT : PDF_LIMIT;
+      const limit = kind === 'ifc' || kind === 'skp' ? IFC_LIMIT : kind === 'dwg' ? DWG_LIMIT : EXCEL_KINDS.has(kind) ? OFFICE_LIMIT : PDF_LIMIT;
       if (file.size > limit) {
-        const mb = kind === 'ifc' ? 300 : OFFICE_KINDS.has(kind) ? 30 : 100;
+        const mb = kind === 'ifc' || kind === 'skp' ? 1024 : EXCEL_KINDS.has(kind) ? 30 : 100;
         setNotice(`O limite para ${kind.toUpperCase()} é ${mb} MB.`);
         setNoticeError(true);
         continue;
       }
-      if (kind === 'ifc') {
+      if (kind === 'ifc' || kind === 'skp') {
         if (await addIfcModel(file)) stackedIfc = true;
         continue;
       }
@@ -300,9 +296,9 @@ export const Visualizador: React.FC = () => {
       {!active && !ifcActive && !busy && (
         <div className={`pointer-events-none absolute inset-0 z-[1] flex items-center justify-center p-6 text-center ${dragOver ? 'bg-[#E5192C]/15' : ''}`}>
           <div>
-            <p className="font-display text-lg font-bold text-[#edf5ef]">Abra um PDF, DWG, IFC, Word ou Excel</p>
+            <p className="font-display text-lg font-bold text-[#edf5ef]">Abra um PDF, DWG, IFC, SKP, Word ou Excel</p>
             <p className="mt-2 max-w-md text-sm text-[#b8cbb9]">
-              O DWG abre como desenho vetorial, com layers e medição. IFCs entram juntos, com cor, corte, nível e caminhar.
+              IFC e SKP entram juntos, com cor, corte, nível e caminhar. Word, imagem e compactado abrem no aparelho.
             </p>
           </div>
         </div>
@@ -356,7 +352,7 @@ export const Visualizador: React.FC = () => {
         <input
           ref={inputRef}
           type="file"
-          accept=".pdf,.dwg,.ifc,.doc,.docx,.xls,.xlsx,application/pdf"
+          accept={FILE_ACCEPT}
           multiple
           hidden
           onChange={(event) => {
@@ -372,11 +368,11 @@ export const Visualizador: React.FC = () => {
         </div>
       )}
 
-      {active && OFFICE_KINDS.has(active.kind) && (
-        <div className="absolute inset-0 z-[2] bg-white">
-          <OfficePreview file={officeSource || active.file} kind={active.kind as 'doc' | 'docx' | 'xls' | 'xlsx'} text={officeText} />
-        </div>
-      )}
+      {active && EXCEL_KINDS.has(active.kind) && (
+          <div className="absolute inset-0 z-[2] bg-white">
+            <OfficePreview file={officeSource || active.file} kind={active.kind as 'xls' | 'xlsx'} text={officeText} />
+          </div>
+        )}
 
       {busy && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/35 text-white">
@@ -408,22 +404,36 @@ export const Visualizador: React.FC = () => {
         </div>
       )}
 
-      {active?.kind === 'pdf' && (
+      {(active?.kind === 'img' || active?.kind === 'svg') && (
         <div className="absolute inset-x-0 bottom-0 z-20 flex flex-wrap items-center gap-2 bg-[#102c21]/95 px-3 py-2 text-[#edf5ef]">
           <button type="button" aria-label="Diminuir" onClick={() => viewerRef.current?.zoom(0.8)} className={iconBtn}><Minus size={16} /></button>
           <button type="button" aria-label="Aumentar" onClick={() => viewerRef.current?.zoom(1.25)} className={iconBtn}><Plus size={16} /></button>
           <button type="button" onClick={() => viewerRef.current?.fit()} className={toolBtn()}>Ajustar</button>
           <button type="button" aria-label="Girar" onClick={() => viewerRef.current?.rotate()} className={iconBtn}><RotateCw size={16} /></button>
-          <button
-            type="button"
-            aria-pressed={!!pdfState.measuring}
-            onClick={() => viewerRef.current?.toggleMeasure()}
-            className={toolBtn(!!pdfState.measuring)}
-          >
-            <Ruler size={16} />
-            Medir
-          </button>
-          {pdfState.measure ? <span className="text-xs font-semibold text-[#ffe49a]">{pdfState.measure}</span> : pdfState.measuring ? <span className="text-xs text-[#b8cbb9]">Toque em dois pontos.</span> : null}
+          <span className="text-xs text-[#b8cbb9]">{dwgState.zoom || 100}%</span>
+        </div>
+      )}
+
+      {(active?.kind === 'pdf' || (active && WORD_KINDS.has(active.kind))) && (
+        <div className="absolute inset-x-0 bottom-0 z-20 flex flex-wrap items-center gap-2 bg-[#102c21]/95 px-3 py-2 text-[#edf5ef]">
+          <button type="button" aria-label="Diminuir" onClick={() => viewerRef.current?.zoom(0.8)} className={iconBtn}><Minus size={16} /></button>
+          <button type="button" aria-label="Aumentar" onClick={() => viewerRef.current?.zoom(1.25)} className={iconBtn}><Plus size={16} /></button>
+          <button type="button" onClick={() => viewerRef.current?.fit()} className={toolBtn()}>Ajustar</button>
+          <button type="button" aria-label="Girar" onClick={() => viewerRef.current?.rotate()} className={iconBtn}><RotateCw size={16} /></button>
+          {active?.kind === 'pdf' && (
+            <>
+              <button
+                type="button"
+                aria-pressed={!!pdfState.measuring}
+                onClick={() => viewerRef.current?.toggleMeasure()}
+                className={toolBtn(!!pdfState.measuring)}
+              >
+                <Ruler size={16} />
+                Medir
+              </button>
+              {pdfState.measure ? <span className="text-xs font-semibold text-[#ffe49a]">{pdfState.measure}</span> : pdfState.measuring ? <span className="text-xs text-[#b8cbb9]">Toque em dois pontos.</span> : null}
+            </>
+          )}
           <span className="text-xs text-[#b8cbb9]">{pdfState.zoom || 100}%</span>
           <div className="flex items-center gap-1">
             <button type="button" aria-label="Página anterior" onClick={() => viewerRef.current?.go((pdfState.page || 1) - 1)} className="rounded-lg border border-[#355544] bg-[#16392c] px-2 py-1 text-sm">‹</button>
@@ -449,7 +459,7 @@ export const Visualizador: React.FC = () => {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar no PDF"
+              placeholder={active?.kind === 'pdf' ? 'Buscar no PDF' : 'Buscar no documento'}
               aria-label="Texto para buscar"
               className="w-full rounded-lg border border-[#355544] bg-[#0a2018] px-2 py-1 text-sm text-[#edf5ef] placeholder:text-[#81a384]"
             />

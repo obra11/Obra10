@@ -195,16 +195,27 @@ export class CrispCadRenderer extends CadCanvasRenderer {
     this.render();
   }
 
+  fitMargins(){
+    const panel=this.canvas.parentElement?.querySelector('#measure-panel:not([hidden])');
+    const edge=Math.min(24,Math.min(this.cssWidth,this.cssHeight)*.06);
+    const top=panel?Math.min(this.cssHeight*.3,panel.offsetTop+panel.offsetHeight+12):edge;
+    const bottom=edge,side=edge;
+    return {top,bottom,side,w:Math.max(1,this.cssWidth-2*side),h:Math.max(1,this.cssHeight-top-bottom)};
+  }
+  centerInView(){
+    const doc=this.getDocument();if(!doc||!this.view)return;
+    const b=drawingFitBounds(doc);
+    if(![b.minX,b.minY,b.maxX,b.maxY].every(Number.isFinite))return;
+    const {top,bottom}=this.fitMargins();
+    this.view={...this.view,centerX:b.minX+(b.maxX-b.minX)/2,centerY:b.minY+(b.maxY-b.minY)/2+(top-bottom)/(2*this.view.scale)};
+    this.render();this.emitViewChange();
+  }
   fitToView(padding=.96) {
     const doc=this.getDocument();
     if(!doc)return super.fitToView(padding,'extents');
     const b=drawingFitBounds(doc);
     if(![b.minX,b.minY,b.maxX,b.maxY].every(Number.isFinite))return super.fitToView(padding,'extents');
-    // Keep geometry clear of the view label and measurement readout.
-    const panel=this.canvas.parentElement?.querySelector('#measure-panel:not([hidden])');
-    const top=Math.min(this.cssHeight*.3,panel?panel.offsetTop+panel.offsetHeight+12:52);
-    const side=Math.min(24,this.cssWidth*.06),bottom=Math.min(24,this.cssHeight*.06);
-    const w=Math.max(1,this.cssWidth-2*side),h=Math.max(1,this.cssHeight-top-bottom);
+    const {top,bottom,w,h}=this.fitMargins();
     const scale=this.clampScale(Math.min(w/Math.max(b.maxX-b.minX,1e-9),h/Math.max(b.maxY-b.minY,1e-9))*padding);
     this.fitScale=scale;
     this.view={centerX:b.minX+(b.maxX-b.minX)/2,centerY:b.minY+(b.maxY-b.minY)/2+(top-bottom)/(2*scale),scale};

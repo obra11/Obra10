@@ -16,6 +16,8 @@
 .prumo-engine #pdf canvas{position:absolute;top:0;left:0;will-change:transform;backface-visibility:hidden;pointer-events:none;user-select:none}
 .prumo-engine #word{position:absolute;inset:0;background:#e9eef5}
 .prumo-engine #word iframe{width:100%;height:100%;border:0;display:block}
+.prumo-engine #drawing{position:absolute;inset:0;overflow:hidden}
+.prumo-engine #plan{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform;user-select:none;pointer-events:none}
 .prumo-engine #layers-dialog{max-width:540px;width:90%;max-height:85dvh;border:1px solid #536b48;border-radius:18px;background:#102c21;color:#edf2f6;padding:20px;box-shadow:0 24px 80px #0006}
 .prumo-engine #layers-dialog::backdrop{background:#030b16b8}
 .prumo-engine #layers-dialog h2{font-size:19px;margin:0}
@@ -47,6 +49,7 @@
 @media (max-height: 500px){
  #measure-loupe{inset: auto 8px 8px auto; width: 104px;}
 }
+#library-dialog .layer-heading{gap: 10px; flex-wrap: wrap;}
 #font-report{font-size: 11px;}
 #layers-open{background: rgb(23, 61, 45); border-color: rgb(73, 112, 86);}
 #layer-list{border-color: rgb(56, 86, 62);}
@@ -70,6 +73,8 @@
 #ifc-tab.collapsed #ifc-actions{display: none;}
 #ifc-tab.collapsed #ifc-tab-grip{min-width: 40px; min-height: 32px; border-color: rgb(224, 196, 109);}
 #ifc-actions{display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: auto; max-width: none; overflow: visible;}
+#ifc-walk{touch-action: none; user-select: none; cursor: grab;}
+#ifc-walk.steering{cursor: grabbing;}
 #ifc-rotate, #ifc-exit{display: none;}
 body.viewer-fullscreen #ifc-rotate, body.viewer-fullscreen #ifc-exit{display: block;}
 #ifc-hint{position: absolute; width: 1px; height: 1px; padding: 0px; margin: -1px; overflow: hidden; clip: rect(0px, 0px, 0px, 0px); border: 0px;}
@@ -100,11 +105,21 @@ body.viewer-fullscreen #ifc-tools{top: 54px; left: 14px; right: 14px;}
 .ifc-color-other{display: inline-flex; align-items: center; gap: 4px; color: rgb(217, 201, 138); font-size: 11px; cursor: pointer;}
 .ifc-model .ifc-model-name{flex: 1 1 0%; min-width: 0px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
 #ifc-loupe{position: absolute; z-index: 6; top: 170px; left: 14px; width: 168px; border: 2px solid rgb(255, 228, 154); border-radius: 14px; overflow: hidden; background: rgb(16, 38, 28); pointer-events: none; box-shadow: rgba(0, 0, 0, 0.533) 0px 8px 24px;}
-#ifc-cut-face, #ifc-cut-side, #ifc-cut-rotate, #ifc-cut-minus, #ifc-cut-plus{flex: 0 0 auto; min-height: 34px; padding: 6px 10px;}
+#ifc-cut-face, #ifc-cut-side, #ifc-cut-rotate, #ifc-cut-minus, #ifc-cut-plus, #ifc-cut-hatch{flex: 0 0 auto; min-height: 34px; padding: 6px 10px;}
 #ifc-cut-minus, #ifc-cut-plus{min-width: 34px; padding: 6px 0px; font-size: 18px; line-height: 1;}
 #ifc-cut-controls{width: auto; align-self: center;}
 #ifc-cut-value{min-width: 38px; text-align: center; color: rgb(255, 228, 154); font-weight: 650;}
-#ifc-name-tag{position: absolute; z-index: 6; max-width: min(260px, 100% - 16px); pointer-events: none; background: rgba(16, 47, 38, 0.96); border: 1px solid rgb(255, 228, 154); border-radius: 10px; padding: 7px 10px; box-shadow: rgba(0, 0, 0, 0.533) 0px 8px 22px;}
+#ifc-name-tag{position: absolute; z-index: 6; top: 64px; right: 10px; left: auto; width: min(320px, 100% - 20px); max-height: min(72vh, 560px); display: flex; flex-direction: column; pointer-events: auto; background: rgba(16, 47, 38, 0.96); border: 1px solid rgb(255, 228, 154); border-radius: 10px; padding: 10px 32px 10px 12px; box-shadow: rgba(0, 0, 0, 0.533) 0px 8px 22px;}
+#ifc-name-tag[hidden]{display: none !important;}
+#ifc-props{overflow: auto; flex: 1 1 0%; min-height: 0px; margin: 8px 0px 6px;}
+#ifc-props-list{display: flex; flex-direction: column; gap: 10px;}
+.ifc-props-empty{margin: 0px; color: rgb(197, 212, 200); font-size: 12px;}
+#ifc-name-tag #ifc-hide{margin-top: auto; align-self: flex-start;}
+#ifc-name-tag #ifc-name-tag-close{position: absolute; top: 2px; right: 2px; margin: 0px; min-width: 28px; width: 28px; padding: 0px; font-size: 18px; line-height: 1; border: 0px; background: transparent; color: rgb(255, 228, 154);}
+#ifc-name-tag #ifc-name-tag-close:hover{background: rgb(76, 53, 43); color: rgb(255, 240, 213);}
+@media (max-width: 760px){
+ #ifc-name-tag{top: 52px; width: min(280px, 100% - 16px); max-height: min(58vh, 420px); padding: 8px 30px 8px 10px;}
+}
 #ifc-selection, #ifc-origin-note{display: none !important;}
 #ifc-info{position: absolute; z-index: 5; left: 0px; right: 0px; bottom: 0px; display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 0.72fr); align-items: center; min-height: 36px; height: 36px; padding: 0px; background: rgba(12, 36, 28, 0.95); border-top: 1px solid rgba(183, 156, 81, 0.333); color: rgb(246, 237, 212); font-size: 12px; line-height: 1.2; pointer-events: auto;}
 #ifc-info-origin{min-width: 0px; padding: 0px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right;}
@@ -125,6 +140,8 @@ body.viewer-fullscreen #ifc-tools{top: 54px; left: 14px; right: 14px;}
 #capture-stage{position: relative; flex: 1 1 0%; min-height: 0px; display: grid; place-items: center; padding: 8px;}
 #capture-field{position: absolute; z-index: 2; min-width: 140px; max-width: 70%; padding: 4px 8px; border: 1px solid rgb(255, 90, 74); border-radius: 6px; background: rgba(16, 36, 28, 0.95); color: rgb(255, 90, 74); font: 600 16px sans-serif;}
 #capture-field[hidden]{display: none !important;}
+#capture-text-box{position: absolute; z-index: 3; border: 1.5px dashed rgb(255, 90, 74); box-shadow: rgba(16, 36, 28, 0.6) 0px 0px 0px 1px; pointer-events: auto; touch-action: none; cursor: move;}
+#capture-text-box[hidden]{display: none !important;}
  body.capture-focus #ifc-info, body.capture-focus #ifc-tab, body.capture-focus #ifc-tools, body.capture-focus #ifc-loupe, body.capture-focus #ifc-hidden-panel, body.capture-focus #ifc-storey-panel{display: none !important;}
 body.capture-focus #capture-select{background: transparent;}
 body.capture-focus #capture-cancel{top: 10px; right: 10px; bottom: auto;}
@@ -141,9 +158,25 @@ body.capture-focus #ifc-view-panel{display: none !important;}
 #ifc-info #ifc-measure-info{flex: 0 1 auto; min-width: 0px;}
 #capture-stage{grid-template: minmax(0px, 1fr) / minmax(0px, 1fr); overflow: hidden;}
 #capture-board{width: auto; height: auto; object-fit: contain;}
-#ifc-walk-pad{position: absolute; z-index: 6; right: 18px; bottom: 54px; width: 116px; height: 116px; border-radius: 50%; background: radial-gradient(circle, rgba(12, 36, 28, 0.333) 0px, rgba(12, 36, 28, 0.7) 70%); border: 2px solid rgba(224, 196, 109, 0.6); touch-action: none; pointer-events: auto; cursor: grab; box-shadow: rgba(0, 0, 0, 0.4) 0px 6px 18px;}
+#ifc-walk-pad{position: absolute; z-index: 6; left: 50%; right: auto; bottom: 54px; width: 116px; height: 116px; margin-left: -58px; border-radius: 50%; background: radial-gradient(circle, rgba(12, 36, 28, 0.333) 0px, rgba(12, 36, 28, 0.7) 70%); border: 2px solid rgba(224, 196, 109, 0.6); touch-action: none; pointer-events: auto; cursor: grab; box-shadow: rgba(0, 0, 0, 0.4) 0px 6px 18px;}
+#ifc-walk-pad.pad-moved{margin-left: 0px;}
+#ifc-walk-pad.pad-dragging{cursor: grabbing; opacity: 0.92;}
+#ifc-walk-pad.mouse-steer{border-color: rgb(255, 228, 154); box-shadow: rgba(255, 228, 154, 0.333) 0px 0px 0px 3px, rgba(0, 0, 0, 0.4) 0px 6px 18px; cursor: crosshair;}
 #ifc-walk-pad[hidden], #ifc-walk-info[hidden]{display: none !important;}
 #ifc-info #ifc-walk-info{display: flex; align-items: center; gap: 8px; height: 26px; flex: 0 1 auto; min-width: 0px;}
 #ifc-walk-text{min-width: 0px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgb(255, 228, 154);}
 body.capture-focus #ifc-walk-pad{display: none !important;}
 body.viewer-fullscreen.mode-3d #ifc-walk-pad{bottom: 18px;}
+html:not(.is-apk) #ifc-info{display: contents; position: static; height: auto; min-height: 0px; padding: 0px; background: transparent; border: 0px;}
+html:not(.is-apk) #ifc-info[hidden]{display: none !important;}
+html:not(.is-apk) #ifc-info-op{grid-area: 1 / 1; display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-start; gap: 12px; border: 0px; height: auto; min-height: 0px; padding: 0px; overflow: visible; width: max-content; max-width: none;}
+html:not(.is-apk) #ifc-info-origin{grid-area: 1 / 3; padding: 0px 0px 0px 12px; font-size: 16px;}
+html:not(.is-apk) #ifc-info-pick{max-width: 12em; font-size: 16px;}
+html:not(.is-apk) #ifc-walk-pad, html:not(.is-apk) body.viewer-fullscreen.mode-3d #ifc-walk-pad{bottom: 18px;}
+html:not(.is-apk) #ifc-cut-controls, html:not(.is-apk) #ifc-measure-info, html:not(.is-apk) #ifc-walk-info, html:not(.is-apk) #ifc-info #ifc-cut-controls, html:not(.is-apk) #ifc-info #ifc-measure-info, html:not(.is-apk) #ifc-info #ifc-walk-info{display: flex; flex: 0 0 auto; flex-wrap: nowrap; align-items: center; gap: 5px; height: 42px; min-height: 42px; width: max-content; min-width: max-content; padding: 4px 8px; border: 1px solid rgb(72, 96, 67); border-radius: 14px; background: rgb(20, 52, 37); box-shadow: rgba(0, 0, 0, 0.133) 0px 4px 14px; box-sizing: border-box;}
+html:not(.is-apk) #ifc-cut-minus, html:not(.is-apk) #ifc-cut-plus{min-width: 30px; padding: 0px; font-size: 20px;}
+html:not(.is-apk) #ifc-cut-value, html:not(.is-apk) #ifc-measure-result, html:not(.is-apk) #ifc-walk-text{flex: 0 0 auto; min-width: 0px; font-size: 15px; line-height: 1; overflow: visible; text-overflow: clip; white-space: nowrap;}
+html:not(.is-apk) #ifc-cut-controls::before, html:not(.is-apk) #ifc-measure-info::before{flex: 0 0 auto; padding: 0px 7px 0px 3px; margin-right: 1px; border-right: 1px solid rgb(73, 96, 68); color: rgb(200, 183, 117); font-size: 12px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; line-height: 1; white-space: nowrap;}
+html:not(.is-apk) #ifc-cut-controls::before{content: "Corte";}
+html:not(.is-apk) #ifc-measure-info::before{content: "Medir";}
+html.is-apk #ifc-info{position: absolute; left: 0px; right: 0px; bottom: 100%; z-index: 5;}

@@ -11,6 +11,8 @@ function visibleSceneBounds(T,root){
  return box.isEmpty()?new T.Box3().setFromObject(root):box;
 }
 export class IfcTools{
+ mark(a=''){const c=getComputedStyle(document.documentElement).getPropertyValue('--mark').trim()||'#ffe49a';return a?c+a:c;}
+ ink(){return getComputedStyle(document.documentElement).getPropertyValue('--ink').trim()||'#173c2d';}
  constructor(T,renderer,camera,controls,navigation,onChange){
   Object.assign(this,{T,renderer,camera,controls,navigation,onChange});this.ray=new T.Raycaster();this.active=false;this.measuring=false;
   this.bindParallel();
@@ -24,19 +26,23 @@ export class IfcTools{
   this.$('ifc-cut-minus').onclick=()=>nudge(-1);
   this.$('ifc-cut-plus').onclick=()=>nudge(1);
   this.$('ifc-cut-reset').onclick=()=>this.resetCut();
-  this.$('ifc-measure').onclick=()=>{this.measuring=!this.measuring;this.preview=null;this.down=null;this.lineTap=null;navigation.armFocus(false);this.sync();};
-  this.$('ifc-measure-clear').onclick=()=>{if(this.state)this.state.points=[];this.preview=null;this.down=null;this.aim=null;this.levelEnds=[];this.levelDrag=null;this.draw();};
-  this.level=false;this.levelEnds=[];this.levelDrag=null;this.$('ifc-measure-level').onclick=()=>{this.level=!this.level;this.$('ifc-measure-level').setAttribute('aria-pressed',String(this.level));if(this.state)this.state.points=[];this.preview=null;this.down=null;this.aim=null;this.lineTap=null;this.levelEnds=[];this.levelDrag=null;this.draw();this.sync();};
+  this.$('ifc-cut-hatch').onclick=()=>{if(!this.state?.cut)return;this.state.hatch=this.state.hatch===false;this.applyCut();};
+  this.$('ifc-measure').onclick=()=>{this.measuring=!this.measuring;this.preview=null;this.previewMeasure=null;this.down=null;this.lineTap=null;navigation.armFocus(false);this.sync();};
+  this.$('ifc-measure-clear').onclick=()=>{if(this.state){this.state.points=[];this.state.measures=[];this.state.levels=[];}this.preview=null;this.previewMeasure=null;this.down=null;this.aim=null;this.levelEnds=[];this.levelDrag=null;this.levelHover=null;this.draw();};
+  this.level=false;this.levelEnds=[];this.levelDrag=null;this.levelHover=null;this.levelHoverRaf=0;this.propToken=0;this.$('ifc-measure-level').onclick=()=>{this.level=!this.level;if(this.level)this.measuring=true;this.$('ifc-measure-level').setAttribute('aria-pressed',String(this.level));if(this.state)this.state.points=[];this.preview=null;this.previewMeasure=null;this.down=null;this.aim=null;this.lineTap=null;this.levelEnds=[];this.levelDrag=null;this.levelHover=null;this.draw();this.sync();};
   const canvas=renderer.domElement;
   this.navPointers=new Set();
-  canvas.addEventListener('pointerdown',e=>{if(!this.active||!this.measuring||e.button)return;if(this.down){e.preventDefault();e.stopImmediatePropagation();return;}const editing=this.navPointers.size?-1:this.tipAt(e.clientX,e.clientY,e.pointerType);if(editing<0){this.navPointers.add(e.pointerId);this.lineTap=!this.lineTap&&this.navPointers.size===1&&(this.level||this.lineAt(e.clientX,e.clientY,e.pointerType))?{id:e.pointerId,x:e.clientX,y:e.clientY}:null;if(this.aim){this.aim=null;this.draw();}return;}e.preventDefault();e.stopImmediatePropagation();this.down={id:e.pointerId,editing,x:e.clientX,y:e.clientY,moved:false};try{canvas.setPointerCapture(e.pointerId);}catch{}this.aimAt(e.clientX,e.clientY,editing>=0);},true);
+  canvas.addEventListener('pointerdown',e=>{if(!this.active||!this.measuring||e.button)return;if(this.down){e.preventDefault();e.stopImmediatePropagation();return;}const editing=this.navPointers.size?-1:this.tipAt(e.clientX,e.clientY,e.pointerType);if(editing<0){this.navPointers.add(e.pointerId);this.lineTap=!this.lineTap&&this.navPointers.size===1&&(this.level||(this.state?.points||[]).length===2||this.lineAt(e.clientX,e.clientY,e.pointerType))?{id:e.pointerId,x:e.clientX,y:e.clientY}:null;if(this.aim){this.aim=null;this.draw();}return;}e.preventDefault();e.stopImmediatePropagation();this.down={id:e.pointerId,editing,x:e.clientX,y:e.clientY,moved:false};try{canvas.setPointerCapture(e.pointerId);}catch{}this.aimAt(e.clientX,e.clientY,editing>=0);},true);
   canvas.addEventListener('pointermove',e=>{if(!this.active||!this.measuring||this.down?.id!==e.pointerId)return;e.preventDefault();e.stopImmediatePropagation();if(Math.hypot(e.clientX-this.down.x,e.clientY-this.down.y)>6)this.down.moved=true;this.aimAt(e.clientX,e.clientY,this.down.editing>=0);},true);
+  canvas.addEventListener('pointermove',e=>{if(!this.active||!this.measuring||!this.level||this.down||this.navPointers.size||e.buttons||e.pointerType==='touch')return;this.hoverLevel(e.clientX,e.clientY);});
   canvas.addEventListener('pointerup',e=>{if(!this.active||!this.measuring||this.down?.id!==e.pointerId)return;e.preventDefault();e.stopImmediatePropagation();const down=this.down;if(down.editing>=0)this.aimAt(e.clientX,e.clientY,true);
-   // Leg tips are 10 + leg index. A drag pins the tip to the face; a plain tap on a pinned tip lets the laser find the surface again.
-   if(down.editing>=10){const i=down.editing-10;if(down.moved&&this.levelDrag)this.levelEnds[i]=this.levelDrag.point;else if(!down.moved)this.levelEnds[i]=null;this.levelDrag=null;this.onChange?.();}
+   // Saved-level tips: 200 + level*6 + leg. Live laser tips: 10 + leg. Measure ends: 100 + pair*2 + end.
+   if(down.editing>=200){const li=(down.editing-200)/6|0,i=(down.editing-200)%6,lv=this.state?.levels?.[li];if(lv&&down.moved&&this.levelDrag)this.ensureLevelEnds(lv)[i]=this.levelDrag.point.slice();this.levelDrag=null;this.laserCache=null;this.onChange?.();}
+   else if(down.editing>=100){if(this.previewMeasure&&this.state?.measures){const {i,end,point}=this.previewMeasure;if(this.state.measures[i])this.state.measures[i][end]=point;}this.onChange?.();}
+   else if(down.editing>=10){const i=down.editing-10;if(down.moved&&this.levelDrag)this.levelEnds[i]=this.levelDrag.point;else if(!down.moved)this.levelEnds[i]=null;this.levelDrag=null;this.onChange?.();}
    else if(this.preview&&this.state){this.state.points=this.preview.map(p=>p.slice());if(this.level)this.levelEnds=[];}
-   this.preview=null;this.down=null;this.draw();},true);
-  for(const name of ['pointerup','pointercancel'])canvas.addEventListener(name,e=>{if(!this.navPointers.delete(e.pointerId))return;const tap=this.lineTap;if(tap?.id!==e.pointerId)return;this.lineTap=null;if(name==='pointerup'&&this.measuring&&this.state&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)<=8){if(this.level){this.placeLevel(e.clientX,e.clientY);return;}this.state.points=[];this.preview=null;this.aim=null;this.draw();this.sync();}},true);
+   this.preview=null;this.previewMeasure=null;this.down=null;this.draw();},true);
+  for(const name of ['pointerup','pointercancel'])canvas.addEventListener(name,e=>{if(!this.navPointers.delete(e.pointerId))return;const tap=this.lineTap;if(tap?.id!==e.pointerId)return;this.lineTap=null;if(name==='pointerup'&&this.measuring&&this.state&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)<=8){if(this.level){this.placeLevel(e.clientX,e.clientY);return;}if((this.state.points||[]).length===2){(this.state.measures??=[]).push(this.state.points.map(p=>p.slice()));this.state.points=[];}this.preview=null;this.aim=null;this.pick(e.clientX,e.clientY);this.sync();}},true);
   canvas.addEventListener('pointercancel',()=>{this.preview=null;this.down=null;this.levelDrag=null;this.draw();});
   canvas.addEventListener('dblclick',e=>{if(this.active&&this.measuring){e.preventDefault();e.stopImmediatePropagation();}},true);
   controls.addEventListener('change',()=>this.draw());
@@ -47,6 +53,7 @@ export class IfcTools{
   canvas.addEventListener('pointercancel',()=>{this.tap=null;});
   this.bindTabDrag();
   this.$('ifc-hide').onclick=e=>{e.stopPropagation();this.hideSelected();};
+  const closeTag=this.$('ifc-name-tag-close');if(closeTag)closeTag.onclick=e=>{e.preventDefault();e.stopPropagation();this.selectionHit=null;this.showSelection(null);};
   this.$('ifc-show-hidden').onclick=()=>this.toggleHiddenList();
   this.$('ifc-storeys').onclick=()=>this.toggleStoreys();
   this.$('ifc-views').onclick=()=>this.toggleViews();
@@ -55,12 +62,12 @@ export class IfcTools{
   document.addEventListener('pointerdown',e=>{const panel=this.$('ifc-hidden-panel');if(panel&&!panel.hidden&&!e.target.closest('#ifc-hidden-panel')&&!e.target.closest('#ifc-show-hidden')){panel.hidden=true;this.$('ifc-show-hidden').setAttribute('aria-expanded','false');}const storeys=this.$('ifc-storey-panel');if(storeys&&!storeys.hidden&&!e.target.closest('#ifc-storey-panel')&&!e.target.closest('#ifc-storeys')){storeys.hidden=true;this.$('ifc-storeys').setAttribute('aria-expanded','false');}if(!e.target.closest('#ifc-view-panel')&&!e.target.closest('#ifc-views'))this.toggleViews(false);});
  }
  setModel(group){
-  this.finishCutDrag();this.clearSection();this.hidden.clear();this.storeyKeys.clear();this.group=group;this.measuring=false;this.choosingFace=false;this.rotating=false;this.down=null;this.preview=null;this.tap=null;this.lineTap=null;this.navPointers.clear();this.selectionHit=null;this.showSelection(null);this.setParallel(null);this.laserCache=null;this.levelEnds=[];this.levelDrag=null;
+  this.finishCutDrag();this.clearSection();this.hidden.clear();this.lastHide=null;this.storeyKeys.clear();this.group=group;this.measuring=false;this.choosingFace=false;this.rotating=false;this.down=null;this.preview=null;this.previewMeasure=null;this.tap=null;this.lineTap=null;this.navPointers.clear();this.selectionHit=null;this.showSelection(null);this.setParallel(null);this.laserCache=null;this.levelEnds=[];this.levelDrag=null;this.levelHover=null;
   const storeys=this.$('ifc-storey-panel');if(storeys)storeys.hidden=true;this.$('ifc-storeys')?.setAttribute('aria-pressed','false');this.$('ifc-storeys')?.setAttribute('aria-expanded','false');this.toggleViews(false);
-  if(group){this.bounds=visibleSceneBounds(this.T,group);this.state=group.userData.prumoTools??={cut:false,axis:'y',position:50,reverse:false,points:[]};}else this.state=null;
+  if(group){this.bounds=visibleSceneBounds(this.T,group);this.state=group.userData.prumoTools??={cut:false,axis:'y',position:50,reverse:false,points:[],measures:[],levels:[],hatch:true};if(!this.state.measures)this.state.measures=[];if(!this.state.levels)this.state.levels=[];if(this.state.hatch==null)this.state.hatch=true;}else this.state=null;
   this.applyCut();this.syncHidden();
  }
- activate(active){if(!active){this.finishCutDrag();this.choosingFace=false;this.rotating=false;this.showSelection(null);}this.active=active;if(!active){this.measuring=false;this.down=null;this.preview=null;this.tap=null;this.lineTap=null;this.levelDrag=null;this.navPointers.clear();}this.applyCut();}
+ activate(active){if(!active){this.finishCutDrag();this.choosingFace=false;this.rotating=false;this.showSelection(null);}this.active=active;if(!active){this.measuring=false;this.down=null;this.preview=null;this.tap=null;this.lineTap=null;this.levelDrag=null;this.levelHover=null;this.navPointers.clear();}this.applyCut();}
  isVisible(point){if(!(this.active&&this.state?.cut&&this.planes?.length))return true;for(const plane of this.planes)if(plane.distanceToPoint(point)<-1e-4)return false;return true;}
  ensureBox(){
   const s=this.state;if(!s||s.box||!this.bounds||this.bounds.isEmpty())return;
@@ -94,7 +101,7 @@ export class IfcTools{
   if(!enabled){this.clearSection();this.sync();this.onChange();return;}
   this.updatePlanes();this.assignClip(true);
   const faces=this.cuttingFaces();
-  if(faces.length)this.buildSolidCaps(faces);
+  if(faces.length&&s.hatch!==false)this.buildSolidCaps(faces);
   else{this.faceKey='';this.clearSolidCaps();}
   this.sync();this.onChange();
  }
@@ -245,7 +252,7 @@ export class IfcTools{
  }
  sync(){
   if(this.measuring)this.$('ifc-hint').textContent=this.measureHint();else if(this.state?.cut){const keys=matchMedia('(pointer:fine)').matches;this.$('ifc-hint').textContent=this.rotating?'Arraste para girar a caixa.'+(keys?' As setas do teclado mudam o ângulo de 1 em 1°.':''):this.choosingFace?'Toque na face que alinha a caixa.':'Arraste um lado da caixa. Lado troca a face e Girar muda a direção.'+(keys?' Setas do teclado: ↑ → aumentam e ↓ ← diminuem o corte de 1 em 1%.':'');}else this.navigation.armFocus(false);
-  const s=this.state;this.$('ifc-cut').setAttribute('aria-pressed',String(!!s?.cut));this.$('ifc-measure').setAttribute('aria-pressed',String(this.measuring));this.$('ifc-cut-face').setAttribute('aria-pressed',String(!!this.choosingFace));this.$('ifc-cut-rotate')?.setAttribute('aria-pressed',String(!!this.rotating));
+  const s=this.state;this.$('ifc-cut').setAttribute('aria-pressed',String(!!s?.cut));this.$('ifc-measure').setAttribute('aria-pressed',String(this.measuring));this.$('ifc-measure-level')?.setAttribute('aria-pressed',String(!!this.level));this.$('ifc-cut-face').setAttribute('aria-pressed',String(!!this.choosingFace));this.$('ifc-cut-rotate')?.setAttribute('aria-pressed',String(!!this.rotating));this.$('ifc-cut-hatch')?.setAttribute('aria-pressed',String(s?.hatch!==false));
   this.$('ifc-cut-controls').hidden=!s?.cut;
   const reset=this.$('ifc-cut-reset');if(reset){reset.hidden=!s?.cut;reset.disabled=!this.cutIsModified();}
   this.cutHandle.title=this.rotating?'↑ → aumentam e ↓ ← diminuem o ângulo · Shift muda de 10 em 10':'↑ → aumentam e ↓ ← diminuem o corte · Shift muda de 10 em 10';
@@ -270,6 +277,7 @@ export class IfcTools{
   this.cutHandle.addEventListener('pointerdown',start);this.cutHandle.addEventListener('pointermove',move);
   for(const name of ['pointerup','pointercancel','lostpointercapture'])this.cutHandle.addEventListener(name,e=>{if(this.cutDrag?.id===e.pointerId){e.stopPropagation();this.finishCutDrag();}});
   this.cutHandle.addEventListener('dblclick',e=>{e.preventDefault();e.stopPropagation();});
+  document.addEventListener('keydown',e=>this.cancelCommand(e),true);
   document.addEventListener('keydown',e=>this.cutKey(e));
   const canvas=this.renderer.domElement;
   canvas.addEventListener('pointerdown',e=>{
@@ -280,6 +288,31 @@ export class IfcTools{
   },true);
   canvas.addEventListener('pointermove',move,true);
   for(const name of ['pointerup','pointercancel'])canvas.addEventListener(name,e=>{if(this.cutDrag?.id===e.pointerId&&this.cutDrag.element===canvas){e.stopPropagation();this.finishCutDrag();}},true);
+ }
+ pauseMeasure(){
+  if(this.state?.points?.length===2)(this.state.measures??=[]).push(this.state.points.map(p=>p.slice()));
+  if(this.state)this.state.points=[];
+  this.measuring=false;this.level=false;this.down=null;this.preview=null;this.previewMeasure=null;this.aim=null;this.lineTap=null;this.levelEnds=[];this.levelDrag=null;this.levelHover=null;
+  this.sync();
+ }
+ cancelCommand(e){
+  if(e.key!=='Escape'||e.ctrlKey||e.metaKey||e.altKey||e.repeat)return false;
+  if(e.target?.closest?.('input,textarea,select,[contenteditable="true"]'))return false;
+  if(this.$('capture-select')?.hidden===false||this.$('capture-editor')?.hidden===false)return false;
+  if(this.$('app-menu-panel')?.hidden===false)return false;
+  if(!this.active)return false;
+  const done=()=>{e.preventDefault();e.stopPropagation();return true;};
+  if(this.cutDrag){this.finishCutDrag();return done();}
+  if(this.measuring||this.level){this.pauseMeasure();return done();}
+  if(this.aim){this.aim=null;this.draw();return done();}
+  if(this.choosingFace||this.rotating){this.choosingFace=false;this.rotating=false;this.sync();return done();}
+  if(this.navigation?.focusArmed){this.navigation.armFocus(false);this.$('ifc-focus')?.setAttribute('aria-pressed','false');return done();}
+  if(this.selectionHit||this.$('ifc-name-tag')?.hidden===false){this.selectionHit=null;this.showSelection(null);return done();}
+  if(this.lastHide&&this.hidden.has(this.lastHide)){this.showOne(this.lastHide);return done();}
+  const storeys=this.$('ifc-storey-panel');if(storeys&&!storeys.hidden){storeys.hidden=true;this.$('ifc-storeys')?.setAttribute('aria-expanded','false');return done();}
+  const hidden=this.$('ifc-hidden-panel');if(hidden&&!hidden.hidden){hidden.hidden=true;this.$('ifc-show-hidden')?.setAttribute('aria-expanded','false');return done();}
+  const views=this.$('ifc-view-panel');if(views&&!views.hidden){this.toggleViews(false);return done();}
+  return false;
  }
  cutKey(e){
   if(!this.active||!this.state?.cut||this.cutDrag||e.ctrlKey||e.metaKey||e.altKey||!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
@@ -330,7 +363,7 @@ export class IfcTools{
   for(const [a,b] of edges){
    const shared=cornerFaces(a).filter(f=>cornerFaces(b).includes(f));
    if(!shared.some(f=>faceInfo[f].facesCam))continue;
-   const pa=projected[a],pb=projected[b];if(pa.z<-1||pa.z>1||pb.z<-1||pb.z>1)continue;add('line',{x1:pa.x,y1:pa.y,x2:pb.x,y2:pb.y,stroke:'#ffe49a','stroke-width':2});
+   const pa=projected[a],pb=projected[b];if(pa.z<-1||pa.z>1||pb.z<-1||pb.z>1)continue;add('line',{x1:pa.x,y1:pa.y,x2:pb.x,y2:pb.y,stroke:this.mark(),'stroke-width':2});
   }
   const face=box.face??5,axis=face>>1,sign=face%2?1:-1,reach=(face%2?box.base[axis]*box.high[axis]:box.base[axis]*box.low[axis]);
   const outward=axes[axis].clone().multiplyScalar(sign),faceCenter=center.clone().addScaledVector(outward,reach);
@@ -342,7 +375,7 @@ export class IfcTools{
    if(!faceInfo[side].facesCam)continue;
    const at=screen(faceInfo[side].point);
    if(at.z<-1||at.z>1)continue;this.faceHits.push({face:side,x:at.x,y:at.y});
-   if(side!==face)add('circle',{cx:at.x,cy:at.y,r:5,fill:'#ffe49a',stroke:'#173c2d','stroke-width':1});
+   if(side!==face)add('circle',{cx:at.x,cy:at.y,r:5,fill:this.mark(),stroke:this.ink(),'stroke-width':1});
   }
   const x=Number.isFinite(middle.x)?Math.max(28,Math.min(r.width-28,middle.x)):r.width/2,y=Number.isFinite(middle.y)?Math.max(28,Math.min(r.height-48,middle.y)):r.height/2;
   this.cutHandle.style.left=x+'px';this.cutHandle.style.top=y+'px';
@@ -378,17 +411,27 @@ export class IfcTools{
   });
  }
  tipAt(x,y,pointerType){
-  const points=this.state?.points||[];if(!points.length)return 0;
+  const points=this.state?.points||[];
   this.camera.updateMatrixWorld();const rect=this.renderer.domElement.getBoundingClientRect();let nearest=-1,limit=pointerType==='touch'?48:26;
   const near=(point,i)=>{const s=this.screenOf(point,rect);if(!s.ok)return;const d=Math.hypot(s.x-x,s.y-y);if(d<=limit){nearest=i;limit=d;}};
   points.forEach((point,i)=>near(new this.T.Vector3().fromArray(point),i));
-  if(this.level&&points.length===1)this.laser(points[0]).forEach((leg,i)=>{const tip=this.legTip(leg);if(tip)near(tip,10+i);});
+  (this.state?.measures||[]).forEach((pair,i)=>pair.forEach((point,j)=>near(new this.T.Vector3().fromArray(point),100+i*2+j)));
+  if(this.level){
+   (this.state?.levels||[]).forEach((lv,li)=>this.laser(lv.point).forEach((leg,i)=>{const tip=this.legGrabTip(leg);if(tip)near(tip,200+li*6+i);}));
+   if(points.length===1)this.laser(points[0]).forEach((leg,i)=>{const tip=this.legGrabTip(leg);if(tip)near(tip,10+i);});
+  }
   return nearest>=0?nearest:points.length<2&&!this.level?points.length:-1;
  }
+ ensureLevelEnds(lv){
+  if(!lv.ends||lv.ends.length!==6)lv.ends=Array.from({length:6},(_,i)=>lv.ends?.[i]||null);
+  return lv.ends;
+ }
  legTip(leg){return leg.target||(leg.to&&leg.cm>=1?leg.to:null);}
+ legGrabTip(leg){return this.legTip(leg)||(leg.from&&leg.dir?leg.from.clone().addScaledVector(leg.dir,.45):null);}
  lineAt(x,y,pointerType){
   const points=this.state?.points||[];
-  const segments=this.level?(points.length===1?this.laser(points[0]).filter(l=>l.to).map(l=>[l.from,l.to]):[]):points.length===2?[points.map(p=>new this.T.Vector3().fromArray(p))]:[];
+  const pairs=(this.state?.measures||[]).concat(points.length===2?[points]:[]);
+  const segments=this.level?(points.length===1?this.laser(points[0]).filter(l=>l.to).map(l=>[l.from,l.to]):[]):pairs.filter(p=>p.length===2).map(p=>p.map(pt=>new this.T.Vector3().fromArray(pt)));
   this.camera.updateMatrixWorld();const rect=this.renderer.domElement.getBoundingClientRect(),limit=pointerType==='touch'?22:10;
   return segments.some(([pa,pb])=>{
    const a=this.screenOf(pa,rect),b=this.screenOf(pb,rect);if(!a.ok||!b.ok)return false;
@@ -397,26 +440,104 @@ export class IfcTools{
   });
  }
  measureHint(){
-  if(this.level)return this.state?.points.length?'Arraste a ponta de uma linha até outra face para medir até ela. Toque em qualquer face para mudar o nível.':'Nível: toque em qualquer face. Ele mede até as superfícies em X, Y e Z.';
-  return (this.state?.points.length||0)===2?'Arraste o modelo para girar. Arraste uma ponta para ajustar ou toque na linha da medida para medir de novo.':'O ponto prende na linha da face. Perto do esquadro com o outro ponto, a ponta trava em ⊥ e mede reto.';
+  if(this.level){const n=this.state?.levels?.length||0;return this.levelHover||n?'Toque para gravar. Arraste a ponta de um nível gravado até outra face, em perpendicular. ESC desliga e mantém o que já foi lançado.'+(n?` ${n} gravado${n>1?'s':''}.`:''):'Nível: passe o mouse na face ou na quina. Toque para gravar. ESC desliga a ferramenta sem apagar os níveis.';}
+  return (this.state?.points.length||0)===2?'Arraste o modelo para girar. Arraste uma ponta para ajustar. Toque em outra face para lançar mais uma cota.':'O ponto prende na linha da face. Perto do esquadro com o outro ponto, a ponta trava em ⊥ e mede reto.';
  }
  pick(x,y){
   const hit=this.hitAt(x,y);
   if(!hit){this.$('ifc-measure-result').textContent='Toque em uma superfície visível do modelo.';return;}
   const snap=this.snapFeature(hit,x,y);
-  if(this.state.points.length===2)this.state.points=[];this.state.points.push(snap.point.toArray());this.draw();
+  if(this.state.points.length===2){(this.state.measures??=[]).push(this.state.points.map(p=>p.slice()));this.state.points=[];}this.state.points.push(snap.point.toArray());this.draw();
  }
  placeLevel(x,y){
   const hit=this.hitAt(x,y);if(!hit||!this.state)return;
-  this.state.points=[hit.point.toArray()];this.levelEnds=[];this.preview=null;this.aim=null;this.draw();this.sync();this.onChange?.();
+  const snap=this.levelSnap(hit,x,y),point=snap.point.toArray(),saved=this.state.levels??=[];
+  const last=saved[saved.length-1];
+  if(last&&Math.hypot(point[0]-last.point[0],point[1]-last.point[1],point[2]-last.point[2])<1e-3)return;
+  const kind=snap.corner?'quina':'face',corner=snap.corner?this.cornerAxisEnds(hit,snap.point):null,key=this.instanceKey(hit.object,hit.instanceId);
+  const ends=Array.from({length:6},(_,i)=>corner?.[i]||null);
+  saved.push({point,kind,ends,key});this.levelEnds=[];this.preview=null;this.aim=null;
+  this.levelHover=point;this.levelHoverKind=kind;this.levelHoverEnds=ends;this.levelHoverKey=key;
+  this.draw();this.sync();this.onChange?.();
+ }
+ hoverLevel(x,y){
+  this._hoverXY=[x,y];
+  if(this.levelHoverRaf)return;
+  this.levelHoverRaf=requestAnimationFrame(()=>{
+   this.levelHoverRaf=0;const xy=this._hoverXY;if(!xy||!this.level||!this.measuring||this.down||this.navPointers.size)return;
+   const hit=this.hitAt(xy[0],xy[1]);if(!hit)return;
+   const snap=this.levelSnap(hit,xy[0],xy[1]);
+   this.levelHover=snap.point.toArray();this.levelHoverKind=snap.corner?'quina':'face';
+   this.levelHoverEnds=snap.corner?this.cornerAxisEnds(hit,snap.point):null;
+   this.levelHoverKey=snap.corner?this.instanceKey(hit.object,hit.instanceId):null;
+   this.aim={point:snap.point.clone(),kind:this.levelHoverKind,edge:snap.edge,faceLines:snap.faceLines,finger:{x:xy[0],y:xy[1]}};
+   this.draw();
+  });
+ }
+ levelSnap(hit,x,y){
+  const snap=this.snapFeature(hit,x,y);
+  if(snap.corner&&snap.point.distanceTo(hit.point)<=0.2)return snap;
+  return {point:hit.point.clone(),kind:'face',faceLines:snap.faceLines};
+ }
+ samePoint(a,b){return a&&b&&Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2])<1e-3;}
+ cornerEndsFor(point){
+  if(this.levelHoverKind==='quina'&&this.samePoint(this.levelHover,point))return this.levelHoverEnds;
+  return (this.state?.levels||[]).find(lv=>lv.kind==='quina'&&this.samePoint(lv.point,point))?.ends||null;
+ }
+ cornerKeyFor(point){
+  if(this.levelHoverKind==='quina'&&this.samePoint(this.levelHover,point))return this.levelHoverKey;
+  return (this.state?.levels||[]).find(lv=>lv.kind==='quina'&&this.samePoint(lv.point,point))?.key||null;
+ }
+ // From a snapped vertex, walk each crease to the far corner and keep the longest run on X, Y and Z.
+ cornerAxisEnds(hit,worldPoint){
+  const data=this.featureData(this.pieceGeometry(hit.object,hit.instanceId));if(!data?.corners?.length)return null;
+  const T=this.T,matrix=this.meshMatrix(hit).clone(),tmp=this._wa||(this._wa=new T.Vector3());
+  let bestId=-1,bestD=0.08;
+  for(const id of data.corners){tmp.fromArray(data.points[id]).applyMatrix4(matrix);const d=tmp.distanceTo(worldPoint);if(d<bestD){bestD=d;bestId=id;}}
+  if(bestId<0)return null;
+  const adj=data.links||(data.links=(()=>{const m=new Map();for(const [a,b] of data.edges||[]){if(!m.has(a))m.set(a,[]);if(!m.has(b))m.set(b,[]);m.get(a).push(b);m.get(b).push(a);}return m;})());
+  const dirs=[[1,0,0],[-1,0,0],[0,0,-1],[0,0,1],[0,1,0],[0,-1,0]],ends=Array(6).fill(null);
+  const walk=(from,next)=>{
+   let prev=from,cur=next;const a=data.points[from],b=data.points[next];
+   let dx=b[0]-a[0],dy=b[1]-a[1],dz=b[2]-a[2];const len=Math.hypot(dx,dy,dz)||1;dx/=len;dy/=len;dz/=len;
+   const seen=new Set([from]);
+   while(!seen.has(cur)){
+    seen.add(cur);
+    let chosen=-1;
+    for(const n of adj.get(cur)||[]){
+     if(n===prev)continue;const p=data.points[cur],q=data.points[n];
+     let ux=q[0]-p[0],uy=q[1]-p[1],uz=q[2]-p[2];const L=Math.hypot(ux,uy,uz)||1;
+     if((ux*dx+uy*dy+uz*dz)/L>0.985){chosen=n;break;}
+    }
+    if(chosen<0)return cur;prev=cur;cur=chosen;
+   }
+   return cur;
+  };
+  for(const nb of adj.get(bestId)||[]){
+   const end=new T.Vector3().fromArray(data.points[walk(bestId,nb)]).applyMatrix4(matrix);
+   const vx=end.x-worldPoint.x,vy=end.y-worldPoint.y,vz=end.z-worldPoint.z,span=Math.hypot(vx,vy,vz);
+   if(span<1e-4)continue;
+   let slot=-1,dot=0.85*span;
+   dirs.forEach((d,i)=>{const v=vx*d[0]+vy*d[1]+vz*d[2];if(v>dot){dot=v;slot=i;}});
+   if(slot<0)continue;
+   const cur=ends[slot];if(!cur||span>Math.hypot(cur[0]-worldPoint.x,cur[1]-worldPoint.y,cur[2]-worldPoint.z))ends[slot]=end.toArray();
+  }
+  return ends.some(Boolean)?ends:null;
  }
  aimAt(x,y,live=false){
   const hit=this.hitAt(x,y);if(!hit){if(!live){this.aim=null;this.paintLoupe();}return;}
-  // The level sits exactly where the face was touched; snapping to an edge would graze the neighbouring faces.
-  const snap=this.level?{point:hit.point.clone(),kind:'face'}:this.snapFeature(hit,x,y,live?this.fixedEnd():null);
+  const edit=this.down?.editing??-1;
+  let snap;
+  if(this.level&&live&&edit>=200){
+   const origin=this.state?.levels?.[(edit-200)/6|0]?.point;
+   snap=this.snapFeature(hit,x,y,origin?new this.T.Vector3().fromArray(origin):null);
+  }else if(this.level)snap=this.levelSnap(hit,x,y);
+  else snap=this.snapFeature(hit,x,y,live?this.fixedEnd():null);
   this.aim={point:snap.point,kind:snap.kind,edge:snap.edge,perpDir:snap.perpDir,faceLines:snap.faceLines,finger:{x,y}};
-  if(live&&this.down?.editing>=10){if(this.down.moved)this.levelDrag={index:this.down.editing-10,point:snap.point.toArray()};}
-  else if(live&&this.down&&this.down.editing>=0&&this.down.editing<=(this.state?.points.length||0)){const pts=(this.state?.points||[]).map(p=>p.slice());pts[this.down.editing]=snap.point.toArray();this.preview=pts;}
+  if(live&&edit>=200){if(this.down.moved)this.levelDrag={level:(edit-200)/6|0,index:(edit-200)%6,point:snap.point.toArray()};}
+  else if(live&&edit>=100){this.previewMeasure={i:(edit-100)>>1,end:(edit-100)&1,point:snap.point.toArray()};}
+  else if(live&&edit>=10){if(this.down.moved)this.levelDrag={index:edit-10,point:snap.point.toArray()};}
+  else if(live&&this.down&&edit>=0&&edit<=(this.state?.points.length||0)){const pts=(this.state?.points||[]).map(p=>p.slice());pts[edit]=snap.point.toArray();this.preview=pts;}
   this.draw();this.onChange?.();
  }
  hitAt(x,y){
@@ -455,7 +576,7 @@ export class IfcTools{
    const la=Math.hypot(ax,ay,az)||1,lb=Math.hypot(bx,by,bz)||1,dot=(ax*bx+ay*by+az*bz)/(la*lb);
    if(dot>-0.985)corners.push(id);
   }
-  return geometry.userData.prumoFeatures={points,edges:feature,corners};
+  return geometry.userData.prumoFeatures={points,edges:feature,corners,links};
  }
  meshMatrix(hit){return this.pieceMatrix(hit.object,hit.instanceId,this._meshMatrix||(this._meshMatrix=new this.T.Matrix4()));}
  pieceCount(mesh){return mesh.isBatchedMesh?mesh.userData.ifcIds?.length??0:mesh.isInstancedMesh?mesh.count:1;}
@@ -488,7 +609,9 @@ export class IfcTools{
   out.copy(a).addScaledVector(v,t);return t;
  }
  fixedEnd(){
-  const d=this.down,points=this.state?.points||[];if(!d||d.editing<0||d.editing>1||(d.editing===0&&points.length<2))return null;
+  const d=this.down,points=this.state?.points||[];if(!d||d.editing<0)return null;
+  if(d.editing>=100){const pair=(this.state?.measures||[])[(d.editing-100)>>1],other=pair?.[1-((d.editing-100)&1)];return other?new this.T.Vector3().fromArray(other):null;}
+  if(d.editing>1||(d.editing===0&&points.length<2))return null;
   const other=points[1-d.editing];return other?new this.T.Vector3().fromArray(other):null;
  }
  samePiece(point,normal,hit){
@@ -497,7 +620,7 @@ export class IfcTools{
  }
  snapFeature(hit,x,y,fixed=null){
   const data=this.featureData(this.pieceGeometry(hit.object,hit.instanceId));
-  if(!data)return {point:hit.point.clone(),kind:'quina'};
+  if(!data)return {point:hit.point.clone(),kind:'face'};
   const matrix=this.meshMatrix(hit),rect=this.renderer.domElement.getBoundingClientRect(),T=this.T;
   const wa=this._wa||(this._wa=new T.Vector3()),wb=this._wb||(this._wb=new T.Vector3());
   const world=id=>wa.fromArray(data.points[id]).applyMatrix4(matrix);
@@ -539,11 +662,11 @@ export class IfcTools{
    }
    if(perp&&perpD<=36&&(!cornerOk||perpD<=bestCd+12))return pack(perp);
   }
-  if(cornerOk&&(!edgeOk||bestCd-bias<=bestEd))return pack({point:bestC,kind:'quina'});
+  if(cornerOk&&(!edgeOk||bestCd-bias<=bestEd))return pack({point:bestC,kind:'quina',corner:true});
   if(edgeOk)return pack({point:bestE,kind:'aresta',edge:bestEdge.slice(0,2)});
   if(bestC)return pack({point:bestC,kind:'quina'});
   if(bestE)return pack({point:bestE,kind:'aresta',edge:bestEdge.slice(0,2)});
-  return pack({point:hit.point.clone(),kind:'quina'});
+  return pack({point:hit.point.clone(),kind:'face'});
  }
  pickCutFace(x,y){
   const hit=this.hitAt(x,y);if(!hit?.face||!this.state)return false;
@@ -598,22 +721,29 @@ export class IfcTools{
   const cropX=(fx-host.left)*ratio,cropY=(fy-host.top)*ratio,zoom=4,size=c.width/zoom;
   ctx.imageSmoothingEnabled=false;ctx.fillStyle='#10261c';ctx.fillRect(0,0,c.width,c.height);
   if(this.shotReady)ctx.drawImage(this.shot,cropX-size/2,cropY-size/2,size,size,0,0,c.width,c.height);
-  ctx.strokeStyle='#ffe49a';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(c.width/2-18,c.height/2);ctx.lineTo(c.width/2+18,c.height/2);ctx.moveTo(c.width/2,c.height/2-18);ctx.lineTo(c.width/2,c.height/2+18);ctx.stroke();ctx.strokeRect(c.width/2-8,c.height/2-8,16,16);
+  ctx.strokeStyle=this.mark();ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(c.width/2-18,c.height/2);ctx.lineTo(c.width/2+18,c.height/2);ctx.moveTo(c.width/2,c.height/2-18);ctx.lineTo(c.width/2,c.height/2+18);ctx.stroke();ctx.strokeRect(c.width/2-8,c.height/2-8,16,16);
   this.$('ifc-loupe-label').textContent=this.measureLabel();
  }
  measureLabel(){
   const points=this.preview||this.state?.points||[];
-  if(this.level){if(this.levelDrag&&points.length===1){const leg=this.laser(points[0])[this.levelDrag.index];return leg.axis+' '+this.cm(leg.cm)+' cm';}return points.length?'Ponto do nível':'Toque o ponto do nível';}
-  if(points.length<2)return points.length?'2º ponto':'1º ponto';
-  const cm=new this.T.Vector3().fromArray(points[0]).distanceTo(new this.T.Vector3().fromArray(points[1]))*100;
-  return (this.down&&this.aim?.kind==='perp'?'⊥ ':'')+this.cm(cm)+' cm';
+  if(this.level){if(this.levelDrag){const src=this.levelDrag.level!=null?this.state?.levels?.[this.levelDrag.level]?.point:points[0];if(src){const leg=this.laser(src)[this.levelDrag.index];if(leg)return leg.axis+' '+this.cm(leg.cm)+' cm';}}const n=this.state?.levels?.length||0;return this.levelHover?(this.levelHoverKind==='quina'?'Quina · até o fim':'Vão completo')+(n?` · ${n} gravado${n>1?'s':''}`:''):n?`${n} nível${n>1?'s':''} gravado${n>1?'s':''}. Arraste uma ponta até outra face, em perpendicular.`:'Passe o mouse na face ou na quina';}
+  const pair=this.previewMeasure&&this.state?.measures?.[this.previewMeasure.i]?this.state.measures[this.previewMeasure.i].map((p,j)=>j===this.previewMeasure.end?this.previewMeasure.point:p):points;
+  if(pair.length<2)return pair.length?'2º ponto':'1º ponto';
+  const cm=new this.T.Vector3().fromArray(pair[0]).distanceTo(new this.T.Vector3().fromArray(pair[1]))*100,n=(this.state?.measures||[]).length+(points.length===2?1:0);
+  return (this.down&&this.aim?.kind==='perp'?'⊥ ':'')+this.cm(cm)+' cm'+(n>1?' · '+n+' cotas':'');
  }
  cm(value){return value.toLocaleString('pt-BR',{maximumFractionDigits:2});}
  // Scene Y is up: IFC X = x, IFC Y = -z and IFC Z (height) = y. Colors follow the origin axes.
  // A tip dragged to another face measures along the same axis up to that face's point.
- laser(point){
-  const ends=this.preview?[]:this.levelEnds.slice(0,6);if(this.levelDrag)ends[this.levelDrag.index]=this.levelDrag.point;
-  const key=point.join()+'|'+JSON.stringify(this.state?.cut?this.state.box:null)+'|'+this.hidden.size+'|'+JSON.stringify(ends);
+ laser(point,live=false){
+  const rec=(this.state?.levels||[]).find(lv=>this.samePoint(lv.point,point));
+  const li=rec?this.state.levels.indexOf(rec):-1;
+  const stored=rec?.ends||(!rec&&this.cornerEndsFor(point))||[];
+  const ends=Array.from({length:6},(_,i)=>stored[i]||null);
+  if(this.levelDrag&&this.down?.moved&&this.levelDrag.level===li)ends[this.levelDrag.index]=this.levelDrag.point;
+  else if(li<0&&!(live||this.preview)){this.levelEnds.forEach((e,i)=>{if(e)ends[i]=e;});if(this.levelDrag)ends[this.levelDrag.index]=this.levelDrag.point;}
+  const skipKey=this.cornerKeyFor(point);
+  const key=point.join()+'|'+JSON.stringify(this.state?.cut?this.state.box:null)+'|'+this.hidden.size+'|'+JSON.stringify(ends)+'|'+(skipKey||'');
   if(this.laserCache?.key===key)return this.laserCache.legs;
   const T=this.T,p=new T.Vector3().fromArray(point);this.group?.updateMatrixWorld(true);
   // Start a hair off the picked face, toward the camera, so the face itself reads as 0 on its own side.
@@ -621,70 +751,116 @@ export class IfcTools{
   const colors={X:'#ff6b5e',Y:'#5eb4ff',Z:'#7ee06d'};
   const legs=[['X',[1,0,0]],['X',[-1,0,0]],['Y',[0,0,-1]],['Y',[0,0,1]],['Z',[0,1,0]],['Z',[0,-1,0]]].map(([axis,v],i)=>{
    const dir=new T.Vector3(...v);
-   if(ends[i]){const target=new T.Vector3().fromArray(ends[i]),cm=Math.max(0,target.clone().sub(p).dot(dir))*100;return {axis,color:colors[axis],from:p,to:p.clone().addScaledVector(dir,cm/100),cm,target};}
-   const hit=this.castRay(origin,dir),to=hit?.point.clone()||null;
-   return {axis,color:colors[axis],from:p,to,cm:to?Math.max(0,to.clone().sub(p).dot(dir))*100:null};
+   if(ends[i]){const target=new T.Vector3().fromArray(ends[i]),cm=Math.max(0,target.clone().sub(p).dot(dir))*100;return {axis,color:colors[axis],from:p,to:p.clone().addScaledVector(dir,cm/100),cm,target,solid:true,dir};}
+   const hit=this.castRay(origin,dir,{skipKey,minDist:skipKey?0.03:0}),to=hit?.point.clone()||null;
+   return {axis,color:colors[axis],from:p,to,cm:to?Math.max(0,to.clone().sub(p).dot(dir))*100:null,dir};
   });
   this.laserCache={key,legs};return legs;
  }
- castRay(origin,dir){
+ castRay(origin,dir,opts){
   if(!this.group)return null;this.ray.set(origin,dir);
   const hits=this.ray.intersectObject(this.group,true);for(const cap of this.capMeshes||[])hits.push(...this.ray.intersectObject(cap,false));
   if(hits.length>1)hits.sort((a,b)=>a.distance-b.distance);
-  return hits.find(h=>!h.object.userData?.prumoSection&&!h.object.isLine&&!this.isHiddenHit(h)&&this.isVisible(h.point))||null;
+  const minDist=opts?.minDist||0,skipKey=opts?.skipKey;
+  return hits.find(h=>{
+   if(h.object.userData?.prumoSection||h.object.isLine||this.isHiddenHit(h)||!this.isVisible(h.point))return false;
+   if(minDist&&h.distance<minDist)return false;
+   if(skipKey&&this.instanceKey(h.object,h.instanceId??0)===skipKey)return false;
+   return true;
+  })||null;
  }
  // A side with no surface leaves the axis open: its total is only a minimum.
  laserTotals(legs){
-  const total=axis=>{const pair=legs.filter(l=>l.axis===axis),found=pair.filter(l=>l.cm!=null),cm=found.reduce((s,l)=>s+l.cm,0),open=found.length<2;return !found.length||open&&cm<1?null:{cm,open};};
+  const total=axis=>{const pair=legs.filter(l=>l.axis===axis),found=pair.filter(l=>l.cm!=null),cm=found.reduce((s,l)=>s+l.cm,0),open=found.length<2&&!found.some(l=>l.solid);return !found.length||open&&cm<1?null:{cm,open};};
   const [x,y,z]=['X','Y','Z'].map(total);
   return {X:x,Y:y,Z:z,slope:x&&y&&z?{cm:Math.hypot(x.cm,y.cm,z.cm),open:x.open||y.open||z.open}:null};
  }
  laserText(total){return total?(total.open?'≥ ':'')+this.cm(total.cm):'—';}
+ paintLevel(legs,screen,add,{live=false,index=0,grab=false}={}){
+  if(!legs)return;
+  const totals=this.laserTotals(legs),op=live?'':'99';
+  ['X','Y','Z'].forEach((axis,ai)=>{
+   const pair=legs.filter(l=>l.axis===axis),plus=pair[0],minus=pair[1],color=plus.color,total=totals[axis];
+   const start=minus?.to||null,end=plus?.to||null,origin=plus.from;
+   const from=start&&end?start:(start||origin),to=start&&end?end:(end||origin);
+   if(!from||!to||from.distanceTo(to)<1e-4)return;
+   const pa=from.clone().project(this.camera),pb=to.clone().project(this.camera);if(pa.z<-1||pa.z>1||pb.z<-1||pb.z>1)return;
+   const sa=screen(pa),sb=screen(pb);
+   add('line',{x1:sa.x,y1:sa.y,x2:sb.x,y2:sb.y,stroke:color+op,'stroke-width':live?2.5:2});
+   if(!total)return;
+   const label=axis+' '+this.laserText(total)+' cm',dx=sb.x-sa.x,dy=sb.y-sa.y,len=Math.hypot(dx,dy)||1,side=ai===1?-1:1;
+   const mx=(sa.x+sb.x)/2-dy/len*16*side,my=(sa.y+sb.y)/2+dx/len*16*side,w=label.length*6.6+12;
+   add('rect',{x:mx-w/2,y:my-10,width:w,height:20,rx:10,fill:'#0d1d16e6',stroke:color+op,'stroke-width':1.2});
+   const text=document.createElementNS('http://www.w3.org/2000/svg','text');text.setAttribute('x',mx);text.setAttribute('y',my+4);text.setAttribute('text-anchor','middle');text.setAttribute('fill',color);text.setAttribute('font-size','11.5');text.setAttribute('font-weight','700');text.textContent=label;this.overlay.append(text);
+  });
+  if(grab)legs.forEach((leg,i)=>{
+   const tip=this.legGrabTip(leg);if(!tip)return;
+   const pt=tip.clone().project(this.camera);if(pt.z<-1||pt.z>1)return;
+   const st=screen(pt),grabbed=this.down?.editing===10+i||this.down?.editing===200+index*6+i;
+   if(leg.target&&leg.to&&leg.target.distanceTo(leg.to)>.01){const pb=leg.to.clone().project(this.camera);if(pb.z>=-1&&pb.z<=1){const sb=screen(pb);add('line',{x1:sb.x,y1:sb.y,x2:st.x,y2:st.y,stroke:leg.color,'stroke-width':1.5,'stroke-dasharray':'4 3'});}}
+   add('circle',{cx:st.x,cy:st.y,r:grabbed?8:5,fill:leg.color,stroke:'#0d1d16','stroke-width':leg.target?2:1.5});
+  });
+  const origin=legs[0]?.from;if(origin){
+   const p=origin.clone().project(this.camera);
+   if(p.z>=-1&&p.z<=1){
+    const at=screen(p);
+    add('circle',{cx:at.x,cy:at.y,r:live?6:5,fill:this.mark(),stroke:this.ink(),'stroke-width':2});
+    if(legs.some(l=>l.solid))add('polygon',{points:`${at.x},${at.y-9} ${at.x+9},${at.y} ${at.x},${at.y+9} ${at.x-9},${at.y}`,fill:'none',stroke:this.mark(),'stroke-width':1.6});
+    if(!live){const n=String(index+1),text=document.createElementNS('http://www.w3.org/2000/svg','text');text.setAttribute('x',at.x);text.setAttribute('y',at.y-10);text.setAttribute('text-anchor','middle');text.setAttribute('fill',this.mark());text.setAttribute('font-size','11');text.setAttribute('font-weight','700');text.textContent=n;this.overlay.append(text);}
+   }
+  }
+ }
  draw(){
   this.drawCut();
-  this.overlay.replaceChildren();const points=this.preview||this.state?.points||[];
-  this.$('ifc-measure-info').hidden=!this.active||(!this.measuring&&!points.length);
+  this.overlay.replaceChildren();const points=this.preview||this.state?.points||[],done=this.state?.measures||[],saved=this.state?.levels||[];
+  const live=this.level&&this.levelHover&&!this.down&&!this.levelDrag;
+  const levelPoint=live?this.levelHover:null;
+  this.$('ifc-measure-info').hidden=!this.active||(!this.measuring&&!points.length&&!done.length&&!levelPoint&&!saved.length);
   if(!this.active){this.paintLoupe();return;}
   const result=this.$('ifc-measure-result');
-  const legs=this.level&&points.length===1?this.laser(points[0]):null;
-  if(legs){const t=this.laserTotals(legs),v=n=>this.laserText(n);result.textContent=`X ${v(t.X)} · Y ${v(t.Y)} · Z ${v(t.Z)} · Inclinada ${v(t.slope)} cm`;}
+  const legs=this.level&&levelPoint?this.laser(levelPoint,true):null;
+  const shown=legs||(saved.length?this.laser(saved[saved.length-1].point,true):null);
+  if(shown){const t=this.laserTotals(shown),v=n=>this.laserText(n),n=saved.length;result.textContent=`X ${v(t.X)} · Y ${v(t.Y)} · Z ${v(t.Z)} · Inclinada ${v(t.slope)} cm`+(n?` · ${n} gravado${n>1?'s':''}`:'');}
   else result.textContent=this.measureLabel();
   if(this.measuring)this.$('ifc-hint').textContent=this.measureHint();
-  result.title=this.level?'Nível: X, Y e Z vão de uma superfície à outra passando pelo ponto. Inclinada é a diagonal entre as três medidas. ≥ indica que um dos lados não encontrou superfície; — indica que nenhum lado encontrou. Arraste a ponta de uma linha até outra face para medir até ela; toque na ponta movida para voltar à primeira superfície.':points.length===2?'Arraste uma ponta para movê-la ou toque na linha para medir de novo. Fora da medida, o modelo gira normalmente.':points.length?'Toque ou arraste o segundo ponto na linha da face.':'Toque o primeiro ponto na linha da face.';
+  result.title=this.level?'Nível: na face, o vão completo em X, Y e Z. Na quina, a cota vai até o fim de cada aresta do elemento. Toque para gravar. ESC desliga a ferramenta e mantém os níveis. ≥ indica que um lado não encontrou face.':points.length===2?'Arraste uma ponta para movê-la. Toque em outra face para lançar mais uma cota. ESC desliga Medir e mantém as cotas. Fora da medida, o modelo gira normalmente.':points.length?'Toque ou arraste o segundo ponto na linha da face. ESC desliga Medir sem apagar as cotas já lançadas.':done.length?'Toque outra face para uma cota nova, ou arraste uma ponta já lançada. ESC desliga Medir e mantém as cotas.':'Toque o primeiro ponto na linha da face. ESC desliga Medir e mantém as cotas já lançadas.';
   const r=this.renderer.domElement.getBoundingClientRect();if(!r.width||!r.height){this.paintLoupe();return;}this.camera.updateMatrixWorld();
   this.overlay.setAttribute('viewBox',`0 0 ${r.width} ${r.height}`);
   const add=(tag,attrs)=>{const el=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [key,value]of Object.entries(attrs))el.setAttribute(key,value);this.overlay.append(el);};
   const screen=p=>({x:(p.x+1)*r.width/2,y:(1-p.y)*r.height/2});
-  if(points.length){const projected=points.map(p=>new this.T.Vector3().fromArray(p).project(this.camera));
-   if(projected.length===2&&projected.every(p=>p.z>=-1&&p.z<=1)){const a=screen(projected[0]),b=screen(projected[1]);add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#ffe18b','stroke-width':2,'stroke-dasharray':'6 4'});}
-   (legs||[]).forEach((leg,i)=>{
-    if(!this.legTip(leg))return;const pa=leg.from.clone().project(this.camera),pb=leg.to.clone().project(this.camera);if(pa.z<-1||pa.z>1||pb.z<-1||pb.z>1)return;
-    const sa=screen(pa),sb=screen(pb),grabbed=this.down?.editing===10+i;add('line',{x1:sa.x,y1:sa.y,x2:sb.x,y2:sb.y,stroke:leg.color,'stroke-width':2.5});
-    const pt=leg.target?.clone().project(this.camera);
-    if(pt&&pt.z>=-1&&pt.z<=1&&leg.target.distanceTo(leg.to)>.01){const st=screen(pt);add('line',{x1:sb.x,y1:sb.y,x2:st.x,y2:st.y,stroke:leg.color,'stroke-width':1.5,'stroke-dasharray':'4 3'});add('circle',{cx:sb.x,cy:sb.y,r:3,fill:leg.color});add('circle',{cx:st.x,cy:st.y,r:grabbed?8:5.5,fill:leg.color,stroke:'#0d1d16','stroke-width':2});}
-    else add('circle',{cx:sb.x,cy:sb.y,r:grabbed?8:5,fill:leg.color,stroke:'#0d1d16','stroke-width':leg.target?2:1.5});
-    if(leg.cm<1)return;
-    const label=leg.axis+' '+this.cm(leg.cm)+' cm',mx=(sa.x+sb.x)/2,my=(sa.y+sb.y)/2,w=label.length*6.6+12;
-    add('rect',{x:mx-w/2,y:my-10,width:w,height:20,rx:10,fill:'#0d1d16e6',stroke:leg.color,'stroke-width':1.2});
-    const text=document.createElementNS('http://www.w3.org/2000/svg','text');text.setAttribute('x',mx);text.setAttribute('y',my+4);text.setAttribute('text-anchor','middle');text.setAttribute('fill',leg.color);text.setAttribute('font-size','11.5');text.setAttribute('font-weight','700');text.textContent=label;this.overlay.append(text);
-   });
-   if(legs&&projected[0].z>=-1&&projected[0].z<=1){
-    const t=this.laserTotals(legs),rows=[['X',t.X,'#ff6b5e'],['Y',t.Y,'#5eb4ff'],['Z',t.Z,'#7ee06d'],['Inclinada',t.slope,'#ffe18b']].map(([n,v,c])=>[n+' '+(v?this.laserText(v)+' cm':'—'),c]);
-    const w=Math.max(...rows.map(([s])=>s.length))*6.8+20,h=rows.length*17+10,x=(r.width-w)/2,y=r.height-h-(this.$('ifc-info')?.offsetHeight||36)-10;
-    add('rect',{x,y,width:w,height:h,rx:9,fill:'#0b1a13eb',stroke:'#e0c46d88','stroke-width':1});
-    rows.forEach(([s,c],i)=>{const text=document.createElementNS('http://www.w3.org/2000/svg','text');text.setAttribute('x',x+10);text.setAttribute('y',y+19+i*17);text.setAttribute('fill',c);text.setAttribute('font-size','12');text.setAttribute('font-weight','700');text.textContent=s;this.overlay.append(text);});
-   }
-   projected.forEach((p,i)=>{if(p.z< -1||p.z>1||!this.isVisible(new this.T.Vector3().fromArray(points[i])))return;const at=screen(p);add('circle',{cx:at.x,cy:at.y,r:this.down?.editing===i?9:6,fill:'#ffe18b',stroke:'#173c2d','stroke-width':2});});
+  const drawPair=(a,b,grabA,grabB)=>{
+   const pa=new this.T.Vector3().fromArray(a).project(this.camera),pb=new this.T.Vector3().fromArray(b).project(this.camera);
+   if(pa.z<-1||pa.z>1||pb.z<-1||pb.z>1)return;
+   const sa=screen(pa),sb=screen(pb);add('line',{x1:sa.x,y1:sa.y,x2:sb.x,y2:sb.y,stroke:this.mark(),'stroke-width':2,'stroke-dasharray':'6 4'});
+   const label=this.cm(new this.T.Vector3().fromArray(a).distanceTo(new this.T.Vector3().fromArray(b))*100)+' cm',mx=(sa.x+sb.x)/2,my=(sa.y+sb.y)/2,w=label.length*6.6+12;
+   add('rect',{x:mx-w/2,y:my-10,width:w,height:20,rx:10,fill:this.ink()+'e6',stroke:this.mark(),'stroke-width':1.2});
+   const text=document.createElementNS('http://www.w3.org/2000/svg','text');text.setAttribute('x',mx);text.setAttribute('y',my+4);text.setAttribute('text-anchor','middle');text.setAttribute('fill',this.mark());text.setAttribute('font-size','11.5');text.setAttribute('font-weight','700');text.textContent=label;this.overlay.append(text);
+   const dot=(pt,grab)=>{if(pt.z<-1||pt.z>1)return;const at=screen(pt);add('circle',{cx:at.x,cy:at.y,r:grab?9:6,fill:this.mark(),stroke:this.ink(),'stroke-width':2});};
+   dot(pa,grabA);dot(pb,grabB);
+  };
+  done.forEach((pair,i)=>{if(pair.length<2)return;const ov=this.previewMeasure?.i===i,a=ov&&this.previewMeasure.end===0?this.previewMeasure.point:pair[0],b=ov&&this.previewMeasure.end===1?this.previewMeasure.point:pair[1];drawPair(a,b,this.down?.editing===100+i*2,this.down?.editing===100+i*2+1);});
+  const near=(a,b)=>a&&b&&Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2])<1e-3;
+  saved.forEach((lv,i)=>{if(live&&near(lv.point,levelPoint))return;this.paintLevel(this.laser(lv.point),screen,add,{live:false,index:i,grab:!!(this.level&&this.measuring)});});
+  if(legs){
+   this.paintLevel(legs,screen,add,{live:true,grab:true});
+   const t=this.laserTotals(legs),rows=[['X',t.X,'#ff6b5e'],['Y',t.Y,'#5eb4ff'],['Z',t.Z,'#7ee06d'],['Inclinada',t.slope,this.mark()]].map(([n,v,c])=>[n+' '+(v?this.laserText(v)+' cm':'—'),c]);
+   const w=Math.max(...rows.map(([s])=>s.length))*6.8+20,h=rows.length*17+10,x=(r.width-w)/2,y=r.height-h-(this.$('ifc-info')?.offsetHeight||36)-10;
+   add('rect',{x,y,width:w,height:h,rx:9,fill:'#0b1a13eb',stroke:this.mark('88'),'stroke-width':1});
+   rows.forEach(([s,c],i)=>{const text=document.createElementNS('http://www.w3.org/2000/svg','text');text.setAttribute('x',x+10);text.setAttribute('y',y+19+i*17);text.setAttribute('fill',c);text.setAttribute('font-size','12');text.setAttribute('font-weight','700');text.textContent=s;this.overlay.append(text);});
   }
-  if(this.measuring&&this.aim?.faceLines){for(const [a,b] of this.aim.faceLines){const pa=a.clone().project(this.camera),pb=b.clone().project(this.camera);if(pa.z<-1||pa.z>1||pb.z<-1||pb.z>1)continue;const sa=screen(pa),sb=screen(pb);add('line',{x1:sa.x,y1:sa.y,x2:sb.x,y2:sb.y,stroke:'#ffe49a99','stroke-width':1.5,'data-aim':1});}}
-  if(this.measuring&&this.aim?.edge){const seg=this.aim.edge.map(p=>p.clone().project(this.camera));if(seg.every(p=>p.z>=-1&&p.z<=1)){const a=screen(seg[0]),b=screen(seg[1]);add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#ffe49a','stroke-width':3,'data-aim':1});}}
+  if(points.length){const projected=points.map(p=>new this.T.Vector3().fromArray(p).project(this.camera));
+   if(!this.level&&projected.length===2&&projected.every(p=>p.z>=-1&&p.z<=1))drawPair(points[0],points[1],this.down?.editing===0,this.down?.editing===1);
+   if(!this.level&&projected.length!==2)projected.forEach((p,i)=>{if(p.z< -1||p.z>1||!this.isVisible(new this.T.Vector3().fromArray(points[i])))return;const at=screen(p);add('circle',{cx:at.x,cy:at.y,r:this.down?.editing===i?9:6,fill:this.mark(),stroke:this.ink(),'stroke-width':2});});
+  }
+  if(this.measuring&&this.aim?.faceLines){for(const [a,b] of this.aim.faceLines){const pa=a.clone().project(this.camera),pb=b.clone().project(this.camera);if(pa.z<-1||pa.z>1||pb.z<-1||pb.z>1)continue;const sa=screen(pa),sb=screen(pb);add('line',{x1:sa.x,y1:sa.y,x2:sb.x,y2:sb.y,stroke:this.mark('99'),'stroke-width':1.5,'data-aim':1});}}
+  if(this.measuring&&this.aim?.edge){const seg=this.aim.edge.map(p=>p.clone().project(this.camera));if(seg.every(p=>p.z>=-1&&p.z<=1)){const a=screen(seg[0]),b=screen(seg[1]);add('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:this.mark(),'stroke-width':3,'data-aim':1});}}
   const fixed=this.aim?.kind==='perp'&&this.aim.perpDir?this.fixedEnd():null;
   if(this.measuring&&fixed){const q=this.aim.point,pq=q.clone().project(this.camera);if(pq.z>=-1&&pq.z<=1){
    const at=screen(pq),span=Math.max(.01,q.distanceTo(fixed)*.1),toward=v=>{const s=screen(q.clone().addScaledVector(v,span).project(this.camera)),dx=s.x-at.x,dy=s.y-at.y,l=Math.hypot(dx,dy)||1;return {x:dx/l,y:dy/l};};
    const u=toward(this.aim.perpDir),w=toward(fixed.clone().sub(q).normalize()),k=11;
    add('path',{d:`M${at.x+u.x*k} ${at.y+u.y*k}L${at.x+(u.x+w.x)*k} ${at.y+(u.y+w.y)*k}L${at.x+w.x*k} ${at.y+w.y*k}`,fill:'none',stroke:'#7ee0ff','stroke-width':2,'data-aim':1});
   }}
-  if(this.measuring&&this.aim?.point){const p=this.aim.point.clone().project(this.camera);if(p.z>=-1&&p.z<=1){const at=screen(p);add('path',{d:`M${at.x-12} ${at.y}h24 M${at.x} ${at.y-12}v24`,stroke:'#ffe49a','stroke-width':2,'data-aim':1});}}
+  if(this.measuring&&this.aim?.point){const p=this.aim.point.clone().project(this.camera);if(p.z>=-1&&p.z<=1){const at=screen(p);add('path',{d:`M${at.x-12} ${at.y}h24 M${at.x} ${at.y-12}v24`,stroke:this.mark(),'stroke-width':2,'data-aim':1});}}
   this.paintLoupe();
  }
  instanceKey(mesh,index){
@@ -825,13 +1001,13 @@ export class IfcTools{
   const hit=this.selectionHit;if(!hit)return;
   const data=hit.object.userData,index=hit.instanceId,named=index!=null&&data.ifcNames;
   const name=named?data.ifcNames[index]:data.ifcName,type=named?data.ifcTypes?.[index]:data.ifcType;
-  this.hidden.set(this.instanceKey(hit.object,index??0),{name:name||type||'Elemento',type:name&&type&&type!==name?type:''});
+  const key=this.instanceKey(hit.object,index??0);this.hidden.set(key,{name:name||type||'Elemento',type:name&&type&&type!==name?type:''});this.lastHide=key;
   this.applyHidden();this.selectionHit=null;this.showSelection(null);this.faceKey='';
   if(this.state?.cut)this.applyCut();else this.onChange?.();
   this.syncHidden();
  }
  showOne(key){
-  if(!this.hidden.delete(key))return;
+  if(!this.hidden.delete(key))return;if(this.lastHide===key)this.lastHide=null;
   this.applyHidden();this.faceKey='';
   if(this.state?.cut)this.applyCut();else this.onChange?.();
   this.syncHidden();
@@ -875,23 +1051,66 @@ export class IfcTools{
   const data=hit.object.userData,index=hit.instanceId,named=index!=null&&data.ifcNames;
   const name=named?data.ifcNames[index]:data.ifcName,type=named?data.ifcTypes?.[index]:data.ifcType,volume=named?data.ifcVolumes?.[index]:data.ifcVolume;
   let file='';for(let node=hit.object;node;node=node.parent)if(node.userData?.fileName){file=node.userData.fileName;break;}
-  this.showSelection({name:name||type||'Elemento',type:name&&type&&type!==name?type:'',file,volume,x,y});
+  this.highlightPiece(hit);
+  this.showSelection({name:name||type||'Elemento',type:name&&type&&type!==name?type:'',file,volume});
+  this.loadElementProps(hit);
+ }
+ highlightPiece(hit){
+  if(!this.group)return;
+  const T=this.T,white=this._hlWhite||(this._hlWhite=new T.Color(1,1,1));
+  const dim=this._hlDim||(this._hlDim=new T.Color(.18,.18,.18));
+  const glow=this._hlGlow||(this._hlGlow=new T.Color());
+  glow.set(this.mark()||'#ffe49a');
+  let model=hit?.object,expressID=null;
+  if(hit){
+   while(model&&model.parent&&model.parent!==this.group)model=model.parent;
+   expressID=hit.object.userData?.ifcIds?.[hit.instanceId??0]??hit.object.userData?.ifcId??null;
+  }
+  this.group.traverse(mesh=>{
+   if(!mesh.isMesh||mesh.userData?.prumoSection||!mesh.setColorAt)return;
+   const ids=mesh.userData?.ifcIds;if(!ids?.length)return;
+   if(!hit&&!mesh.userData.ifcTinted)return;
+   let host=mesh;while(host&&host.parent&&host.parent!==this.group)host=host.parent;
+   for(let i=0;i<ids.length;i++){
+    const on=!!hit&&host===model&&ids[i]===expressID;
+    mesh.setColorAt(i,hit?on?glow:dim:white);
+   }
+   mesh.userData.ifcTinted=!!hit;
+   if(mesh.material)mesh.material.needsUpdate=true;
+  });
+  this.onChange?.();
+ }
+ loadElementProps(hit){
+  const list=this.$('ifc-props-list');if(!list)return;
+  list.replaceChildren();const wait=document.createElement('p');wait.className='ifc-props-empty';wait.textContent='Lendo propriedades…';list.append(wait);
+  const token=++this.propToken,read=this.readIfcElement;
+  if(!read){this.renderProps([]);return;}
+  Promise.resolve(read(hit)).then(groups=>{if(token!==this.propToken||this.selectionHit!==hit)return;this.renderProps(groups);}).catch(()=>{if(token===this.propToken)this.renderProps([]);});
+ }
+ renderProps(groups){
+  const list=this.$('ifc-props-list');if(!list)return;
+  list.replaceChildren();
+  if(!groups)return;
+  if(!groups.length){const p=document.createElement('p');p.className='ifc-props-empty';p.textContent='Este elemento não traz propriedades extras no arquivo.';list.append(p);return;}
+  for(const group of groups){
+   const sec=document.createElement('section');
+   if(group.title){const h=document.createElement('h3');h.textContent=group.title;sec.append(h);}
+   const ul=document.createElement('ul');
+   for(const row of group.rows||[]){
+    const li=document.createElement('li'),name=document.createElement('span'),value=document.createElement('b');
+    name.textContent=row.name;value.textContent=row.value;li.append(name,value);ul.append(li);
+   }
+   sec.append(ul);list.append(sec);
+  }
  }
  showSelection(info){
   const box=this.$('ifc-selection'),tag=this.$('ifc-name-tag');
-  if(!info){if(box)box.hidden=true;if(tag)tag.hidden=true;this.onInfo?.(null);return;}
-  const meta=String(info.type||'').split('·')[0].trim();
+  if(!info){if(box)box.hidden=true;if(tag)tag.hidden=true;this.propToken++;this.renderProps(null);this.highlightPiece(null);this.onInfo?.(null);return;}
+  const meta=[info.type,info.file].filter(Boolean).join(' · ');
   if(box){this.$('ifc-selection-name').textContent=info.name;this.$('ifc-selection-meta').textContent=meta;box.hidden=false;}
   this.onInfo?.(info);
   if(!tag)return;
   this.$('ifc-name-tag-name').textContent=info.name;this.$('ifc-name-tag-meta').textContent=meta;
-  if(!Number.isFinite(info.x)||!Number.isFinite(info.y)){tag.hidden=true;return;}
-  tag.hidden=false;const view=tag.offsetParent?.getBoundingClientRect();if(!view)return;
-  const w=tag.offsetWidth,h=tag.offsetHeight;
-  let left=info.x-view.left+16,top=info.y-view.top-h-12;
-  if(left+w>view.width-8)left=info.x-view.left-w-16;
-  if(top<8)top=info.y-view.top+16;
-  tag.style.left=Math.max(8,Math.min(Math.max(8,view.width-w-8),left))+'px';
-  tag.style.top=Math.max(8,Math.min(Math.max(8,view.height-h-36),top))+'px';
+  tag.hidden=false;tag.style.left='auto';tag.style.right='10px';tag.style.top='64px';
  }
 }

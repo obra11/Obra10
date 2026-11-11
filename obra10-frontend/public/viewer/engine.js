@@ -19,8 +19,12 @@ globalThis.PrumoAssets = new Proxy({}, {
 
 const PDF_LIMIT = 100 * 1024 * 1024;
 const DWG_LIMIT = 100 * 1024 * 1024;
-const IFC_LIMIT = 300 * 1024 * 1024;
+const IFC_LIMIT = 1024 * 1024 * 1024;
+const WORD_LIMIT = 100 * 1024 * 1024;
 const IFC_PALETTE = ['#e0c46d', '#7dcea0', '#85c1e9', '#f0b27a', '#d7bde2', '#f1948a', '#e74c3c', '#2e86de', '#27ae60', '#8e44ad', '#95a5a6', '#f5f5f5'];
+const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif', 'ico', 'tif', 'tiff', 'heic', 'heif']);
+const ARCHIVE_EXT = new Set(['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'tbz', 'tbz2', 'xz', 'txz', 'lzma', 'cab', 'cbz', 'cbr', 'zst', 'tzst']);
+const VIEW_EXT = new Set(['dwg', 'ifc', 'skp', 'pdf', 'svg', 'doc', 'docx', 'txt', ...IMAGE_EXT, ...ARCHIVE_EXT]);
 
 function ensureStyle() {
   if (!document.getElementById('obra10-viewer-tools')) {
@@ -43,6 +47,13 @@ function ensureStyle() {
     .obra10-stage #ifc-measure, .obra10-stage #ifc-walk, .obra10-stage #ifc-views, .obra10-stage #ifc-storeys,
     .obra10-stage #ifc-capture, .obra10-stage #ifc-show-hidden { background:#E5192C; border-color:#c41426; color:#fff; }
     .obra10-stage #ifc-walk-pad i { position:absolute; left:50%; top:50%; width:36px; height:36px; margin:-18px 0 0 -18px; border-radius:50%; background:#E5192C; pointer-events:none; }
+    .obra10-stage #drawing { position:absolute; inset:0; overflow:hidden; }
+    .obra10-stage #plan { position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform; user-select:none; pointer-events:none; }
+    .obra10-stage #word { position:absolute; inset:0; background:#e9eef5; }
+    .obra10-stage #archive-dialog { max-width:540px; width:90%; max-height:85dvh; border:1px solid #536b48; border-radius:18px; background:#102c21; color:#edf2f6; padding:20px; }
+    .obra10-stage #archive-dialog::backdrop { background:#030b16b8; }
+    .obra10-stage #archive-list { display:flex; flex-direction:column; gap:6px; max-height:50dvh; overflow:auto; margin-top:12px; }
+    .obra10-stage #archive-list button { text-align:left; }
   `;
 }
 
@@ -169,7 +180,16 @@ export function mountViewer(host, hooks = {}) {
   stage.innerHTML = `
     <div id="pdf" hidden><canvas aria-label="Página PDF"></canvas><svg id="pdf-measure" aria-hidden="true"></svg></div>
     <canvas id="cad" hidden aria-label="Desenho CAD vetorial"></canvas>
+    <div id="drawing" hidden><img id="plan" alt="Desenho"></div>
+    <div id="word" hidden></div>
+    <input id="pdf-page" type="number" hidden>
+    <span id="pdf-total" hidden></span>
     ${markup}
+    <dialog id="archive-dialog">
+      <div class="layer-heading"><h2 id="archive-title">Compactado</h2><button type="button" id="archive-back" hidden>Voltar</button><button type="button" id="archive-close">Fechar</button></div>
+      <p>Toque um arquivo para abrir. Imagens, textos, DWG, IFC, SKP, PDF, Word, SVG e outros compactados.</p>
+      <div id="archive-list"></div>
+    </dialog>
   `;
   host.appendChild(stage);
 
@@ -184,6 +204,8 @@ export function mountViewer(host, hooks = {}) {
   let group = null;
   let ifcApi = null;
   let IfcMeshBuilder = null;
+  let buildSkpGroup = null;
+  let openskpBuildScene = null;
   let ifcNavigation = null;
   let ifcTools = null;
   let ifcWalk = null;
@@ -192,6 +214,18 @@ export function mountViewer(host, hooks = {}) {
   let ifcNeedsRender = false;
   let ifcPick = null;
   let alive = true;
+  let wordViewer = null;
+  let cadImages = null;
+  let imageUrl = null;
+  let imageScale = 1;
+  let imageX = 0;
+  let imageY = 0;
+  let imageWidth = 1000;
+  let imageHeight = 700;
+  let imageTurns = 0;
+  const imagePointers = new Map();
+  const archiveStack = [];
+  let fromArchiveOpen = false;
   const modelIds = new WeakMap();
 
   function status(message, error = false) {
@@ -205,9 +239,11 @@ export function mountViewer(host, hooks = {}) {
     $('cad').hidden = next !== 'dwg';
     $('three').hidden = next !== 'ifc';
     $('ifc-tools').hidden = next !== 'ifc';
+    if ($('drawing')) $('drawing').hidden = next !== 'image';
+    if ($('word')) $('word').hidden = next !== 'word';
     if ($('ifc-tab')) $('ifc-tab').hidden = next !== 'ifc';
     if ($('ifc-info')) $('ifc-info').hidden = next !== 'ifc' || !group;
-    if (next !== 'ifc') $('ifc-cut-handle').hidden = true;
+    if (next !== 'ifc' && $('ifc-cut-handle')) $('ifc-cut-handle').hidden = true;
     ifcTools?.activate(next === 'ifc');
     if (next === 'ifc' && group) ifcTools?.setModel(group);
     if (controls) controls.enabled = next === 'ifc' && !ifcWalk?.walking;
@@ -230,6 +266,72 @@ export function mountViewer(host, hooks = {}) {
     return group ? [...group.children].filter((child) => child.userData?.ifcModel) : [];
   }
 
+  function formatCubicMeters(volume) {
+    const value = Number(volume);
+    if (!Number.isFinite(value) || value <= 0) return '';
+    if (value >= 1) return value.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + ' m³';
+    return (value * 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' cm³';
+  }
+
+  function closeIfcHandle(root) {
+    if (!root || !ifcApi) return;
+    const models = root.userData?.ifcModel ? [root] : [...root.children || []].filter((child) => child.userData?.ifcModel);
+    for (const model of models) {
+      const id = model.userData?.ifcModelID;
+      if (id >= 0) {
+        try { ifcApi.CloseModel(id); } catch { /* modelo já fechado */ }
+        model.userData.ifcModelID = -1;
+      }
+    }
+  }
+
+  function readSkpElementProps(hit, model) {
+    const id = hit?.object?.userData?.ifcIds?.[hit.instanceId ?? 0];
+    const entry = model?.userData?.skpElements?.get?.(id);
+    const meta = entry?.meta || {};
+    const groups = [];
+    const ident = [];
+    if (entry?.name) ident.push({ name: 'Nome', value: entry.name });
+    if (meta.definitionName) ident.push({ name: 'Definição', value: String(meta.definitionName) });
+    if (meta.layer) ident.push({ name: 'Camada', value: String(meta.layer) });
+    if (meta.guid) ident.push({ name: 'GUID', value: String(meta.guid) });
+    if (meta.path) ident.push({ name: 'Caminho', value: String(meta.path) });
+    const data = hit?.object?.userData;
+    const index = hit?.instanceId;
+    const volume = index != null && data?.ifcVolumes ? data.ifcVolumes[index] : entry?.volume;
+    const vol = formatCubicMeters(volume);
+    if (vol) ident.push({ name: 'Volume (malha)', value: vol });
+    if (model?.userData?.fileName) ident.push({ name: 'Arquivo', value: model.userData.fileName });
+    if (ident.length) groups.push({ title: 'Identificação', rows: ident });
+    const dyn = Object.entries(meta.properties || {}).map(([name, value]) => ({ name, value: String(value ?? '') })).filter((row) => row.value);
+    if (dyn.length) groups.push({ title: 'Dynamic Components', rows: dyn });
+    return groups;
+  }
+
+  function readIfcElementProps(hit) {
+    let model = hit?.object;
+    while (model && model.parent && !(model.userData?.ifcModel || model.userData?.skpModel)) model = model.parent;
+    if (model?.userData?.skpModel) return readSkpElementProps(hit, model);
+    const data = hit?.object?.userData;
+    const index = hit?.instanceId;
+    const name = index != null && data?.ifcNames ? data.ifcNames[index] : data?.ifcName;
+    const type = index != null && data?.ifcTypes ? data.ifcTypes[index] : data?.ifcType;
+    const volume = index != null && data?.ifcVolumes ? data.ifcVolumes[index] : data?.ifcVolume;
+    const rows = [];
+    if (name) rows.push({ name: 'Nome', value: name });
+    if (type) rows.push({ name: 'Tipo', value: type });
+    const vol = formatCubicMeters(volume);
+    if (vol) rows.push({ name: 'Volume (malha)', value: vol });
+    if (model?.userData?.fileName) rows.push({ name: 'Arquivo', value: model.userData.fileName });
+    return rows.length ? [{ title: 'Identificação', rows }] : [];
+  }
+
+  function bindElementReader() {
+    if (!ifcTools) return;
+    ifcTools.ifcApi = ifcApi || null;
+    ifcTools.readIfcElement = (hit) => readIfcElementProps(hit);
+  }
+
   function visibleFederationBounds() {
     const box = new THREE.Box3();
     for (const model of federationModels()) if (model.visible) box.union(new THREE.Box3().setFromObject(model));
@@ -248,7 +350,7 @@ export function mountViewer(host, hooks = {}) {
     const origin = $('ifc-info-origin');
     const distances = models.map((model) => Number.isFinite(model.userData.originDistance) ? model.userData.originDistance : null).filter((value) => value != null);
     if (pick) {
-      const label = [ifcPick?.name, ifcPick?.type].filter(Boolean).join(' · ');
+      const label = [ifcPick?.name, ifcPick?.type, formatCubicMeters(ifcPick?.volume)].filter(Boolean).join(' · ');
       pick.textContent = label;
       pick.hidden = !label;
     }
@@ -354,7 +456,8 @@ export function mountViewer(host, hooks = {}) {
         swatch.onclick = () => ifcColorPicker(model, swatch, row);
         const name = document.createElement('span');
         name.className = 'ifc-model-name';
-        name.textContent = model.userData.fileName;
+        name.textContent = (model.userData.skpModel ? 'SKP · ' : 'IFC · ') + model.userData.fileName;
+        name.title = model.userData.fileName;
         const distance = document.createElement('small');
         const center = new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3());
         model.userData.originDistance = center.length();
@@ -382,6 +485,8 @@ export function mountViewer(host, hooks = {}) {
     ifcNeedsRender = true;
     ifcTools?.draw?.();
     if (pdfViewer && kind === 'pdf') pdfViewer.render().catch((e) => status(e.message, true));
+    if (kind === 'word' && wordViewer?.current?.fitted) wordViewer.fit();
+    if (kind === 'image') fitImage();
     if (kind === 'dwg' && dwgMode === 'preview') drawDwgPreview();
     else if (cadRenderer && kind === 'dwg') cadRenderer.resize();
     if (renderer && camera) {
@@ -445,11 +550,7 @@ export function mountViewer(host, hooks = {}) {
       walkUi();
       hooks.onWalk?.({ active: !!this.walking, placing: !!this.placing, through: !!this.through });
     };
-    $('ifc-pan').onclick = () => {
-      const pressed = $('ifc-pan').getAttribute('aria-pressed') === 'true';
-      ifcNavigation.setPan(!pressed);
-      $('ifc-pan').setAttribute('aria-pressed', String(!pressed));
-    };
+    bindElementReader();
     $('ifc-focus').onclick = () => {
       const pressed = $('ifc-focus').getAttribute('aria-pressed') === 'true';
       ifcNavigation.armFocus(!pressed);
@@ -493,9 +594,29 @@ export function mountViewer(host, hooks = {}) {
       await api.Init(() => asset('./vendor/web-ifc.wasm'), true);
       ifcApi = api;
     }
+    bindElementReader();
     if (!IfcMeshBuilder) {
       const mod = await import(asset('./ifc-meshes.js'));
       IfcMeshBuilder = mod.IfcMeshBuilder;
+      disposeIfcGroup = mod.disposeIfcGroup;
+    }
+  }
+
+  async function ensureSkp() {
+    await init3d();
+    bindElementReader();
+    if (!buildSkpGroup) {
+      const mod = await import(asset('./skp-meshes.js'));
+      buildSkpGroup = mod.buildSkpGroup;
+      disposeIfcGroup ||= mod.disposeSkpGroup;
+    }
+    if (!openskpBuildScene) {
+      const mod = await import(asset('./vendor/openskp.mjs'));
+      openskpBuildScene = mod.buildScene;
+      if (typeof openskpBuildScene !== 'function') throw new Error('Leitor SKP indisponível.');
+    }
+    if (!disposeIfcGroup) {
+      const mod = await import(asset('./ifc-meshes.js'));
       disposeIfcGroup = mod.disposeIfcGroup;
     }
   }
@@ -523,11 +644,10 @@ export function mountViewer(host, hooks = {}) {
         for (let i = 0; i < flat.geometries.size(); i++) builder.add(ifcApi, id, flat.geometries.get(i), expressID);
       });
       const meter = ifcLengthScale(ifcApi, id);
-      const factor = meter ** 3;
       const labels = new Map();
       for (const expressID of builder.elementIds) {
         const label = ifcElementLabel(ifcApi, id, expressID);
-        label.volume = (builder.volumes.get(expressID) || 0) * factor;
+        label.volume = builder.volumes.get(expressID) || 0;
         labels.set(expressID, label);
       }
       model = builder.build(labels);
@@ -536,6 +656,8 @@ export function mountViewer(host, hooks = {}) {
       model.userData.ifcModel = true;
       model.userData.fileName = file.name;
       model.userData.bytes = file.size;
+      model.userData.ifcModelID = id;
+      model.userData.lengthScale = meter;
       try {
         const spatial = readIfcStoreys(ifcApi, id);
         if (spatial) {
@@ -549,23 +671,49 @@ export function mountViewer(host, hooks = {}) {
       model.matrixAutoUpdate = false;
       return model;
     } catch (error) {
+      if (id >= 0) try { ifcApi.CloseModel(id); } catch { /* wasm já fechou */ }
       if (model) disposeIfcGroup(model);
       else builder.dispose();
       throw error;
-    } finally {
-      if (id >= 0) ifcApi.CloseModel(id);
     }
   }
 
+  async function loadSkpModel(file) {
+    await ensureSkp();
+    const buffer = await file.arrayBuffer();
+    let sceneData;
+    try {
+      sceneData = openskpBuildScene(buffer);
+    } catch (error) {
+      throw new Error('Arquivo SKP inválido ou não suportado.' + (error?.message ? ' ' + error.message : ''));
+    }
+    const model = buildSkpGroup(THREE, sceneData);
+    if (!model.children.length) {
+      disposeIfcGroup?.(model);
+      throw new Error(file.name + ' não contém geometria 3D compatível.');
+    }
+    model.name = file.name;
+    model.userData.ifcModel = true;
+    model.userData.skpModel = true;
+    model.userData.fileName = file.name;
+    model.userData.bytes = file.size;
+    model.userData.lengthScale = 1;
+    model.quaternion.identity();
+    model.scale.set(1, 1, 1);
+    model.updateMatrix();
+    model.matrixAutoUpdate = false;
+    return model;
+  }
+
   async function addIfc(file, modelId) {
-    if (file.size > IFC_LIMIT) throw new Error('O limite para IFC é 300 MB.');
+    const isSkp = /\.skp$/i.test(file.name);
+    if (file.size > IFC_LIMIT) throw new Error('O limite para IFC/SKP é 1 GB.');
     const existing = federationModels().find((model) => modelIds.get(model) === modelId);
     if (existing) {
       setKind('ifc');
       return modelId;
     }
-    await ensureIfc();
-    const model = await loadIfcModel(file);
+    const model = isSkp ? await loadSkpModel(file) : (await ensureIfc(), await loadIfcModel(file));
     const root = ensureFederation();
     const before = federationModels()[0];
     root.add(model);
@@ -615,6 +763,7 @@ export function mountViewer(host, hooks = {}) {
   function removeIfc(modelId) {
     const model = federationModels().find((item) => modelIds.get(item) === modelId);
     if (!model || !group) return;
+    closeIfcHandle(model);
     group.remove(model);
     disposeIfcGroup?.(model);
     ifcNeedsRender = true;
@@ -637,6 +786,7 @@ export function mountViewer(host, hooks = {}) {
     ifcPick = null;
     ifcTools?.setModel(null);
     if (group) {
+      closeIfcHandle(group);
       disposeIfcGroup?.(group);
       scene?.remove(group);
       group = null;
@@ -747,6 +897,39 @@ export function mountViewer(host, hooks = {}) {
       refreshLayerView();
     };
     $('layers-dimensions').onclick = showDimensionLayers;
+    if ($('fonts-open')) {
+      $('fonts-open').onclick = () => $('font-files').click();
+      $('font-files').onchange = async (event) => {
+        try {
+          const { importFonts } = await import(asset('./local-fonts.js'));
+          const count = await importFonts(event.target.files);
+          cadRenderer?.fontCaps?.clear?.();
+          cadRenderer?.textMetrics?.clear?.();
+          cadRenderer?.wrapCache?.clear?.();
+          cadRenderer?.render?.();
+          $('font-report').textContent = count + ' fonte(s) importada(s). Fontes com o mesmo nome do DWG serão usadas automaticamente. SHX ainda não é suportado.';
+        } catch (error) {
+          $('font-report').textContent = error.message;
+        } finally {
+          event.target.value = '';
+        }
+      };
+    }
+    if ($('images-open')) {
+      $('images-open').onclick = () => $('image-files').click();
+      $('image-files').onchange = async (event) => {
+        try {
+          const files = [...event.target.files];
+          const count = await cadImages?.link?.(files);
+          cadRenderer?.setDocument?.(cadRenderer.getSourceDocument());
+          status(count ? count + ' imagem(ns) vinculada(s).' : 'Nenhum nome corresponde às imagens referenciadas no DWG.', !count);
+        } catch (error) {
+          status(error.message, true);
+        } finally {
+          event.target.value = '';
+        }
+      };
+    }
     viewport.addEventListener('wheel', (event) => {
       if (kind !== 'dwg' || !cadRenderer) return;
       event.preventDefault();
@@ -865,6 +1048,11 @@ export function mountViewer(host, hooks = {}) {
     dwgMode = 'vector';
     const { CrispCadRenderer, prepareDrawing } = await import(asset('./cad-view.js'));
     const prepared = prepareDrawing(result.database, file.name);
+    try {
+      const { attachCadImages } = await import(asset('./cad-images.js'));
+      cadImages?.dispose?.();
+      cadImages = await attachCadImages(result.database, prepared);
+    } catch { /* imagens OLE opcionais */ }
     setKind('dwg');
     await new Promise((resolve) => requestAnimationFrame(resolve));
     if (!cadRenderer) {
@@ -919,6 +1107,234 @@ export function mountViewer(host, hooks = {}) {
     await viewer.open(file);
   }
 
+  function paintImage() {
+    const plan = $('plan');
+    if (!plan) return;
+    const turn = imageTurns % 4;
+    plan.style.transform = `translate(${imageX}px,${imageY}px) scale(${imageScale}) translate(${turn === 1 ? imageHeight : turn === 2 ? imageWidth : 0}px,${turn === 2 ? imageHeight : turn === 3 ? imageWidth : 0}px) rotate(${turn * 90}deg)`;
+    hooks.onDwgState?.({ zoom: Math.round(imageScale * 100), measuring: false });
+  }
+
+  function fitImage() {
+    const fitWidth = imageTurns % 2 ? imageHeight : imageWidth;
+    const fitHeight = imageTurns % 2 ? imageWidth : imageHeight;
+    imageScale = Math.max(0.01, Math.min((stage.clientWidth - 48) / fitWidth, (stage.clientHeight - 48) / fitHeight));
+    imageX = (stage.clientWidth - fitWidth * imageScale) / 2;
+    imageY = (stage.clientHeight - fitHeight * imageScale) / 2;
+    paintImage();
+  }
+
+  function bindImage() {
+    const viewport = $('drawing');
+    if (!viewport || viewport.dataset.bound) return;
+    viewport.dataset.bound = '1';
+    viewport.addEventListener('wheel', (event) => {
+      if (kind !== 'image') return;
+      event.preventDefault();
+      const next = Math.max(0.01, Math.min(100, imageScale * Math.exp(-event.deltaY * 0.001)));
+      const rect = viewport.getBoundingClientRect();
+      const cx = event.clientX - rect.left;
+      const cy = event.clientY - rect.top;
+      imageX = cx - (cx - imageX) * next / imageScale;
+      imageY = cy - (cy - imageY) * next / imageScale;
+      imageScale = next;
+      paintImage();
+    }, { passive: false });
+    viewport.addEventListener('pointerdown', (event) => {
+      if (kind !== 'image') return;
+      viewport.setPointerCapture(event.pointerId);
+      imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    });
+    viewport.addEventListener('pointermove', (event) => {
+      if (!imagePointers.has(event.pointerId) || kind !== 'image') return;
+      const old = imagePointers.get(event.pointerId);
+      imagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const pts = [...imagePointers.values()];
+      if (pts.length === 1) {
+        imageX += event.clientX - old.x;
+        imageY += event.clientY - old.y;
+      }
+      paintImage();
+    });
+    for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+      viewport.addEventListener(name, (event) => imagePointers.delete(event.pointerId));
+    }
+    viewport.addEventListener('dblclick', () => { if (kind === 'image') fitImage(); });
+  }
+
+  function probeImage(source) {
+    return new Promise((resolve, reject) => {
+      const probe = new Image();
+      probe.onload = () => resolve(probe);
+      probe.onerror = () => reject(new Error('Não foi possível abrir esta imagem.'));
+      probe.src = source;
+    });
+  }
+
+  async function prepareSVG(file) {
+    let text = await file.text();
+    text = text.replace(/^\uFEFF/, '').trim();
+    if (!/<svg[\s>]/i.test(text)) throw new Error('Não foi possível ler o desenho SVG.');
+    const open = text.match(/<svg\b[^>]*>/i)?.[0] || '';
+    if (open && !/\sxmlns\s*=/.test(open)) text = text.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+    const blobURL = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
+    try {
+      const probe = await probeImage(blobURL);
+      return { url: blobURL, probe, width: probe.naturalWidth, height: probe.naturalHeight };
+    } catch (error) {
+      URL.revokeObjectURL(blobURL);
+      throw error;
+    }
+  }
+
+  async function showImageSource(source) {
+    bindImage();
+    const probe = source?.probe || await probeImage(typeof source === 'string' ? source : source.url);
+    const url = typeof source === 'string' ? source : source.url;
+    if (imageUrl) URL.revokeObjectURL(imageUrl);
+    imageUrl = url.startsWith('blob:') ? url : null;
+    const plan = $('plan');
+    plan.src = url;
+    imageTurns = 0;
+    imageWidth = probe.naturalWidth || source.width || 1000;
+    imageHeight = probe.naturalHeight || source.height || 700;
+    plan.style.width = imageWidth + 'px';
+    plan.style.height = imageHeight + 'px';
+    setKind('image');
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    fitImage();
+  }
+
+  async function openWord(file) {
+    if (!wordViewer) {
+      const { WordViewer } = await import(asset('./word-view.js'));
+      wordViewer = new WordViewer($('word'), (value) => {
+        if (kind === 'word') hooks.onPdfState?.({ page: wordViewer.current?.pageNumber || 1, pages: wordViewer.current?.pages?.length || 1, zoom: value, matches: wordViewer.current?.matches?.length || 0, match: (wordViewer.current?.matchIndex ?? -1) + 1 });
+      });
+    }
+    if (wordViewer.current) wordViewer.dispose(wordViewer.current);
+    setKind('word');
+    await wordViewer.open(file);
+  }
+
+  function archiveSize(size) {
+    if (!size) return '';
+    if (size >= 1048576) return ' · ' + (size / 1048576).toFixed(1) + ' MB';
+    if (size >= 1024) return ' · ' + Math.max(1, Math.round(size / 1024)) + ' KB';
+    return ' · ' + size + ' B';
+  }
+
+  function renderArchive(session) {
+    const dialog = $('archive-dialog');
+    const list = $('archive-list');
+    const back = $('archive-back');
+    $('archive-title').textContent = session.name;
+    if (back) back.hidden = archiveStack.length < 2;
+    list.replaceChildren();
+    for (const entry of session.entries) {
+      const button = document.createElement('button');
+      const ext = entry.path.split('.').pop().toLowerCase();
+      const known = VIEW_EXT.has(ext);
+      button.type = 'button';
+      button.textContent = entry.path + (known ? '' : ' · não abre aqui') + archiveSize(entry.size);
+      button.onclick = async () => {
+        if (!known) {
+          status('Este item não abre aqui. Escolha uma imagem, DWG, IFC, SKP, PDF, Word, TXT, SVG ou outro compactado.', true);
+          return;
+        }
+        dialog.close();
+        status('Abrindo ' + (entry.path.split('/').pop()) + '…');
+        try {
+          const blob = await entry.blob();
+          fromArchiveOpen = true;
+          await openFile(new File([blob], entry.path.split('/').pop() || 'arquivo', { type: blob.type || 'application/octet-stream' }));
+        } catch (error) {
+          fromArchiveOpen = false;
+          status(error.message, true);
+        }
+      };
+      list.append(button);
+    }
+    dialog.showModal();
+  }
+
+  async function openArchive(file) {
+    const { readArchive } = await import(asset('./archive-view.js'));
+    const session = await readArchive(file);
+    session.name = file.name;
+    session.file = file;
+    archiveStack.push(session);
+    if ($('archive-close') && !$('archive-close').dataset.bound) {
+      $('archive-close').dataset.bound = '1';
+      $('archive-close').onclick = () => $('archive-dialog').close();
+      $('archive-back').onclick = () => {
+        const current = archiveStack.pop();
+        current?.close?.().catch(() => {});
+        if (archiveStack.length) renderArchive(archiveStack[archiveStack.length - 1]);
+        else $('archive-dialog').close();
+      };
+    }
+    renderArchive(session);
+  }
+
+  async function openFile(file) {
+    const nested = fromArchiveOpen;
+    fromArchiveOpen = false;
+    if (!nested) {
+      while (archiveStack.length) {
+        const session = archiveStack.pop();
+        session.close?.().catch(() => {});
+      }
+    }
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (IMAGE_EXT.has(ext)) {
+      const url = URL.createObjectURL(file);
+      try { await showImageSource(url); }
+      catch (error) {
+        URL.revokeObjectURL(url);
+        throw new Error(ext === 'heic' || ext === 'heif' || ext === 'tif' || ext === 'tiff'
+          ? 'Este aparelho não abre esta foto. Salve como JPG ou PNG.'
+          : (error.message || 'Não foi possível abrir esta imagem.'));
+      }
+      return 'image';
+    }
+    if (ARCHIVE_EXT.has(ext)) {
+      if (file.size > PDF_LIMIT) throw new Error('O limite para este formato é 100 MB.');
+      await openArchive(file);
+      return 'archive';
+    }
+    if (ext === 'doc' || ext === 'docx' || ext === 'txt') {
+      if (file.size > WORD_LIMIT) throw new Error('O limite para Word/TXT é 100 MB.');
+      await openWord(file);
+      return 'word';
+    }
+    if (ext === 'pdf') {
+      if (file.size > PDF_LIMIT) throw new Error('O limite para PDF é 100 MB.');
+      await openPdf(file);
+      return 'pdf';
+    }
+    if (ext === 'ifc' || ext === 'skp') {
+      if (file.size > IFC_LIMIT) throw new Error('O limite para IFC/SKP é 1 GB.');
+      await addIfc(file, file.name + ':' + file.size + ':' + file.lastModified);
+      return 'ifc';
+    }
+    if (ext === 'svg') {
+      const prepared = await prepareSVG(file);
+      try { await showImageSource(prepared); }
+      catch (error) {
+        if (prepared.url.startsWith('blob:')) URL.revokeObjectURL(prepared.url);
+        throw error;
+      }
+      return 'image';
+    }
+    if (ext === 'dwg') {
+      if (file.size > DWG_LIMIT) throw new Error('O limite para DWG é 100 MB.');
+      await openDwg(file);
+      return 'dwg';
+    }
+    throw new Error('Este visualizador abre PDF, DWG, IFC, SKP, Word, TXT, SVG, imagem ou compactado.');
+  }
+
   const observer = new ResizeObserver(() => resize());
   observer.observe(stage);
 
@@ -935,26 +1351,21 @@ export function mountViewer(host, hooks = {}) {
       return !!ifcWalk?.walking;
     },
     async open(file) {
-      const ext = (file.name.split('.').pop() || '').toLowerCase();
-      if (ext === 'pdf') {
-        if (file.size > PDF_LIMIT) throw new Error('O limite para PDF é 100 MB.');
-        await openPdf(file);
-        return 'pdf';
-      }
-      if (ext === 'dwg') {
-        if (file.size > DWG_LIMIT) throw new Error('O limite para DWG é 100 MB.');
-        await openDwg(file);
-        return 'dwg';
-      }
-      if (ext === 'ifc') {
-        await addIfc(file, file.name + ':' + file.size + ':' + file.lastModified);
-        return 'ifc';
-      }
-      throw new Error('Este visualizador abre PDF, DWG e IFC.');
+      return openFile(file);
     },
     zoom(factor) {
       if (kind === 'pdf') pdfViewer?.zoom(factor);
       else if (kind === 'dwg') cadRenderer?.zoom(factor, { x: $('cad').clientWidth / 2, y: $('cad').clientHeight / 2 });
+      else if (kind === 'word') wordViewer?.zoom(factor, true);
+      else if (kind === 'image') {
+        const next = Math.max(0.01, Math.min(100, imageScale * factor));
+        const cx = stage.clientWidth / 2;
+        const cy = stage.clientHeight / 2;
+        imageX = cx - (cx - imageX) * next / imageScale;
+        imageY = cy - (cy - imageY) * next / imageScale;
+        imageScale = next;
+        paintImage();
+      }
       else if (kind === 'ifc') {
         if (ifcWalk?.walking) ifcWalk.nudge(factor > 1 ? 0.5 : -0.5);
         else ifcNavigation?.zoom(factor);
@@ -963,10 +1374,17 @@ export function mountViewer(host, hooks = {}) {
     async fit() {
       if (kind === 'pdf') await pdfViewer?.fit();
       else if (kind === 'dwg') cadRenderer?.fitToView(0.9);
+      else if (kind === 'word') wordViewer?.fit();
+      else if (kind === 'image') fitImage();
       else if (kind === 'ifc') fit3d();
     },
     async rotate() {
       if (kind === 'pdf') await pdfViewer?.rotate();
+      else if (kind === 'word') wordViewer?.rotate();
+      else if (kind === 'image') {
+        imageTurns = (imageTurns + 1) % 4;
+        fitImage();
+      }
       else if (kind === 'dwg' && cadRenderer && cadSource) {
         const { rotatedDocument } = await import(asset('./cad-view.js'));
         quarterTurns = (quarterTurns + 1) % 4;
@@ -991,13 +1409,16 @@ export function mountViewer(host, hooks = {}) {
     },
     async go(page) {
       if (kind === 'pdf') await pdfViewer?.go(page);
+      else if (kind === 'word') wordViewer?.go(page);
     },
     async search(query) {
       if (kind === 'pdf') return pdfViewer?.search(query);
+      if (kind === 'word') return wordViewer?.search(query) || [];
       return [];
     },
     async nextMatch(direction) {
       if (kind === 'pdf') await pdfViewer?.nextMatch(direction);
+      else if (kind === 'word') wordViewer?.nextMatch(direction);
     },
     setMeasureScale(info) {
       pdfViewer?.setScaleInfo(info || null);
@@ -1022,6 +1443,10 @@ export function mountViewer(host, hooks = {}) {
       try { ifcWalk?.stop(); } catch { /* caminhar já encerrado */ }
       try { measureTool?.reset?.(); cadRenderer?.destroy?.(); clearDwgPreview(); } catch { /* leitor DWG já liberado */ }
       try { clear3d(); } catch { /* a cena pode já ter saído da página */ }
+      try { wordViewer?.dispose?.(wordViewer.current); } catch { /* Word já fechado */ }
+      try { cadImages?.dispose?.(); } catch { /* imagens CAD já liberadas */ }
+      if (imageUrl) URL.revokeObjectURL(imageUrl);
+      while (archiveStack.length) archiveStack.pop()?.close?.().catch(() => {});
       pdfViewer?.close().catch(() => {});
       try { renderer?.dispose(); } catch { /* renderer já liberado */ }
       ifcApi = null;
