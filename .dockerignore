@@ -16,4 +16,13 @@ obra10-backend/uploads
 obra10-backend/scratch
 obra10-backend/client (1)
 obra10-backend/python/__pycache__
+obra10-backend/recovered_restore_script.js
+obra10-backend/scripts/tmp-*.cjs
+obra10-backend/migration-diff.sql
 .tmp-brand
+.tmp-prumo
+.tmp-prumo-103
+.tmp-prumo-105
+.tmp-id-visual-lunardeli.pdf
+obra10-backend/prisma/data
+obra10-frontend/scratch-pwa-smoke.mjs

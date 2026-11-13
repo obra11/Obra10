@@ -18,7 +18,7 @@ globalThis.PrumoAssets = new Proxy({}, {
 });
 
 const PDF_LIMIT = 100 * 1024 * 1024;
-const DWG_LIMIT = 100 * 1024 * 1024;
+const DWG_LIMIT = 500 * 1024 * 1024;
 const IFC_LIMIT = 1024 * 1024 * 1024;
 const WORD_LIMIT = 100 * 1024 * 1024;
 const IFC_PALETTE = ['#e0c46d', '#7dcea0', '#85c1e9', '#f0b27a', '#d7bde2', '#f1948a', '#e74c3c', '#2e86de', '#27ae60', '#8e44ad', '#95a5a6', '#f5f5f5'];
@@ -1038,7 +1038,7 @@ export function mountViewer(host, hooks = {}) {
       return;
     }
     const { readDwg } = await import(asset('./dwg-read.js'));
-    const result = await readDwg(file);
+    const result = await readDwg(file, (message) => status(message));
     if (result.preview) {
       await showDwgPreview(result.preview);
       cadKey = key;
@@ -1329,7 +1329,7 @@ export function mountViewer(host, hooks = {}) {
       return 'image';
     }
     if (ext === 'dwg') {
-      if (file.size > DWG_LIMIT) throw new Error('O limite para DWG é 100 MB.');
+      if (file.size > DWG_LIMIT) throw new Error('O limite para DWG é 500 MB.');
       await openDwg(file);
       return 'dwg';
     }
@@ -1338,6 +1338,7 @@ export function mountViewer(host, hooks = {}) {
 
   const observer = new ResizeObserver(() => resize());
   observer.observe(stage);
+  import(asset('./dwg-read.js')).then((mod) => mod.warmDwgEngine?.()).catch(() => {});
 
   return {
     getKind: () => kind,

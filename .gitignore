@@ -65,6 +65,12 @@ secops_tester.js
 # /package.json
 # /package-lock.json
 
+# Extrações locais do visualizador Prumo (não versionar)
+.tmp-prumo/
+.tmp-prumo-*/
+.tmp-brand/
+.tmp-id-visual-lunardeli.pdf
+
 # AI agent generated intermediary files
 *.metadata.json
 *.resolved

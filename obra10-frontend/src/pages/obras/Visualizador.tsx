@@ -33,7 +33,7 @@ interface PdfState {
 
 const PDF_LIMIT = 100 * 1024 * 1024;
 const IFC_LIMIT = 1024 * 1024 * 1024;
-const DWG_LIMIT = 100 * 1024 * 1024;
+const DWG_LIMIT = 500 * 1024 * 1024;
 const OFFICE_LIMIT = 30 * 1024 * 1024;
 const EXCEL_KINDS = new Set<Kind>(['xls', 'xlsx']);
 const WORD_KINDS = new Set<Kind>(['doc', 'docx', 'txt']);
@@ -232,7 +232,7 @@ export const Visualizador: React.FC = () => {
       }
       const limit = kind === 'ifc' || kind === 'skp' ? IFC_LIMIT : kind === 'dwg' ? DWG_LIMIT : EXCEL_KINDS.has(kind) ? OFFICE_LIMIT : PDF_LIMIT;
       if (file.size > limit) {
-        const mb = kind === 'ifc' || kind === 'skp' ? 1024 : EXCEL_KINDS.has(kind) ? 30 : 100;
+        const mb = kind === 'ifc' || kind === 'skp' ? 1024 : kind === 'dwg' ? 500 : EXCEL_KINDS.has(kind) ? 30 : 100;
         setNotice(`O limite para ${kind.toUpperCase()} é ${mb} MB.`);
         setNoticeError(true);
         continue;
