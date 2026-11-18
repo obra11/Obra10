@@ -24,7 +24,8 @@ const MODULOS = [
   { slug: 'MATERIAIS',    nome: 'Controle de Materiais e Estoque',    sigla: 'Material',    grupo: 'Gestão',      descricao: 'Requisições, estoque e rastreabilidade de materiais.', preco: 29.90, ordemExibicao: 8 },
   { slug: 'EQUIPAMENTOS', nome: 'Manutenção e Aferição de Equipamentos', sigla: 'HSE/Maint', grupo: 'Gestão',   descricao: 'Manutenção preventiva e calibração de equipamentos.', preco: 29.90, ordemExibicao: 9 },
   { slug: 'MEDICOES',     nome: 'Boletim de Medição',                 sigla: 'BM',          grupo: 'Gestão',      descricao: 'Boletins de medição e faturamento de progresso.', preco: 29.90, ordemExibicao: 10 },
-  { slug: 'SEGURANCA',    nome: 'Segurança do Trabalho',              sigla: 'HSE/Safety',  grupo: 'Pessoas',     descricao: 'APR, DDS, registro de acidentes e conformidade HSE.', preco: 29.90, ordemExibicao: 11 },
+  { slug: 'SEGURANCA',    nome: 'Segurança do Trabalho',              sigla: 'HSE/Safety',  grupo: 'Pessoas',     descricao: 'APR, DDS, entrega de EPI, registro de acidentes e conformidade HSE.', preco: 29.90, ordemExibicao: 11 },
+  { slug: 'EPI',          nome: 'Entrega de EPI',                     sigla: 'EPI',         grupo: 'Pessoas',     descricao: 'Ficha de entrega de EPI (NR-6) com baixa no estoque.', preco: 29.90, ordemExibicao: 12 },
   { slug: 'TREINAMENTOS', nome: 'Treinamento de Funcionários',        sigla: 'Training',    grupo: 'Pessoas',     descricao: 'Gestão de treinamentos, certificações e competências.', preco: 29.90, ordemExibicao: 12 },
   { slug: 'VISUALIZADOR', nome: 'Visualizador de Arquivos',           sigla: 'Viewer',      grupo: 'Desenvolvimento', descricao: 'Abre PDF e IFC no navegador e converte DWG em PDF.', preco: 29.90, ordemExibicao: 13 },
   // Legacy IA module
@@ -49,6 +50,7 @@ const SUBMODULOS: { moduloSlug: string; slug: string; nome: string; descricao?: 
   { moduloSlug: 'SEGURANCA', slug: 'APR',        nome: 'Análise Preliminar de Risco',  descricao: 'Identificação e mitigação de riscos por tarefa.' },
   { moduloSlug: 'SEGURANCA', slug: 'DDS',        nome: 'Diálogo Diário de Segurança',  descricao: 'Registro de DDS e presenças.' },
   { moduloSlug: 'SEGURANCA', slug: 'ACIDENTES',  nome: 'Registro de Acidentes',        descricao: 'Acidentes, incidentes e quase-acidentes com investigação.' },
+  { moduloSlug: 'SEGURANCA', slug: 'EPI',        nome: 'Entrega de EPI',               descricao: 'Registro de entrega de equipamentos de proteção individual.' },
   // CLIENTES
   { moduloSlug: 'CLIENTES', slug: 'VISTORIA',    nome: 'Vistoria de Entrega',          descricao: 'Checklist de entrega de unidade ao cliente.' },
   { moduloSlug: 'CLIENTES', slug: 'ASSISTENCIA', nome: 'Assistência Técnica Pós-Entrega', descricao: 'Chamados e atendimentos pós-entrega.' },

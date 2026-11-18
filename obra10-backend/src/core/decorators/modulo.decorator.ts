@@ -1,3 +1,3 @@
 import { SetMetadata } from '@nestjs/common';
 export const MODULO_KEY = 'modulo';
-export const Modulo = (slug: string) => SetMetadata(MODULO_KEY, slug);
+export const Modulo = (...slugs: string[]) => SetMetadata(MODULO_KEY, slugs);

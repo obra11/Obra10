@@ -55,6 +55,10 @@ const MODULO_LABELS: Record<string, string> = {
   VISUALIZADOR: 'Visualizador de Arquivos',
   CONCRETO: 'Concretagem',
   IA: 'Análise IA',
+  MATERIAIS: 'Controle de Estoque',
+  ESTOQUE: 'Controle de Estoque',
+  EPI: 'Entrega de EPI',
+  SEGURANCA: 'Segurança do Trabalho',
 };
 
 const FUNCOES = [

@@ -51,6 +51,9 @@ model Empresa {
   features            EmpresaFeature[]
   catalogoInsumos     CatalogoInsumo[]
   chamadosSuporte     ChamadoSuporte[]
+  estoqueItens        EstoqueItem[]
+  estoqueMovimentos   EstoqueMovimento[]
+  epiEntregas         EpiEntrega[]
 
   @@map("empresas")
 }
@@ -72,6 +75,9 @@ model Obra {
   rdos         Rdo[]
   relatoriosIA RelatorioIA[]
   userObraRole UserObraRole[]
+  estoqueItens        EstoqueItem[]
+  estoqueMovimentos   EstoqueMovimento[]
+  epiEntregas         EpiEntrega[]
 
   @@index([empresaId])
   @@map("obras")
@@ -112,6 +118,8 @@ model Usuario {
   empresa        Empresa         @relation(fields: [empresaId], references: [id])
   chamadosSuporte ChamadoSuporte[]
   mensagensSuporte MensagemChamadoSuporte[]
+  estoqueMovimentos EstoqueMovimento[]
+  epiEntregasCriadas EpiEntrega[]
 
   @@unique([empresaId, email])
   @@index([empresaId])
@@ -615,6 +623,110 @@ enum TipoInsumo {
   MATERIAL
   EQUIPAMENTO
   MAO_DE_OBRA
+}
+
+enum TipoEstoqueItem {
+  MATERIAL
+  EPI
+}
+
+enum TipoMovimentoEstoque {
+  ENTRADA
+  SAIDA
+  AJUSTE
+  ENTREGA_EPI
+}
+
+model EstoqueItem {
+  id               String          @id @default(uuid())
+  empresaId        String          @map("empresa_id")
+  obraId           String          @map("obra_id")
+  tipo             TipoEstoqueItem
+  nome             String
+  unidade          String          @default("un")
+  codigo           String?
+  caNumero         String?         @map("ca_numero")
+  estoqueMinimo    Decimal         @default(0) @map("estoque_minimo") @db.Decimal(14, 3)
+  saldo            Decimal         @default(0) @db.Decimal(14, 3)
+  catalogoInsumoId String?         @map("catalogo_insumo_id")
+  ativo            Boolean         @default(true)
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  empresa     Empresa            @relation(fields: [empresaId], references: [id])
+  obra        Obra               @relation(fields: [obraId], references: [id])
+  movimentos  EstoqueMovimento[]
+  epiItens    EpiEntregaItem[]
+
+  @@index([empresaId, obraId, tipo])
+  @@index([obraId])
+  @@map("estoque_itens")
+}
+
+model EstoqueMovimento {
+  id          String                @id @default(uuid())
+  empresaId   String                @map("empresa_id")
+  obraId      String                @map("obra_id")
+  itemId      String                @map("item_id")
+  tipo        TipoMovimentoEstoque
+  quantidade  Decimal               @db.Decimal(14, 3)
+  saldoApos   Decimal               @map("saldo_apos") @db.Decimal(14, 3)
+  data        DateTime              @default(now())
+  observacao  String?
+  usuarioId   String                @map("usuario_id")
+  entregaId   String?               @map("entrega_id")
+  createdAt   DateTime              @default(now()) @map("created_at")
+
+  empresa Empresa     @relation(fields: [empresaId], references: [id])
+  obra    Obra        @relation(fields: [obraId], references: [id])
+  item    EstoqueItem @relation(fields: [itemId], references: [id])
+  usuario Usuario     @relation(fields: [usuarioId], references: [id])
+  entrega EpiEntrega? @relation(fields: [entregaId], references: [id])
+
+  @@index([empresaId, obraId, itemId])
+  @@index([itemId, createdAt])
+  @@map("estoque_movimentos")
+}
+
+model EpiEntrega {
+  id                   String   @id @default(uuid())
+  empresaId            String   @map("empresa_id")
+  obraId               String   @map("obra_id")
+  data                 DateTime
+  colaboradorNome      String   @map("colaborador_nome")
+  colaboradorCpf       String?  @map("colaborador_cpf")
+  colaboradorFuncao    String?  @map("colaborador_funcao")
+  colaboradorUsuarioId String?  @map("colaborador_usuario_id")
+  observacao           String?
+  criadoPorId          String   @map("criado_por_id")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  empresa   Empresa            @relation(fields: [empresaId], references: [id])
+  obra      Obra               @relation(fields: [obraId], references: [id])
+  criadoPor Usuario            @relation(fields: [criadoPorId], references: [id])
+  itens     EpiEntregaItem[]
+  movimentos EstoqueMovimento[]
+
+  @@index([empresaId, obraId, data])
+  @@map("epi_entregas")
+}
+
+model EpiEntregaItem {
+  id        String   @id @default(uuid())
+  empresaId String   @map("empresa_id")
+  entregaId String   @map("entrega_id")
+  itemId    String?  @map("item_id")
+  nome      String
+  unidade   String   @default("un")
+  quantidade Decimal @db.Decimal(14, 3)
+  caNumero  String?  @map("ca_numero")
+
+  entrega EpiEntrega  @relation(fields: [entregaId], references: [id], onDelete: Cascade)
+  item    EstoqueItem? @relation(fields: [itemId], references: [id])
+
+  @@index([empresaId, entregaId])
+  @@map("epi_entrega_itens")
 }
 
 model CatalogoInsumo {
