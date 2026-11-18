@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { Search, Loader2, Building, AlertTriangle, Plus, X, User, Mail, Lock, Phone, FileText, Bell, BellRing } from 'lucide-react';
 import { getImageUrl } from '../../utils/image';
+import { formatDataBrasil } from '../../utils/cupomData';
 
 interface EmpresaGridItem {
   id: string;
@@ -16,6 +17,12 @@ interface EmpresaGridItem {
   totalUsuarios: number;
   totalModulos: number;
   statusPagamento: string;
+  temPendencia?: boolean;
+  ultimoPagamento?: {
+    valor: number;
+    dataPagamento?: string | null;
+    formaPagamento?: string | null;
+  } | null;
   logoUrl?: string | null;
 }
 
@@ -112,8 +119,10 @@ export const AdminEmpresas: React.FC = () => {
     const matchPagamento =
       filterPagamento === 'ALL' ||
       (filterPagamento === 'PENDENTE'
-        ? ['PENDENTE', 'VENCIDO', 'OVERDUE'].includes(pagamento)
-        : pagamento === filterPagamento);
+        ? emp.temPendencia || ['PENDENTE', 'VENCIDO', 'OVERDUE'].includes(pagamento)
+        : filterPagamento === 'PAGO'
+          ? Boolean(emp.ultimoPagamento) || pagamento === 'PAGO'
+          : pagamento === filterPagamento);
 
     return Boolean(matchSearch) && matchStatus && matchPagamento;
   });
@@ -144,7 +153,7 @@ export const AdminEmpresas: React.FC = () => {
     }
   };
 
-  const temPendentes = empresas.some(e => ['PENDENTE', 'VENCIDO', 'OVERDUE'].includes(e.statusPagamento));
+  const temPendentes = empresas.some(e => e.temPendencia || ['PENDENTE', 'VENCIDO', 'OVERDUE'].includes(e.statusPagamento));
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -257,9 +266,21 @@ export const AdminEmpresas: React.FC = () => {
                       <span className="font-medium text-gray-900">{emp.totalObras}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
-                      <span className={`font-semibold ${emp.statusPagamento === 'PAGO' ? 'text-green-600' : emp.statusPagamento === 'PENDENTE' ? 'text-yellow-600' : 'text-gray-500'}`}>
+                      <span className={`font-semibold ${emp.statusPagamento === 'PAGO' ? 'text-green-600' : emp.statusPagamento === 'PENDENTE' || emp.statusPagamento === 'VENCIDO' || emp.statusPagamento === 'OVERDUE' ? 'text-yellow-600' : 'text-gray-500'}`}>
                         {emp.statusPagamento}
                       </span>
+                      {emp.ultimoPagamento && (
+                        <span className="block text-[11px] text-green-700 mt-0.5">
+                          {emp.ultimoPagamento.formaPagamento || 'PIX'}{' '}
+                          {emp.ultimoPagamento.valor.toLocaleString('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          })}
+                          {emp.ultimoPagamento.dataPagamento
+                            ? ` · ${formatDataBrasil(emp.ultimoPagamento.dataPagamento)}`
+                            : ''}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-2">

@@ -355,5 +355,19 @@ export class CobrancaCron implements OnModuleInit {
         });
       }
     }
+
+    try {
+      const { confirmados } =
+        await this.cobrancaService.confirmarPendentesAsaas(80);
+      if (confirmados.length > 0) {
+        this.logger.log(
+          `💰 ${confirmados.length} depósito(s) Asaas confirmado(s) sem webhook`,
+        );
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `Falha ao confirmar depósitos Asaas: ${err?.message || err}`,
+      );
+    }
   }
 }
