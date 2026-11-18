@@ -88,7 +88,7 @@ export const DEFAULT_CAPABILITIES_BY_TIPO: Record<
     verTodosRdos: true,
     verSoAprovados: false,
     verParcialAprovados: false,
-    modulosPadrao: { RDO: 'EDIT' },
+    modulosPadrao: { RDO: 'EDIT', VISUALIZADOR: 'VIEW' },
   },
   EXTERNO: {
     gerenciarUsuarios: false,

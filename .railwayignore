@@ -20,4 +20,11 @@ node_modules/
 *.mkv
 *.avi
 obra10-backend/prisma/data/
+obra10-backend/prisma/migrations/20261029233000_modulo_manutencao/
+obra10-backend/src/modules/estoque/
+obra10-backend/src/modules/rh/
+obra10-backend/src/modules/manutencao/
+obra10-frontend/src/pages/estoque/
+obra10-frontend/src/pages/rh/
+obra10-frontend/src/pages/manutencao/
 obra10-frontend/scratch-pwa-smoke.mjs

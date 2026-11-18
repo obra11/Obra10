@@ -279,7 +279,7 @@ export const Visualizador: React.FC = () => {
 
   return (
     <div
-      className="relative h-full min-h-0 overflow-hidden bg-[#172334]"
+      className="relative h-full min-h-full overflow-hidden bg-[#172334]"
       onDragOver={(event) => {
         event.preventDefault();
         setDragOver(true);

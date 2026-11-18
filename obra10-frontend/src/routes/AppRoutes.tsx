@@ -28,6 +28,7 @@ import { Efetivo } from '../pages/obras/Efetivo';
 import { Perfil } from '../pages/Perfil';
 import { Configuracoes } from '../pages/obras/Configuracoes';
 import { Visualizador } from '../pages/obras/Visualizador';
+import { ModuloIndisponivel } from '../pages/obras/ModuloIndisponivel';
 import { CatalogoPage } from '../pages/CatalogoPage';
 
 import { AdminRoute } from './AdminRoute';
@@ -117,6 +118,9 @@ export const AppRoutes: React.FC = () => {
         <Route path="efetivo" element={<Efetivo />} />
         <Route path="configuracoes" element={<Configuracoes />} />
         <Route path="visualizador" element={<Visualizador />} />
+        <Route path="projetos" element={<Visualizador />} />
+        <Route path="documentos" element={<Visualizador />} />
+        <Route path="*" element={<ModuloIndisponivel />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

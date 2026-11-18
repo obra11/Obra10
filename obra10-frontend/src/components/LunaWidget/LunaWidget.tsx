@@ -123,7 +123,7 @@ export default function LunaWidget() {
   }, []);
 
   const inObra = /^\/obras\/[^/]+/.test(pathname);
-  const inViewer = /\/visualizador\/?$/i.test(pathname);
+  const inViewer = /\/(visualizador|projetos|documentos)\/?$/i.test(pathname);
   const clearance = narrow && inObra && !inViewer ? 96 : 0;
   const buttonBottom = narrow ? 12 + clearance : 24;
   const panelBottom = buttonBottom + 76;

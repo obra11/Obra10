@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   LogOut, Settings, LayoutDashboard, Users, FileText, ArrowLeft, BarChart2, Loader2,
@@ -25,9 +25,10 @@ const MODULE_ICONS: Record<string, any> = {
 };
 
 export const ObraLayout: React.FC = () => {
-  const { logout, obraAtiva, empresa, setObraAtiva, user, updateUserPhoto, updateEmpresaLogo } = useAuth();
+  const { logout, obraAtiva, obras, empresa, setObraAtiva, user, updateUserPhoto, updateEmpresaLogo } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { obraId } = useParams();
   const [uploadingUserPhoto, setUploadingUserPhoto] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
@@ -39,11 +40,18 @@ export const ObraLayout: React.FC = () => {
 
   // Hide bottom nav when the user is inside DiarioDeObra (it has its own floating action bar)
   const isInsideDiario = /\/rdos\/(novo|[a-f0-9-]+)$/i.test(location.pathname);
-  const isInsideVisualizador = /\/visualizador\/?$/i.test(location.pathname);
+  const isInsideVisualizador = /\/(visualizador|projetos|documentos)\/?$/i.test(location.pathname);
 
   useEffect(() => {
     setMobileMoreOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!obraId) return;
+    if (obraAtiva?.id === obraId) return;
+    const found = (obras || []).find((obra) => obra.id === obraId);
+    if (found) setObraAtiva(found);
+  }, [obraId, obras, obraAtiva?.id, setObraAtiva]);
 
   const handleLogout = () => {
     logout();
@@ -115,7 +123,13 @@ export const ObraLayout: React.FC = () => {
       name: m.nome,
       slug: m.slug,
       icon: MODULE_ICONS[m.slug] || Package,
-      path: `/obras/${obraAtiva?.id}/${m.slug === 'RDO' ? 'rdos' : m.slug.toLowerCase()}`,
+      path: `/obras/${obraAtiva?.id}/${
+        m.slug === 'RDO'
+          ? 'rdos'
+          : m.slug === 'PROJETOS' || m.slug === 'DOCUMENTOS'
+            ? 'visualizador'
+            : m.slug.toLowerCase()
+      }`,
       visible: true
     }));
 
@@ -155,7 +169,7 @@ export const ObraLayout: React.FC = () => {
   // const baseURL = import.meta.env.VITE_API_URL ?? '';
 
   return (
-    <div className="flex min-h-screen bg-lunardeli-gray font-sans overflow-x-hidden">
+    <div className="flex h-dvh min-h-0 bg-lunardeli-gray font-sans overflow-hidden">
       {/* Sidebar Desktop */}
       <aside className="w-64 bg-lunardeli-dark text-white flex-col hidden md:flex shrink-0 shadow-2xl z-10 transition-all duration-300">
         
@@ -293,7 +307,7 @@ export const ObraLayout: React.FC = () => {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
         {/* Header Mobile */}
         <header className="h-14 bg-white shadow-sm flex items-center justify-between px-4 md:hidden shrink-0 z-10 relative">
           <div className="flex items-center text-lunardeli-dark min-w-0 gap-2">
@@ -351,8 +365,8 @@ export const ObraLayout: React.FC = () => {
         </header>
 
         {/* Dynamic Nested Content — add bottom padding on mobile for bottom nav */}
-        <div className={`flex-1 pb-[env(safe-area-inset-bottom)] md:pb-0 ${isInsideVisualizador ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-          <div className={`md:pb-0 ${isInsideDiario || isInsideVisualizador ? 'h-full pb-0' : 'pb-20'}`}>
+        <div className={`relative flex-1 min-h-0 pb-[env(safe-area-inset-bottom)] md:pb-0 ${isInsideVisualizador ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+          <div className={`h-full min-h-0 md:pb-0 ${isInsideDiario || isInsideVisualizador ? 'pb-0' : 'pb-20'}`}>
             <Outlet />
           </div>
         </div>

@@ -108,6 +108,9 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         if (fresh) {
           setObraAtivaState(fresh);
           localStorage.setItem('obra10_obraAtiva', JSON.stringify(fresh));
+        } else {
+          setObraAtivaState(null);
+          localStorage.removeItem('obra10_obraAtiva');
         }
       }
     } catch (err) {

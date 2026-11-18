@@ -1,12 +1,12 @@
 ﻿# ============================================
 # Obra 10 — Production Dockerfile
-# Force rebuild: 2026-11-13-viewer-prumo-0.1.105-2.9.53
+# Force rebuild: 2026-11-18-giliard-visualizador-2.9.55
 # ============================================
 
 # --- Build stage ---
 FROM node:22-bookworm-slim AS builder
 
-ARG OBRA10_BUILD_ID=2.9.53-20261113
+ARG OBRA10_BUILD_ID=2.9.55-20261118
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 
 # Install build tools for native modules (bcrypt)
@@ -29,6 +29,9 @@ RUN npm install
 # Copy remaining backend source
 COPY obra10-backend/ .
 
+# Garante o módulo no processo mesmo se o app.module do snapshot vier sem o registro.
+RUN node scripts/wire-estoque-build.js
+
 # Generate Prisma client and build NestJS (sem banco real no build)
 RUN npx prisma generate && npx nest build
 ENV PRISMA_BUILD_PLACEHOLDER=
@@ -36,7 +39,7 @@ ENV PRISMA_BUILD_PLACEHOLDER=
 # --- Production stage ---
 FROM node:22-bookworm-slim
 
-ARG OBRA10_BUILD_ID=2.9.53-20261113
+ARG OBRA10_BUILD_ID=2.9.55-20261118
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 ENV NODE_ENV=production
 
