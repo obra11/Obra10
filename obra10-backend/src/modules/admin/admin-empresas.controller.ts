@@ -20,6 +20,7 @@ import {
   resolvePlano,
 } from '../cobranca/pacotes-obras';
 import { normalizarDocumentoFiscal } from '../../core/utils/documento-fiscal';
+import { resumoPagamentoEmpresa } from '../cobranca/cobranca-fatura';
 
 @Controller('admin/empresas')
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
@@ -41,8 +42,14 @@ export class AdminEmpresasController {
         },
         cobrancas: {
           orderBy: { createdAt: 'desc' },
-          take: 1
-        }
+          take: 12,
+          select: {
+            status: true,
+            valor: true,
+            dataPagamento: true,
+            formaPagamento: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -50,6 +57,7 @@ export class AdminEmpresasController {
     return empresas.map(emp => {
       let documentoStr = emp.cpfCnpj ? this.cryptoService.decrypt(emp.cpfCnpj) : null;
       if (!documentoStr && emp.cnpj) documentoStr = this.cryptoService.decrypt(emp.cnpj);
+      const pagamento = resumoPagamentoEmpresa(emp.cobrancas);
 
       return {
         id: emp.id,
@@ -62,7 +70,9 @@ export class AdminEmpresasController {
         totalObras: emp._count.obras,
         totalUsuarios: emp._count.usuarios,
         totalModulos: emp._count.tenantModulos,
-        statusPagamento: emp.cobrancas[0]?.status || 'SEM COBRANCA',
+        statusPagamento: pagamento.statusPagamento,
+        temPendencia: pagamento.temPendencia,
+        ultimoPagamento: pagamento.ultimoPagamento,
         logoUrl: emp.logoUrl
       };
     });

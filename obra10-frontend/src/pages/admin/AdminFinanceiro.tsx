@@ -84,6 +84,20 @@ export const AdminFinanceiro: React.FC = () => {
     conta?: { ok?: boolean; name?: string; error?: string };
     webhook?: { ok?: boolean; action?: string };
   } | null>(null);
+  const [depositosSync, setDepositosSync] = useState<{
+    confirmados: Array<{
+      empresaNome: string;
+      valor: number;
+      dataPagamento?: string | null;
+    }>;
+    orfaos: Array<{
+      idAsaas: string;
+      valor: number;
+      forma?: string | null;
+      descricao?: string | null;
+      dataPagamento?: string | null;
+    }>;
+  } | null>(null);
   const [form, setForm] = useState({
     descricao: '',
     valor: '',
@@ -207,9 +221,31 @@ export const AdminFinanceiro: React.FC = () => {
     setSyncing(true);
     try {
       const res = await api.post('/admin/financeiro/sincronizar-asaas');
-      alert(
+      const confirmados = res.data.confirmados || [];
+      const orfaos = res.data.orfaos || [];
+      setDepositosSync({ confirmados, orfaos });
+      const linhas = [
         `Sincronização Asaas: ${res.data.atualizados}/${res.data.processados} cobrança(s) atualizada(s).`,
-      );
+      ];
+      if (confirmados.length) {
+        linhas.push(
+          `${confirmados.length} depósito(s) já pago(s) na Asaas agora visíveis:`,
+        );
+        for (const d of confirmados.slice(0, 8)) {
+          linhas.push(
+            `• ${d.empresaNome} — ${money(d.valor)}${d.dataPagamento ? ` em ${d.dataPagamento}` : ''}`,
+          );
+        }
+      }
+      if (orfaos.length) {
+        linhas.push(
+          `${orfaos.length} depósito(s) na Asaas sem cobrança no Obra 10.`,
+        );
+      }
+      if (!confirmados.length && !orfaos.length) {
+        linhas.push('Nenhum depósito Asaas estava escondido.');
+      }
+      alert(linhas.join('\n'));
       if (tab === 'resumo') await loadResumo();
       if (tab === 'recebimentos') await loadRecebimentos();
       if (tab === 'fluxo') await loadFluxo();
@@ -295,6 +331,27 @@ export const AdminFinanceiro: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {depositosSync && (depositosSync.confirmados.length > 0 || depositosSync.orfaos.length > 0) && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-2">
+          <p className="text-sm font-bold text-green-900">
+            Depósitos já realizados na Asaas
+          </p>
+          {depositosSync.confirmados.map((d, i) => (
+            <p key={`c-${i}`} className="text-sm text-green-800">
+              {d.empresaNome} — {money(d.valor)}
+              {d.dataPagamento ? ` em ${d.dataPagamento}` : ''} (agora visível no Obra 10)
+            </p>
+          ))}
+          {depositosSync.orfaos.map((d) => (
+            <p key={d.idAsaas} className="text-sm text-amber-800">
+              {d.forma || 'PIX'} {money(d.valor)}
+              {d.dataPagamento ? ` em ${d.dataPagamento}` : ''}
+              {d.descricao ? ` — ${d.descricao}` : ''} (na Asaas, sem cobrança local)
+            </p>
+          ))}
+        </div>
+      )}
 
       {showPeriodo && (
         <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">

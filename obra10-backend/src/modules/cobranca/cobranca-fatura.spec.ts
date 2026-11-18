@@ -1,4 +1,9 @@
-import { motivoEncerrarFatura } from './cobranca-fatura';
+import {
+  dataPagamentoAsaas,
+  isAsaasPago,
+  motivoEncerrarFatura,
+  resumoPagamentoEmpresa,
+} from './cobranca-fatura';
 
 describe('motivoEncerrarFatura', () => {
   it('tira da Asaas a fatura já bonificada ou quitada por cupom', () => {
@@ -59,5 +64,33 @@ describe('motivoEncerrarFatura', () => {
         cupomCobreTudo: false,
       }),
     ).toBeNull();
+  });
+});
+
+describe('depósito Asaas', () => {
+  it('reconhece PIX/cartão já creditado na Asaas', () => {
+    expect(isAsaasPago('RECEIVED')).toBe(true);
+    expect(isAsaasPago('CONFIRMED')).toBe(true);
+    expect(isAsaasPago('PENDING')).toBe(false);
+  });
+
+  it('usa a data do PIX em Brasília, não o instante do webhook', () => {
+    const d = dataPagamentoAsaas({ clientPaymentDate: '2026-11-18' });
+    expect(d?.toISOString()).toBe('2026-11-18T15:00:00.000Z');
+  });
+
+  it('mostra o depósito pago mesmo com fatura nova pendente', () => {
+    const r = resumoPagamentoEmpresa([
+      { status: 'PENDENTE', valor: 99, formaPagamento: 'PIX' },
+      {
+        status: 'PAGO',
+        valor: 99,
+        formaPagamento: 'PIX',
+        dataPagamento: new Date('2026-11-10T15:00:00.000Z'),
+      },
+    ]);
+    expect(r.statusPagamento).toBe('PENDENTE');
+    expect(r.temPendencia).toBe(true);
+    expect(r.ultimoPagamento?.valor).toBe(99);
   });
 });
