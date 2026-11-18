@@ -169,7 +169,7 @@ export const ObraLayout: React.FC = () => {
   // const baseURL = import.meta.env.VITE_API_URL ?? '';
 
   return (
-    <div className="flex h-dvh min-h-0 bg-lunardeli-gray font-sans overflow-hidden">
+    <div className="flex min-h-screen h-dvh bg-lunardeli-gray font-sans overflow-x-hidden">
       {/* Sidebar Desktop */}
       <aside className="w-64 bg-lunardeli-dark text-white flex-col hidden md:flex shrink-0 shadow-2xl z-10 transition-all duration-300">
         

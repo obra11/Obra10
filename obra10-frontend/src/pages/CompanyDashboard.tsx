@@ -44,7 +44,7 @@ export const CompanyDashboard: React.FC = () => {
   };
 
   const filteredObras = useMemo(() => {
-    return obras.filter((obra) => {
+    return (obras || []).filter((obra) => {
       const matchSearch =
         !searchQuery.trim() ||
         obra.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||

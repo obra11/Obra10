@@ -100,7 +100,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       const data = await authService.getSession(`?_t=${Date.now()}`);
       setUser(data.usuario);
       setEmpresa(data.empresa);
-      setObras(data.obrasPermitidas);
+      setObras(data.obrasPermitidas || []);
       setIsAuthenticated(true);
       const ativa = loadObraAtiva();
       if (ativa?.id) {
