@@ -29,9 +29,6 @@ RUN npm install
 # Copy remaining backend source
 COPY obra10-backend/ .
 
-# Garante o módulo no processo mesmo se o app.module do snapshot vier sem o registro.
-RUN node scripts/wire-estoque-build.js
-
 # Generate Prisma client and build NestJS (sem banco real no build)
 RUN npx prisma generate && npx nest build
 ENV PRISMA_BUILD_PLACEHOLDER=
