@@ -18,13 +18,17 @@ export class ModuloGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const moduloSlug = this.reflector.getAllAndOverride<string>(MODULO_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const moduloMeta = this.reflector.getAllAndOverride<string | string[]>(
+      MODULO_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
     // Se a rota não tem @Modulo(), deixa passar (sem restrição de módulo)
-    if (!moduloSlug) return true;
+    if (!moduloMeta || (Array.isArray(moduloMeta) && moduloMeta.length === 0)) {
+      return true;
+    }
+    const slugs = Array.isArray(moduloMeta) ? moduloMeta : [moduloMeta];
+    const moduloSlug = slugs[0];
 
     const req = context.switchToHttp().getRequest();
     const userId: string = req.user?.sub;
@@ -53,7 +57,7 @@ export class ModuloGuard implements CanActivate {
     const tenantModulo = await this.prisma.tenantModulo.findFirst({
       where: {
         empresaId,
-        modulo: { slug: moduloSlug },
+        modulo: { slug: { in: slugs } },
         ativo: true,
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   LogOut, Settings, LayoutDashboard, Users, FileText, ArrowLeft, BarChart2, Loader2,
   Beaker, ClipboardCheck, Home, Package, Calendar, Clock, Layers, Files, ShieldCheck, Heart, BadgeDollarSign,
-  Building2, User, Boxes, Headphones, Menu, X, Box
+  Building2, User, Boxes, Headphones, Menu, X, Box, HardHat
 } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
@@ -14,6 +14,8 @@ const MODULE_ICONS: Record<string, any> = {
   PQO: ClipboardCheck,
   CLIENTES: Home,
   ESTOQUE: Package,
+  MATERIAIS: Package,
+  EPI: HardHat,
   PLANEJAMENTO: Calendar,
   PONTUALIDADE: Clock,
   PROJETOS: Layers,
