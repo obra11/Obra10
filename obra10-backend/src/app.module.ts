@@ -33,6 +33,8 @@ import { CatalogoModule } from './modules/catalogo/catalogo.module';
 import { ContatoModule } from './modules/contato/contato.module';
 import { SuporteModule } from './modules/suporte/suporte.module';
 import { VisualizadorModule } from './modules/visualizador/visualizador.module';
+import { EstoqueModule } from './modules/estoque/estoque.module';
+import { RhModule } from './modules/rh/rh.module';
 import { ApiVersionMiddleware } from './core/middlewares/api-version.middleware';
 
 @Module({
@@ -103,6 +105,8 @@ import { ApiVersionMiddleware } from './core/middlewares/api-version.middleware'
     AdminModule,
     FeatureModule,
     CatalogoModule,
+    EstoqueModule,
+    RhModule,
     SuporteModule,
     ContatoModule,
     VisualizadorModule,

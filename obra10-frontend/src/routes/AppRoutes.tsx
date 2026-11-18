@@ -30,6 +30,8 @@ import { Configuracoes } from '../pages/obras/Configuracoes';
 import { Visualizador } from '../pages/obras/Visualizador';
 import { ModuloIndisponivel } from '../pages/obras/ModuloIndisponivel';
 import { CatalogoPage } from '../pages/CatalogoPage';
+import { EstoquePage } from '../pages/estoque/EstoquePage';
+import { RhPage } from '../pages/rh/RhPage';
 
 import { AdminRoute } from './AdminRoute';
 import { AdminLayout } from '../layouts/AdminLayout';
@@ -108,6 +110,7 @@ export const AppRoutes: React.FC = () => {
       <Route path="/dashboard" element={<ProtectedRoute><CompanyDashboard /></ProtectedRoute>} />
       <Route path="/relatorios" element={<ProtectedRoute><RelatoriosEmpresa /></ProtectedRoute>} />
       <Route path="/catalogo" element={<ProtectedRoute><CatalogoPage /></ProtectedRoute>} />
+      <Route path="/estoque" element={<ProtectedRoute><EstoquePage modo="central" /></ProtectedRoute>} />
 
       <Route path="/obras/:obraId/*" element={<ProtectedRoute><ObraLayout /></ProtectedRoute>}>
         <Route path="dashboard" element={<Dashboard />} />
@@ -116,6 +119,8 @@ export const AppRoutes: React.FC = () => {
         <Route path="rdos/:rdoId" element={<DiarioDeObra />} />
         <Route path="rdos/dashboard" element={<RdoDashboard />} />
         <Route path="efetivo" element={<Efetivo />} />
+        <Route path="materiais" element={<EstoquePage modo="obra" />} />
+        <Route path="rh" element={<RhPage />} />
         <Route path="configuracoes" element={<Configuracoes />} />
         <Route path="visualizador" element={<Visualizador />} />
         <Route path="projetos" element={<Visualizador />} />

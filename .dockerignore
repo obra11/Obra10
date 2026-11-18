@@ -26,12 +26,6 @@ obra10-backend/migration-diff.sql
 .tmp-id-visual-lunardeli.pdf
 obra10-backend/prisma/data
 obra10-frontend/scratch-pwa-smoke.mjs
-obra10-backend/src/modules/estoque
-obra10-backend/src/modules/rh
-obra10-backend/src/modules/manutencao
-obra10-frontend/src/pages/estoque
-obra10-frontend/src/pages/rh
-obra10-frontend/src/pages/manutencao
-obra10-backend/prisma/migrations/20261029220000_estoque_rh
-obra10-backend/prisma/migrations/20261111230000_materiais_no_menu
 obra10-backend/prisma/migrations/20261029233000_modulo_manutencao
+obra10-backend/src/modules/manutencao
+obra10-frontend/src/pages/manutencao

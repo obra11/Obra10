@@ -20,9 +20,10 @@ import {
   Upload,
   FileSpreadsheet,
   FileJson,
+  HardHat,
 } from 'lucide-react';
 
-export type TipoInsumo = 'MATERIAL' | 'EQUIPAMENTO' | 'MAO_DE_OBRA';
+export type TipoInsumo = 'MATERIAL' | 'EQUIPAMENTO' | 'MAO_DE_OBRA' | 'EPI';
 
 export interface CatalogoInsumo {
   id: string;
@@ -97,7 +98,7 @@ const UNIDADE_GRUPOS = Array.from(
   new Set(UNIDADES_OPCOES.map((u) => u.grupo)),
 );
 
-const TIPOS_VALIDOS: TipoInsumo[] = ['MATERIAL', 'EQUIPAMENTO', 'MAO_DE_OBRA'];
+const TIPOS_VALIDOS: TipoInsumo[] = ['MATERIAL', 'EQUIPAMENTO', 'MAO_DE_OBRA', 'EPI'];
 
 function normalizarTipo(raw: unknown): TipoInsumo | null {
   const v = String(raw || '')
@@ -110,6 +111,7 @@ function normalizarTipo(raw: unknown): TipoInsumo | null {
   if (TIPOS_VALIDOS.includes(v as TipoInsumo)) return v as TipoInsumo;
   if (['MATERIAL', 'MATERIAIS', 'MAT'].includes(v)) return 'MATERIAL';
   if (['EQUIPAMENTO', 'EQUIPAMENTOS', 'EQP', 'EQUIP'].includes(v)) return 'EQUIPAMENTO';
+  if (['EPI', 'EPIS', 'E.P.I', 'PROTECAO'].includes(v)) return 'EPI';
   if (
     ['MAO_DE_OBRA', 'MAO_OBRA', 'MAO-DE-OBRA', 'FUNCAO', 'FUNCOES', 'MAO', 'MDO'].includes(v)
   ) {
@@ -293,6 +295,7 @@ export const CatalogoPage: React.FC = () => {
       MATERIAL: items.filter((i) => i.tipo === 'MATERIAL').length,
       EQUIPAMENTO: items.filter((i) => i.tipo === 'EQUIPAMENTO').length,
       MAO_DE_OBRA: items.filter((i) => i.tipo === 'MAO_DE_OBRA').length,
+      EPI: items.filter((i) => i.tipo === 'EPI').length,
     };
   }, [items]);
 
@@ -382,7 +385,7 @@ export const CatalogoPage: React.FC = () => {
       );
       const nome = pickField(obj, ['nome', 'name', 'descricao', 'descrição', 'item']);
       if (!tipo) {
-        errors.push(`Linha ${linha}: tipo inválido (use MATERIAL, EQUIPAMENTO ou MAO_DE_OBRA).`);
+        errors.push(`Linha ${linha}: tipo inválido (use MATERIAL, EQUIPAMENTO, MAO_DE_OBRA ou EPI).`);
         return;
       }
       if (!nome) {
@@ -515,7 +518,7 @@ export const CatalogoPage: React.FC = () => {
             Cadastro Base
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Cadastre, importe e exporte o catálogo padronizado de Materiais, Equipamentos e Mão de Obra.
+            Cadastre, importe e exporte o catálogo padronizado de Materiais, Equipamentos, EPIs e Mão de Obra.
           </p>
         </div>
 
@@ -596,7 +599,9 @@ export const CatalogoPage: React.FC = () => {
                 ? 'Material'
                 : activeTab === 'EQUIPAMENTO'
                   ? 'Equipamento'
-                  : 'Função'}
+                  : activeTab === 'EPI'
+                    ? 'EPI'
+                    : 'Função'}
             </span>
           </button>
         </div>
@@ -660,6 +665,25 @@ export const CatalogoPage: React.FC = () => {
             {counts.MAO_DE_OBRA}
           </span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('EPI')}
+          className={`flex items-center gap-2 px-4 py-3 rounded-t-xl font-bold text-sm transition-all border-b-2 whitespace-nowrap ${
+            activeTab === 'EPI'
+              ? 'border-lunardeli-red text-lunardeli-red bg-red-50/50'
+              : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-100/60'
+          }`}
+        >
+          <HardHat size={18} />
+          <span>EPIs</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-xs font-black ${
+              activeTab === 'EPI' ? 'bg-lunardeli-red text-white' : 'bg-gray-200 text-gray-700'
+            }`}
+          >
+            {counts.EPI}
+          </span>
+        </button>
       </div>
 
       {/* Search */}
@@ -674,7 +698,9 @@ export const CatalogoPage: React.FC = () => {
                 ? 'material...'
                 : activeTab === 'EQUIPAMENTO'
                   ? 'equipamento...'
-                  : 'função ou profissional...'
+                  : activeTab === 'EPI'
+                    ? 'EPI...'
+                    : 'função ou profissional...'
             }`}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -696,6 +722,8 @@ export const CatalogoPage: React.FC = () => {
               <Package size={24} />
             ) : activeTab === 'EQUIPAMENTO' ? (
               <Drill size={24} />
+            ) : activeTab === 'EPI' ? (
+              <HardHat size={24} />
             ) : (
               <Users size={24} />
             )}
@@ -790,6 +818,8 @@ export const CatalogoPage: React.FC = () => {
                   <Package className="text-lunardeli-red" size={20} />
                 ) : formData.tipo === 'EQUIPAMENTO' ? (
                   <Drill className="text-lunardeli-red" size={20} />
+                ) : formData.tipo === 'EPI' ? (
+                  <HardHat className="text-lunardeli-red" size={20} />
                 ) : (
                   <Users className="text-lunardeli-red" size={20} />
                 )}
@@ -818,6 +848,7 @@ export const CatalogoPage: React.FC = () => {
                   <option value="MATERIAL">Material</option>
                   <option value="EQUIPAMENTO">Equipamento</option>
                   <option value="MAO_DE_OBRA">Mão de Obra / Função</option>
+                  <option value="EPI">EPI</option>
                 </select>
               </div>
 
@@ -834,7 +865,9 @@ export const CatalogoPage: React.FC = () => {
                       ? 'Ex: Cimento CP II 50kg'
                       : formData.tipo === 'EQUIPAMENTO'
                         ? 'Ex: Betoneira 400L'
-                        : 'Ex: Pedreiro'
+                        : formData.tipo === 'EPI'
+                          ? 'Ex: Capacete de segurança'
+                          : 'Ex: Pedreiro'
                   }
                   value={formData.nome}
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}

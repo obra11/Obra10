@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   LogOut, Settings, LayoutDashboard, Users, FileText, ArrowLeft, BarChart2, Loader2,
   Beaker, ClipboardCheck, Home, Package, Calendar, Clock, Layers, Files, ShieldCheck, Heart, BadgeDollarSign,
-  Building2, User, Boxes, Headphones, Menu, X, Box
+  Building2, User, Boxes, Headphones, Menu, X, Box, HardHat
 } from 'lucide-react';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
@@ -14,6 +14,7 @@ const MODULE_ICONS: Record<string, any> = {
   PQO: ClipboardCheck,
   CLIENTES: Home,
   ESTOQUE: Package,
+  MATERIAIS: Package,
   PLANEJAMENTO: Calendar,
   PONTUALIDADE: Clock,
   PROJETOS: Layers,
@@ -147,6 +148,12 @@ export const ObraLayout: React.FC = () => {
   // Final permanent items
   const footerItems = [
     { name: 'Efetivo', icon: Users, path: `/obras/${obraAtiva?.id}/efetivo`, visible: true },
+    {
+      name: 'RH',
+      icon: HardHat,
+      path: `/obras/${obraAtiva?.id}/rh`,
+      visible: hasPerm('MATERIAIS') || user?.perfilGlobal === 'GESTOR',
+    },
     { name: 'Cadastro Base', icon: Boxes, path: '/catalogo', visible: true },
     {
       name: 'Configurações',
@@ -160,18 +167,19 @@ export const ObraLayout: React.FC = () => {
 
   const painelItem = menuItems.find((item) => /\/dashboard$/.test(item.path) && !item.path.includes('/rdos/'));
   const diarioItem = menuItems.find((item) => /\/rdos$/.test(item.path));
-  const mobilePrimaryItems = [painelItem, diarioItem].filter((item, index, list): item is NonNullable<typeof item> => !!item && list.indexOf(item) === index);
-  if (mobilePrimaryItems.length < 2) {
-    const extra = menuItems.find((item) => !mobilePrimaryItems.includes(item) && item.name !== 'Configurações');
-    if (extra) mobilePrimaryItems.push(extra);
-  }
+  const estoqueItem = menuItems.find((item) => /\/materiais$/.test(item.path));
+  const mobilePrimaryItems = [
+    painelItem ? { ...painelItem, name: 'Painel' } : null,
+    estoqueItem ? { ...estoqueItem, name: 'Estoque' } : null,
+    diarioItem ? { ...diarioItem, name: 'Diário' } : null,
+  ].filter((item): item is NonNullable<typeof item> => !!item);
 
   // const baseURL = import.meta.env.VITE_API_URL ?? '';
 
   return (
     <div className="flex min-h-screen h-dvh bg-lunardeli-gray font-sans overflow-x-hidden">
       {/* Sidebar Desktop */}
-      <aside className="w-64 bg-lunardeli-dark text-white flex-col hidden md:flex shrink-0 shadow-2xl z-10 transition-all duration-300">
+      <aside className="w-64 h-dvh sticky top-0 bg-lunardeli-dark text-white flex-col hidden lg:flex shrink-0 shadow-2xl z-10 overflow-hidden">
         
         {/* Brand Area */}
         <div className="h-20 flex flex-col justify-center px-4 bg-black/30 border-b border-white/10 relative overflow-hidden">
@@ -309,7 +317,7 @@ export const ObraLayout: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
         {/* Header Mobile */}
-        <header className="h-14 bg-white shadow-sm flex items-center justify-between px-4 md:hidden shrink-0 z-10 relative">
+        <header className="h-14 bg-white shadow-sm flex items-center justify-between px-4 lg:hidden shrink-0 z-10 relative">
           <div className="flex items-center text-lunardeli-dark min-w-0 gap-2">
             <button onClick={handleBackToCompany} className="p-2.5 -ml-2 mr-1 text-gray-500 hover:text-lunardeli-red active:bg-gray-100 rounded-lg shrink-0">
                <ArrowLeft size={20} />
@@ -365,8 +373,8 @@ export const ObraLayout: React.FC = () => {
         </header>
 
         {/* Dynamic Nested Content — add bottom padding on mobile for bottom nav */}
-        <div className={`relative flex-1 min-h-0 pb-[env(safe-area-inset-bottom)] md:pb-0 ${isInsideVisualizador ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-          <div className={`h-full min-h-0 md:pb-0 ${isInsideDiario || isInsideVisualizador ? 'pb-0' : 'pb-20'}`}>
+        <div className={`relative flex-1 min-h-0 pb-[env(safe-area-inset-bottom)] lg:pb-0 ${isInsideVisualizador ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+          <div className={`h-full min-h-0 lg:pb-0 ${isInsideDiario || isInsideVisualizador ? 'pb-0' : 'pb-20'}`}>
             <Outlet />
           </div>
         </div>
@@ -375,7 +383,7 @@ export const ObraLayout: React.FC = () => {
       {/* ═══ Bottom Navigation Bar — Mobile Only ═══ */}
       {/* Hidden when inside DiarioDeObra since it has its own floating action bar */}
       {!isInsideDiario && !isInsideVisualizador && (
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           <div className="flex items-center justify-around h-16 px-1">
             {mobilePrimaryItems.map(item => {
               const isActive = location.pathname.startsWith(item.path);
@@ -413,7 +421,7 @@ export const ObraLayout: React.FC = () => {
 
       {/* Sheet "Mais" — acesso a Configurações e demais itens no mobile */}
       {mobileMoreOpen && (
-        <div className="md:hidden fixed inset-0 z-50">
+        <div className="lg:hidden fixed inset-0 z-50">
           <button
             type="button"
             aria-label="Fechar menu"

@@ -1666,9 +1666,12 @@ export const DiarioDeObra: React.FC = () => {
     }
   };
 
+  const midiasSoNoCelular = () =>
+    fotosRef.current.length + videosRef.current.length + anexosRef.current.length;
+
   const autoUploadPendingMedia = async () => {
-    if (!navigator.onLine || !obraId || isReadOnly) return;
-    if (status !== 'rascunho') return;
+    if (!navigator.onLine || !obraId) return;
+    if (midiasSoNoCelular() === 0) return;
     if (mediaUploadLockRef.current) {
       await mediaUploadLockRef.current;
     }
@@ -1685,11 +1688,15 @@ export const DiarioDeObra: React.FC = () => {
 
     const run = (async () => {
       let lastKeys = '';
-      while (navigator.onLine && obraId && !isReadOnly) {
+      while (navigator.onLine && obraId) {
         const keys = pendingKeys();
         if (!keys || keys === lastKeys) break;
         lastKeys = keys;
-        const rdoIdAlvo = await ensureRdoIdOnServer();
+        let rdoIdAlvo = rdoIdAtualRef.current;
+        if (!rdoIdAlvo) {
+          if (isReadOnly || status !== 'rascunho') break;
+          rdoIdAlvo = await ensureRdoIdOnServer();
+        }
         if (!rdoIdAlvo || !navigator.onLine) break;
         await uploadMidas(rdoIdAlvo);
         await syncOfflineFiles(rdoIdAlvo);
@@ -1852,9 +1859,9 @@ export const DiarioDeObra: React.FC = () => {
     };
   }, [initLoading, obraId, rdoIdAtual, rdoId, hydratePendingMediaFromIdb]);
 
-  // Com internet, envia foto/vídeo/anexo assim que entram no RDO — sem esperar o Salvar
+  // Com internet, envia foto/vídeo/anexo assim que entram no RDO — também depois de enviado ou aprovado
   useEffect(() => {
-    if (initLoading || !isOnline || !obraId || isReadOnly || status !== 'rascunho') return;
+    if (initLoading || !isOnline || !obraId) return;
     const pending = fotos.length + videos.length + anexos.length;
     if (pending === 0) return;
     const timer = window.setTimeout(() => {
@@ -1867,8 +1874,6 @@ export const DiarioDeObra: React.FC = () => {
     initLoading,
     isOnline,
     obraId,
-    isReadOnly,
-    status,
     fotos.length,
     videos.length,
     anexos.length,
@@ -2204,6 +2209,13 @@ export const DiarioDeObra: React.FC = () => {
 
       await uploadMidas(idParaSubmeter!);
       await syncOfflineFiles(idParaSubmeter!);
+      const aindaNoCelular = midiasSoNoCelular();
+      if (aindaNoCelular > 0) {
+        showToast(
+          `⚠️ ${aindaNoCelular} arquivo(s) continuam só no celular. O diário não foi enviado.`,
+        );
+        return;
+      }
 
       // Submeter com aprovador selecionado
       await api.put(`/rdos/${idParaSubmeter}/submeter`,
@@ -2228,9 +2240,26 @@ export const DiarioDeObra: React.FC = () => {
   };
 
   // ── Aprovar ──
+  const enviarMidiasDoCelular = async (precisaDasFotos: boolean): Promise<boolean> => {
+    if (midiasSoNoCelular() === 0) return true;
+    if (!navigator.onLine) {
+      showToast('⚠️ As fotos ainda estão só neste celular. Conecte para enviá-las à nuvem.');
+      return !precisaDasFotos;
+    }
+    showToast('☁️ Enviando as fotos do celular para a nuvem...');
+    await autoUploadFnRef.current();
+    const restam = midiasSoNoCelular();
+    if (restam === 0) return true;
+    showToast(
+      `⚠️ ${restam} arquivo(s) continuam só no celular. O relatório não leva essas fotos até o envio terminar.`,
+    );
+    return !precisaDasFotos;
+  };
+
   const handleAprovar = async () => {
     if (!obraId || !rdoIdAtual) return;
     try {
+      if (!(await enviarMidiasDoCelular(true))) return;
       await api.put(`/rdos/${rdoIdAtual}/aprovar`, {}, { headers: { 'x-obra-id': obraId } });
       setStatus('aprovado');
       setDataAprovacao(new Date().toLocaleDateString('pt-BR'));
@@ -2347,6 +2376,19 @@ export const DiarioDeObra: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            {rdoIdAtual && obraId && !initLoading && (
+              <RdoShareBar
+                rdoId={rdoIdAtual}
+                obraId={obraId}
+                rdoLabel={`${rdoNumberStr.replace(/[^a-zA-Z0-9]/g, '_')}_${nomeObra.replace(/[^a-zA-Z0-9]/g, '_')}`}
+                apenasImprimir
+                incluirFotosNaImpressao={
+                  fotos.length > 0 ||
+                  savedFiles.some((item) => item.mimeType?.startsWith('image/'))
+                }
+                antesDeExportar={enviarMidiasDoCelular}
+              />
+            )}
             {!isOnline && (
               <span className="px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border whitespace-nowrap bg-amber-50 text-amber-800 border-amber-200">
                 SEM SINAL
@@ -3065,7 +3107,7 @@ export const DiarioDeObra: React.FC = () => {
                                  {!f.isUploading && !f.uploadFalhou && (
                                     <div className="flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-amber-600">
                                        <span>☁️</span>
-                                       <span>{isOnline ? 'Na fila' : 'Offline'}</span>
+                                       <span>{isOnline ? 'Só no celular' : 'Offline'}</span>
                                     </div>
                                  )}
                                  {f.isUploading && (
@@ -3259,7 +3301,7 @@ export const DiarioDeObra: React.FC = () => {
                               <div className="w-full flex items-center justify-between gap-2 border-t border-gray-100 pt-1.5">
                                  {!v.isUploading && !v.uploadFalhou && (
                                     <div className="w-full flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-amber-600">
-                                       <span>{isOnline ? '☁️ Na fila' : '☁️ Offline'}</span>
+                                       <span>{isOnline ? '☁️ Só no celular' : '☁️ Offline'}</span>
                                     </div>
                                  )}
                                  {v.isUploading && (
@@ -3393,7 +3435,7 @@ export const DiarioDeObra: React.FC = () => {
                               <div className="w-full flex items-center justify-between gap-2 border-t border-gray-100 pt-1.5">
                                  {!a.isUploading && !a.uploadFalhou && (
                                     <div className="w-full flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-amber-600">
-                                       <span>{isOnline ? '☁️ Na fila' : '☁️ Offline'}</span>
+                                       <span>{isOnline ? '☁️ Só no celular' : '☁️ Offline'}</span>
                                     </div>
                                  )}
                                  {a.isUploading && (
@@ -3575,6 +3617,11 @@ export const DiarioDeObra: React.FC = () => {
                             rdoId={rdoIdAtual}
                             obraId={obraId}
                             rdoLabel={`${rdoNumberStr.replace(/[^a-zA-Z0-9]/g, '_')}_${nomeObra.replace(/[^a-zA-Z0-9]/g, '_')}`}
+                            incluirFotosNaImpressao={
+                              fotos.length > 0 ||
+                              savedFiles.some((item) => item.mimeType?.startsWith('image/'))
+                            }
+                            antesDeExportar={enviarMidiasDoCelular}
                           />
                         </div>
                       )}

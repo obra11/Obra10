@@ -30,6 +30,7 @@ export const CompanyDashboard: React.FC = () => {
   const [showNovoModal, setShowNovoModal] = useState(false);
   const [novaObra, setNovaObra] = useState({ nome: '', endereco: '' });
   const [loadingCriar, setLoadingCriar] = useState(false);
+  const criandoObra = useRef(false);
 
   // Filtros e Modos de Visualização das Obras
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,14 +87,17 @@ export const CompanyDashboard: React.FC = () => {
   }, []);
 
   const handleCriarObra = async () => {
-    if (!novaObra.nome.trim()) return;
+    if (criandoObra.current || !novaObra.nome.trim()) return;
+    criandoObra.current = true;
     setLoadingCriar(true);
     try {
       await api.post('/obras', novaObra);
       window.location.reload();
     } catch(e: any) {
+      criandoObra.current = false;
       alert('Erro ao criar obra: ' + (e?.response?.data?.message || e.message));
-    } finally { setLoadingCriar(false); }
+      setLoadingCriar(false);
+    }
   };
 
   const handleEditarEmpresa = async () => {
@@ -441,9 +445,9 @@ export const CompanyDashboard: React.FC = () => {
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-700 outline-none focus:ring-2 focus:ring-lunardeli-red"
               >
                 <option value="TODOS">Todos os Status ({obras.length})</option>
-                <option value="ATIVA">Ativas ({obras.filter(o => (o.status || 'ATIVA') === 'ATIVA').length})</option>
-                <option value="INATIVA">Inativas ({obras.filter(o => o.status === 'INATIVA').length})</option>
-                <option value="FINALIZADA">Finalizadas ({obras.filter(o => o.status === 'FINALIZADA').length})</option>
+                <option value="ATIVA">Ativas ({(obras || []).filter(o => (o.status || 'ATIVA') === 'ATIVA').length})</option>
+                <option value="INATIVA">Inativas ({(obras || []).filter(o => o.status === 'INATIVA').length})</option>
+                <option value="FINALIZADA">Finalizadas ({(obras || []).filter(o => o.status === 'FINALIZADA').length})</option>
               </select>
 
               {/* Botões de Modo de Visualização */}

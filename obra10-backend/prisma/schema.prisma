@@ -51,6 +51,17 @@ model Empresa {
   features            EmpresaFeature[]
   catalogoInsumos     CatalogoInsumo[]
   chamadosSuporte     ChamadoSuporte[]
+  fornecedores        Fornecedor[]
+  locaisEstoque       LocalEstoque[]
+  insumosAlias        InsumoAlias[]
+  documentosEntrada   DocumentoEntrada[]
+  saldosEstoque       SaldoEstoque[]
+  movimentosEstoque   MovimentoEstoque[]
+  funcionarios        Funcionario[]
+  treinamentos        TreinamentoFuncionario[]
+  agendasManutencao   AgendaManutencao[]
+  fichasManutencao    FichaManutencao[]
+  despesasManutencao  FichaManutencaoDespesa[]
 
   @@map("empresas")
 }
@@ -72,6 +83,11 @@ model Obra {
   rdos         Rdo[]
   relatoriosIA RelatorioIA[]
   userObraRole UserObraRole[]
+  locaisEstoque LocalEstoque[]
+  funcionarios  Funcionario[]
+  treinamentos  TreinamentoFuncionario[]
+  agendasManutencao AgendaManutencao[]
+  fichasManutencao  FichaManutencao[]
 
   @@index([empresaId])
   @@map("obras")
@@ -112,6 +128,12 @@ model Usuario {
   empresa        Empresa         @relation(fields: [empresaId], references: [id])
   chamadosSuporte ChamadoSuporte[]
   mensagensSuporte MensagemChamadoSuporte[]
+  documentosEntradaCriados DocumentoEntrada[] @relation("DocumentoEntradaCriador")
+  documentosEntradaRecebidos DocumentoEntrada[] @relation("DocumentoEntradaRecebedor")
+  movimentosEstoque MovimentoEstoque[]
+  fichasManutencaoCriadas FichaManutencao[] @relation("FichaManutencaoCriador")
+  fichasManutencaoResponsavel FichaManutencao[] @relation("FichaManutencaoResponsavel")
+  fichasManutencaoValidadas FichaManutencao[] @relation("FichaManutencaoValidador")
 
   @@unique([empresaId, email])
   @@index([empresaId])
@@ -615,25 +637,501 @@ enum TipoInsumo {
   MATERIAL
   EQUIPAMENTO
   MAO_DE_OBRA
+  EPI
+}
+
+enum CategoriaInsumo {
+  CONSTRUCAO
+  LIMPEZA
+  OUTRO
+}
+
+enum TipoDocumentoEntrada {
+  NFE
+  NFCE_CUPOM
+  FOTO
+  MANUAL
+}
+
+enum StatusDocumentoEntrada {
+  EXTRAINDO
+  EM_CONFERENCIA
+  CONFIRMADA
+  REJEITADA
+  ESTORNADA
+}
+
+enum StatusItemEntrada {
+  PENDENTE
+  VINCULADO
+  NOVO
+  IGNORADO
+}
+
+enum TipoLocalEstoque {
+  DEPOSITO_CENTRAL
+  ALMOXARIFADO
+}
+
+enum TipoMovimentoEstoque {
+  ENTRADA
+  SAIDA
+  TRANSFERENCIA
+  ESTORNO
+}
+
+enum NaturezaManutencao {
+  LIMPEZA
+  ESPECIALIDADE
+}
+
+enum OrigemFichaManutencao {
+  PLANEJADA
+  MANUAL
+}
+
+enum TipoFichaManutencao {
+  PREVENTIVA
+  EXECUTIVA
+}
+
+enum StatusFichaManutencao {
+  RASCUNHO
+  ENVIADA
+  VALIDADA
+  DEVOLVIDA
+  CANCELADA
 }
 
 model CatalogoInsumo {
-  id          String     @id @default(uuid())
-  empresaId   String     @map("empresa_id")
-  tipo        TipoInsumo
-  nome        String
-  unidade     String?
-  codigo      String?
-  observacao  String?
-  ativo       Boolean    @default(true)
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
-  deletedAt   DateTime?  @map("deleted_at")
+  id           String          @id @default(uuid())
+  empresaId    String          @map("empresa_id")
+  tipo         TipoInsumo
+  nome         String
+  unidade      String?
+  codigo       String?
+  observacao   String?
+  categoria    CategoriaInsumo @default(OUTRO)
+  ean          String?
+  codigoBarras String?         @map("codigo_barras")
+  ativo        Boolean         @default(true)
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  deletedAt    DateTime?       @map("deleted_at")
 
-  empresa     Empresa    @relation(fields: [empresaId], references: [id])
+  empresa            Empresa                 @relation(fields: [empresaId], references: [id])
+  aliases            InsumoAlias[]
+  itensEntrada       DocumentoEntradaItem[]
+  saldos             SaldoEstoque[]
+  movimentos         MovimentoEstoque[]
+  despesasManutencao FichaManutencaoDespesa[]
 
   @@index([empresaId, tipo])
+  @@index([empresaId, ean])
+  @@index([empresaId, codigoBarras])
   @@map("catalogo_insumos")
+}
+
+model Fornecedor {
+  id           String    @id @default(uuid())
+  empresaId    String    @map("empresa_id")
+  cnpj         String?
+  razaoSocial  String    @map("razao_social")
+  nomeFantasia String?   @map("nome_fantasia")
+  ie           String?
+  telefone     String?
+  email        String?
+  endereco     String?
+  ativo        Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  empresa           Empresa            @relation(fields: [empresaId], references: [id])
+  aliases           InsumoAlias[]
+  documentos        DocumentoEntrada[]
+  agendasManutencao AgendaManutencao[]
+  fichasManutencao  FichaManutencao[]
+
+  @@unique([empresaId, cnpj])
+  @@index([empresaId])
+  @@map("fornecedores")
+}
+
+model LocalEstoque {
+  id        String           @id @default(uuid())
+  empresaId String           @map("empresa_id")
+  obraId    String?          @map("obra_id")
+  tipo      TipoLocalEstoque
+  nome      String
+  codigo    String
+  ativo     Boolean          @default(true)
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  empresa           Empresa            @relation(fields: [empresaId], references: [id])
+  obra              Obra?              @relation(fields: [obraId], references: [id])
+  saldos            SaldoEstoque[]
+  documentos        DocumentoEntrada[]
+  movimentosOrigem  MovimentoEstoque[] @relation("MovimentoOrigem")
+  movimentosDestino MovimentoEstoque[] @relation("MovimentoDestino")
+
+  @@unique([empresaId, codigo])
+  @@index([empresaId, tipo])
+  @@map("locais_estoque")
+}
+
+model InsumoAlias {
+  id                   String   @id @default(uuid())
+  empresaId            String   @map("empresa_id")
+  insumoId             String   @map("insumo_id")
+  fornecedorId         String?  @map("fornecedor_id")
+  descricaoOriginal    String   @map("descricao_original")
+  descricaoNormalizada String   @map("descricao_normalizada")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  empresa    Empresa        @relation(fields: [empresaId], references: [id])
+  insumo     CatalogoInsumo @relation(fields: [insumoId], references: [id])
+  fornecedor Fornecedor?    @relation(fields: [fornecedorId], references: [id])
+
+  @@unique([empresaId, descricaoNormalizada])
+  @@index([empresaId, insumoId])
+  @@map("insumos_alias")
+}
+
+model DocumentoEntrada {
+  id                 String                 @id @default(uuid())
+  empresaId          String                 @map("empresa_id")
+  localId            String                 @map("local_id")
+  obraId             String?                @map("obra_id")
+  tipo               TipoDocumentoEntrada   @default(NFE)
+  status             StatusDocumentoEntrada @default(EXTRAINDO)
+  numero             String?
+  serie              String?
+  chaveAcesso        String?                @map("chave_acesso")
+  dataEmissao        DateTime?              @map("data_emissao")
+  valorTotal         Decimal?               @map("valor_total") @db.Decimal(14, 2)
+  fornecedorId       String?                @map("fornecedor_id")
+  fornecedorCnpj     String?                @map("fornecedor_cnpj")
+  fornecedorRazao    String?                @map("fornecedor_razao")
+  fornecedorIe       String?                @map("fornecedor_ie")
+  fornecedorTelefone String?                @map("fornecedor_telefone")
+  fornecedorEmail    String?                @map("fornecedor_email")
+  recebedorId        String                 @map("recebedor_id")
+  criadorId          String                 @map("criador_id")
+  imagemUrl          String?                @map("imagem_url")
+  imagemMime         String?                @map("imagem_mime")
+  imagemNome         String?                @map("imagem_nome")
+  observacao         String?                @db.Text
+  observacaoExtracao String?                @map("observacao_extracao")
+  rejeitadoMotivo    String?                @map("rejeitado_motivo")
+  confirmadoEm       DateTime?              @map("confirmado_em")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+
+  empresa    Empresa                @relation(fields: [empresaId], references: [id])
+  local      LocalEstoque           @relation(fields: [localId], references: [id])
+  fornecedor Fornecedor?            @relation(fields: [fornecedorId], references: [id])
+  recebedor  Usuario                @relation("DocumentoEntradaRecebedor", fields: [recebedorId], references: [id])
+  criador    Usuario                @relation("DocumentoEntradaCriador", fields: [criadorId], references: [id])
+  itens      DocumentoEntradaItem[]
+  movimentos MovimentoEstoque[]
+
+  @@index([empresaId, status])
+  @@index([empresaId, localId])
+  @@map("documentos_entrada")
+}
+
+model DocumentoEntradaItem {
+  id                   String            @id @default(uuid())
+  empresaId            String            @map("empresa_id")
+  documentoId          String            @map("documento_id")
+  ordem                Int               @default(0)
+  descricaoOriginal    String            @map("descricao_original")
+  descricaoNormalizada String            @map("descricao_normalizada")
+  quantidade           Decimal           @db.Decimal(14, 4)
+  unidade              String?
+  valorUnitario        Decimal?          @map("valor_unitario") @db.Decimal(14, 4)
+  valorTotal           Decimal?          @map("valor_total") @db.Decimal(14, 2)
+  ncm                  String?
+  ean                  String?
+  insumoId             String?           @map("insumo_id")
+  status               StatusItemEntrada @default(PENDENTE)
+  tipoInsumo           TipoInsumo?       @map("tipo_insumo")
+  candidatos           Json?
+
+  documento DocumentoEntrada @relation(fields: [documentoId], references: [id], onDelete: Cascade)
+  insumo    CatalogoInsumo?  @relation(fields: [insumoId], references: [id])
+
+  @@index([documentoId])
+  @@index([empresaId])
+  @@map("documentos_entrada_itens")
+}
+
+model SaldoEstoque {
+  id         String   @id @default(uuid())
+  empresaId  String   @map("empresa_id")
+  localId    String   @map("local_id")
+  insumoId   String   @map("insumo_id")
+  quantidade Decimal  @default(0) @db.Decimal(14, 4)
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  local   LocalEstoque   @relation(fields: [localId], references: [id])
+  insumo  CatalogoInsumo @relation(fields: [insumoId], references: [id])
+  empresa Empresa        @relation(fields: [empresaId], references: [id])
+
+  @@unique([localId, insumoId])
+  @@index([empresaId, localId])
+  @@map("saldos_estoque")
+}
+
+model MovimentoEstoque {
+  id              String               @id @default(uuid())
+  empresaId       String               @map("empresa_id")
+  tipo            TipoMovimentoEstoque
+  insumoId        String               @map("insumo_id")
+  localOrigemId   String?              @map("local_origem_id")
+  localDestinoId  String?              @map("local_destino_id")
+  quantidade      Decimal              @db.Decimal(14, 4)
+  documentoId     String?              @map("documento_id")
+  usuarioId       String               @map("usuario_id")
+  motivo          String?
+  retiradoPor     String?              @map("retirado_por")
+  funcionarioId   String?              @map("funcionario_id")
+  dataRecebimento DateTime?            @map("data_recebimento")
+  validadeEpi     DateTime?            @map("validade_epi") @db.Date
+  ca              String?
+  assinatura      String?              @db.Text
+  createdAt       DateTime             @default(now()) @map("created_at")
+
+  empresa      Empresa           @relation(fields: [empresaId], references: [id])
+  insumo       CatalogoInsumo    @relation(fields: [insumoId], references: [id])
+  localOrigem  LocalEstoque?     @relation("MovimentoOrigem", fields: [localOrigemId], references: [id])
+  localDestino LocalEstoque?     @relation("MovimentoDestino", fields: [localDestinoId], references: [id])
+  documento    DocumentoEntrada? @relation(fields: [documentoId], references: [id])
+  usuario      Usuario           @relation(fields: [usuarioId], references: [id])
+  funcionario  Funcionario?      @relation(fields: [funcionarioId], references: [id])
+
+  @@index([empresaId, createdAt])
+  @@index([documentoId])
+  @@index([funcionarioId])
+  @@map("movimentos_estoque")
+}
+
+enum Sexo {
+  FEMININO
+  MASCULINO
+  NAO_INFORMADO
+}
+
+enum EstadoCivil {
+  SOLTEIRO
+  CASADO
+  UNIAO_ESTAVEL
+  DIVORCIADO
+  SEPARADO
+  VIUVO
+}
+
+enum Escolaridade {
+  FUNDAMENTAL_INCOMPLETO
+  FUNDAMENTAL
+  MEDIO_INCOMPLETO
+  MEDIO
+  TECNICO
+  SUPERIOR_INCOMPLETO
+  SUPERIOR
+  POS_GRADUACAO
+}
+
+enum TipoContrato {
+  CLT
+  TEMPORARIO
+  ESTAGIO
+  APRENDIZ
+  AUTONOMO
+  TERCEIRIZADO
+}
+
+enum TipoContaBancaria {
+  CORRENTE
+  POUPANCA
+  SALARIO
+}
+
+enum TipoTreinamento {
+  ADMISSIONAL
+  RECORRENTE
+}
+
+model Funcionario {
+  id             String             @id @default(uuid())
+  empresaId      String             @map("empresa_id")
+  obraId         String             @map("obra_id")
+  nome           String
+  funcao         String
+  cpf            String?            @db.Text
+  cpfHash        String?            @map("cpf_hash")
+  rg             String?
+  rgOrgao        String?            @map("rg_orgao")
+  rgUf           String?            @map("rg_uf")
+  dataNascimento DateTime?          @map("data_nascimento") @db.Date
+  sexo           Sexo?
+  estadoCivil    EstadoCivil?       @map("estado_civil")
+  nacionalidade  String?
+  naturalidade   String?
+  nomeMae        String?            @map("nome_mae")
+  nomePai        String?            @map("nome_pai")
+  pis            String?            @db.Text
+  pisHash        String?            @map("pis_hash")
+  ctpsNumero     String?            @map("ctps_numero")
+  ctpsSerie      String?            @map("ctps_serie")
+  ctpsUf         String?            @map("ctps_uf")
+  escolaridade   Escolaridade?
+  telefone       String?
+  email          String?
+  cep            String?
+  logradouro     String?
+  numero         String?
+  complemento    String?
+  bairro         String?
+  cidade         String?
+  uf             String?
+  cbo            String?
+  matricula      String?
+  dataAdmissao   DateTime?          @map("data_admissao") @db.Date
+  tipoContrato   TipoContrato?      @map("tipo_contrato")
+  salario        Decimal?           @db.Decimal(14, 2)
+  jornada        String?
+  banco          String?
+  agencia        String?
+  conta          String?
+  tipoConta      TipoContaBancaria? @map("tipo_conta")
+  pix            String?
+  ativo          Boolean            @default(true)
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  deletedAt      DateTime?          @map("deleted_at")
+
+  empresa      Empresa                  @relation(fields: [empresaId], references: [id])
+  obra         Obra                     @relation(fields: [obraId], references: [id])
+  movimentos   MovimentoEstoque[]
+  treinamentos TreinamentoFuncionario[]
+
+  @@unique([empresaId, cpfHash])
+  @@unique([empresaId, pisHash])
+  @@index([empresaId, obraId])
+  @@map("funcionarios")
+}
+
+model TreinamentoFuncionario {
+  id             String          @id @default(uuid())
+  empresaId      String          @map("empresa_id")
+  obraId         String          @map("obra_id")
+  funcionarioId  String          @map("funcionario_id")
+  tipo           TipoTreinamento
+  nome           String
+  dataRealizacao DateTime        @map("data_realizacao") @db.Date
+  cargaHoraria   Decimal?        @map("carga_horaria") @db.Decimal(6, 2)
+  validade       DateTime        @db.Date
+  instrutor      String?
+  observacao     String?
+  assinatura     String?         @db.Text
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  deletedAt      DateTime?       @map("deleted_at")
+
+  empresa     Empresa     @relation(fields: [empresaId], references: [id])
+  obra        Obra        @relation(fields: [obraId], references: [id])
+  funcionario Funcionario @relation(fields: [funcionarioId], references: [id])
+
+  @@index([empresaId, obraId, validade])
+  @@index([funcionarioId, tipo])
+  @@map("treinamentos_funcionario")
+}
+
+model AgendaManutencao {
+  id            String             @id @default(uuid())
+  empresaId     String             @map("empresa_id")
+  obraId        String             @map("obra_id")
+  ano           Int
+  servico       String
+  natureza      NaturezaManutencao
+  dataPrevista  DateTime           @map("data_prevista") @db.Date
+  fornecedorId  String?            @map("fornecedor_id")
+  valorPrevisto Decimal            @default(0) @map("valor_previsto") @db.Decimal(14, 2)
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  deletedAt     DateTime?          @map("deleted_at")
+
+  empresa    Empresa           @relation(fields: [empresaId], references: [id])
+  obra       Obra              @relation(fields: [obraId], references: [id])
+  fornecedor Fornecedor?       @relation(fields: [fornecedorId], references: [id])
+  fichas     FichaManutencao[]
+
+  @@index([empresaId, obraId, ano])
+  @@index([obraId, dataPrevista])
+  @@map("agendas_manutencao")
+}
+
+model FichaManutencao {
+  id              String                @id @default(uuid())
+  empresaId       String                @map("empresa_id")
+  obraId          String                @map("obra_id")
+  agendaId        String?               @map("agenda_id")
+  origem          OrigemFichaManutencao
+  tipo            TipoFichaManutencao
+  servico         String
+  natureza        NaturezaManutencao
+  fornecedorId    String?               @map("fornecedor_id")
+  profissional    String                @default("")
+  dataExecucao    DateTime?             @map("data_execucao") @db.Date
+  horaExecucao    String?               @map("hora_execucao")
+  descricao       String?
+  status          StatusFichaManutencao @default(RASCUNHO)
+  responsavelId   String?               @map("responsavel_id")
+  motivoDevolucao String?               @map("motivo_devolucao")
+  validadaEm      DateTime?             @map("validada_em")
+  validadaPorId   String?               @map("validada_por_id")
+  criadaPorId     String                @map("criada_por_id")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+  deletedAt       DateTime?             @map("deleted_at")
+
+  empresa     Empresa                  @relation(fields: [empresaId], references: [id])
+  obra        Obra                     @relation(fields: [obraId], references: [id])
+  agenda      AgendaManutencao?        @relation(fields: [agendaId], references: [id])
+  fornecedor  Fornecedor?              @relation(fields: [fornecedorId], references: [id])
+  responsavel Usuario?                 @relation("FichaManutencaoResponsavel", fields: [responsavelId], references: [id])
+  validadaPor Usuario?                 @relation("FichaManutencaoValidador", fields: [validadaPorId], references: [id])
+  criadaPor   Usuario                  @relation("FichaManutencaoCriador", fields: [criadaPorId], references: [id])
+  despesas    FichaManutencaoDespesa[]
+
+  @@index([empresaId, obraId, status])
+  @@index([agendaId])
+  @@index([responsavelId])
+  @@map("fichas_manutencao")
+}
+
+model FichaManutencaoDespesa {
+  id            String   @id @default(uuid())
+  empresaId     String   @map("empresa_id")
+  fichaId       String   @map("ficha_id")
+  descricao     String
+  quantidade    Decimal  @default(1) @db.Decimal(14, 4)
+  unidade       String?
+  valorUnitario Decimal  @map("valor_unitario") @db.Decimal(14, 4)
+  valorTotal    Decimal  @map("valor_total") @db.Decimal(14, 2)
+  insumoId      String?  @map("insumo_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  empresa Empresa         @relation(fields: [empresaId], references: [id])
+  ficha   FichaManutencao @relation(fields: [fichaId], references: [id], onDelete: Cascade)
+  insumo  CatalogoInsumo? @relation(fields: [insumoId], references: [id])
+
+  @@index([fichaId])
+  @@index([empresaId])
+  @@map("fichas_manutencao_despesas")
 }
 
 enum StatusChamadoSuporte {

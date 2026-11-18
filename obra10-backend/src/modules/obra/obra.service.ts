@@ -166,16 +166,33 @@ export class ObraService {
       }
     }
 
+    const nome = data.nome.trim().replace(/\s+/g, ' ');
+    if (!nome) throw new BadRequestException('Informe o nome da obra.');
+    const endereco = data.endereco?.trim() || null;
+
     // 1. Garante que o perfil ENGENHEIRO existe (FORA da transação para não abortar em caso de erro de constraint)
     const perfil = await this.ensurePerfil('ENGENHEIRO');
 
-    // 2. Cria a obra e vincula o usuário na transação principal
+    // 2. Toque duplo em Salvar criava duas obras iguais e a vazia escondia os diários.
+    const chave = `${empresaId}|${nome.toLowerCase()}`;
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${chave}))`;
+      const recente = await tx.obra.findFirst({
+        where: {
+          empresaId,
+          deletedAt: null,
+          nome: { equals: nome, mode: 'insensitive' },
+          createdAt: { gte: new Date(Date.now() - 30_000) },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (recente) return recente;
+
       const obra = await tx.obra.create({
         data: {
           empresaId,
-          nome: data.nome,
-          endereco: data.endereco,
+          nome,
+          endereco,
           status: 'ATIVA',
         },
       });

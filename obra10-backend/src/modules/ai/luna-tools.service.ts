@@ -951,7 +951,7 @@ export class LunaToolsService {
 
   private async listarCatalogo(auth: LunaAuth, args: Record<string, any>) {
     const tipoRaw = String(args.tipo || '').toUpperCase();
-    const tipo = (['MATERIAL', 'EQUIPAMENTO', 'MAO_DE_OBRA'] as const).includes(
+    const tipo = (['MATERIAL', 'EQUIPAMENTO', 'MAO_DE_OBRA', 'EPI'] as const).includes(
       tipoRaw as TipoInsumo,
     )
       ? (tipoRaw as TipoInsumo)

@@ -12,6 +12,15 @@ interface RdoShareBarProps {
   onOpen?: () => void;
   /** Direção da abertura do menu: 'up' (para cima) ou 'down' (para baixo). */
   direction?: 'up' | 'down';
+  /** Impressão e compartilhamento levam o álbum, quando o diário tem foto. */
+  incluirFotosNaImpressao?: boolean;
+  /** Um botão só, para o topo do diário no celular. */
+  apenasImprimir?: boolean;
+  /**
+   * Roda antes de gerar o PDF. Recebe true quando o arquivo precisa das fotos.
+   * Retorne false para cancelar (por exemplo, foto que ainda está só no celular).
+   */
+  antesDeExportar?: (precisaDasFotos: boolean) => Promise<boolean>;
 }
 
 /**
@@ -30,6 +39,9 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
   compact = false,
   onOpen,
   direction = 'down',
+  incluirFotosNaImpressao = false,
+  antesDeExportar,
+  apenasImprimir = false,
 }) => {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfFotosLoading, setPdfFotosLoading] = useState(false);
@@ -69,12 +81,48 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
   };
 
   const filenamePdf = `${rdoLabel.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+  const noCelular = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  const baixarArquivo = (url: string, nome: string) => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nome;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const entregarNoCelular = async (blob: Blob, nome: string) => {
+    const arquivo = new File([blob], nome, { type: 'application/pdf' });
+    if (navigator.share && navigator.canShare?.({ files: [arquivo] })) {
+      try {
+        await navigator.share({
+          files: [arquivo],
+          title: nome,
+          text: 'Relatório do diário de obra.',
+        });
+        return;
+      } catch (erro: any) {
+        if (erro?.name === 'AbortError') return;
+      }
+    }
+    baixarArquivo(URL.createObjectURL(blob), nome);
+    alert('O PDF foi baixado no celular. Abra o arquivo em Downloads para imprimir.');
+  };
+
+  const preparar = async (precisaDasFotos: boolean) => {
+    if (!antesDeExportar) return true;
+    return antesDeExportar(precisaDasFotos);
+  };
 
   /** Download simples do PDF (sem fotos). */
   const handleDownloadPdf = async () => {
     if (pdfLoading) return;
     setPdfLoading(true);
     try {
+      const pronto = await preparar(false);
+      if (!pronto) return;
       const url = await fetchPdfBlobUrl(false);
       const a = document.createElement('a');
       a.href = url;
@@ -96,6 +144,12 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
     if (pdfFotosLoading) return;
     setPdfFotosLoading(true);
     try {
+      const pronto = await preparar(true);
+      if (!pronto) return;
+      if (noCelular) {
+        await entregarNoCelular(await fetchPdfBlob(true), filenamePdf.replace('.pdf', '_ComFotos.pdf'));
+        return;
+      }
       const url = await fetchPdfBlobUrl(true);
       const a = document.createElement('a');
       a.href = url;
@@ -122,12 +176,22 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
     if (pdfLoading) return;
     setPdfLoading(true);
     try {
-      const url = await fetchPdfBlobUrl(false);
+      const comFotos = incluirFotosNaImpressao;
+      const pronto = await preparar(comFotos);
+      if (!pronto) return;
+      const blob = await fetchPdfBlob(comFotos);
+      if (noCelular) {
+        await entregarNoCelular(blob, filenamePdf);
+        return;
+      }
+      const url = URL.createObjectURL(blob);
       const win = window.open(url, '_blank');
       if (win) {
         win.addEventListener('load', () => {
           setTimeout(() => win.print(), 500);
         });
+      } else {
+        baixarArquivo(url, filenamePdf);
       }
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (e) {
@@ -143,16 +207,19 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
     if (shareLoading) return;
     setShareLoading(true);
     try {
+      const comFotos = incluirFotosNaImpressao;
+      const pronto = await preparar(comFotos);
+      if (!pronto) return;
       let backendBase = import.meta.env.VITE_API_URL || window.location.origin;
       if (backendBase.startsWith('/')) {
         backendBase = `${window.location.origin}${backendBase}`;
       }
-      const pdfUrl = `${backendBase}/rdos/${rdoId}/pdf`;
+      const pdfUrl = `${backendBase}/rdos/${rdoId}/pdf${comFotos ? '?fotos=true' : ''}`;
 
       if (navigator.share) {
         let shared = false;
         try {
-          const blob = await fetchPdfBlob(false);
+          const blob = await fetchPdfBlob(comFotos);
           const file = new File([blob], filenamePdf, { type: 'application/pdf' });
           if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({
@@ -189,6 +256,20 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
       setShareLoading(false);
     }
   };
+
+  if (apenasImprimir) {
+    return (
+      <button
+        type="button"
+        onClick={handlePrint}
+        disabled={pdfLoading || pdfFotosLoading}
+        className="flex items-center gap-1.5 px-3 py-2 text-xs md:text-sm font-bold text-white bg-lunardeli-red rounded-lg shadow-sm disabled:opacity-60 shrink-0"
+      >
+        {pdfLoading ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
+        Imprimir
+      </button>
+    );
+  }
 
   // ── Modo compacto: menu de 3 pontos ──────────────────────────────────────────
   if (compact) {
@@ -299,7 +380,9 @@ export const RdoShareBar: React.FC<RdoShareBarProps> = ({
         </div>
         <div className="min-w-0">
           <p className="text-sm font-bold text-gray-900">Imprimir</p>
-          <p className="text-xs text-gray-500 mt-0.5">Abre o PDF e a impressão</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {incluirFotosNaImpressao ? 'Abre o PDF com as fotos' : 'Abre o PDF e a impressão'}
+          </p>
         </div>
       </button>
 
