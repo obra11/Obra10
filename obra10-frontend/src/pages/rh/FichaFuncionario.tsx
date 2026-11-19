@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 
 export type FichaValores = {
+  obraId: string;
   nome: string;
   cpf: string;
   rg: string;
@@ -92,6 +93,7 @@ const campo = 'w-full border border-gray-200 rounded-xl px-3 py-3 text-sm bg-whi
 
 export function fichaVazia(): FichaValores {
   return {
+    obraId: '',
     nome: '',
     cpf: '',
     rg: '',
@@ -100,7 +102,7 @@ export function fichaVazia(): FichaValores {
     dataNascimento: '',
     sexo: '',
     estadoCivil: '',
-    nacionalidade: 'Brasileira',
+    nacionalidade: '',
     naturalidade: '',
     nomeMae: '',
     nomePai: '',
@@ -143,23 +145,23 @@ export function fichaDe(data: Partial<FichaValores> | null | undefined): FichaVa
   return base;
 }
 
+export function mesclarFicha(atual: FichaValores, extraida: Partial<FichaValores> | null | undefined): FichaValores {
+  const next = { ...atual };
+  if (!extraida) return next;
+  (Object.keys(next) as (keyof FichaValores)[]).forEach((chave) => {
+    const novo = extraida[chave];
+    if (typeof novo === 'string' && novo.trim() && !String(atual[chave] || '').trim()) {
+      next[chave] = novo;
+    }
+  });
+  return next;
+}
+
 export function pendenciaFicha(valores: FichaValores) {
   if (valores.nome.trim().length < 3) return 'Informe o nome completo.';
   const cpf = valores.cpf.replace(/\D/g, '');
   if (!cpf) return 'Informe o CPF.';
   if (!cpfValido(cpf)) return 'CPF inválido.';
-  if (!valores.dataNascimento) return 'Informe a data de nascimento.';
-  if (!valores.sexo) return 'Informe o sexo.';
-  if (valores.nomeMae.trim().length < 3) return 'Informe o nome da mãe.';
-  if (valores.cep.replace(/\D/g, '').length !== 8) return 'Informe o CEP.';
-  if (valores.logradouro.trim().length < 2) return 'Informe o logradouro.';
-  if (!valores.numero.trim()) return 'Informe o número. Use S/N se não houver.';
-  if (valores.bairro.trim().length < 2) return 'Informe o bairro.';
-  if (valores.cidade.trim().length < 2) return 'Informe a cidade.';
-  if (!valores.uf) return 'Informe a UF.';
-  if (valores.funcao.trim().length < 2) return 'Informe a função.';
-  if (!valores.dataAdmissao) return 'Informe a data de admissão.';
-  if (!valores.tipoContrato) return 'Informe o tipo de contrato.';
   return '';
 }
 
@@ -249,9 +251,11 @@ function Uf({ valor, onChange, obrigatorio }: { valor: string; onChange: (valor:
 export function FichaFuncionario({
   valores,
   onChange,
+  obras,
 }: {
   valores: FichaValores;
   onChange: (valores: FichaValores) => void;
+  obras?: { id: string; nome: string }[];
 }) {
   const [avisoCep, setAvisoCep] = useState('');
   const [buscandoCep, setBuscandoCep] = useState(false);
@@ -290,17 +294,17 @@ export function FichaFuncionario({
 
   return (
     <div className="space-y-6">
-      <Secao titulo="Identificação" texto="Nome, documentos pessoais e contato.">
+      <Secao titulo="Identificação" texto="Só nome completo e CPF são obrigatórios. O restante pode ficar para depois.">
         <Campo label="Nome completo" obrigatorio className="sm:col-span-2">
           <input className={campo} value={valores.nome} autoComplete="name" onChange={(e) => set('nome', e.target.value)} />
         </Campo>
         <Campo label="CPF" obrigatorio>
           <input className={campo} inputMode="numeric" value={valores.cpf} onChange={(e) => set('cpf', mascaraCpf(e.target.value))} />
         </Campo>
-        <Campo label="Data de nascimento" obrigatorio>
+        <Campo label="Data de nascimento">
           <input className={campo} type="date" value={valores.dataNascimento} autoComplete="bday" onChange={(e) => set('dataNascimento', e.target.value)} />
         </Campo>
-        <Campo label="Sexo" obrigatorio>
+        <Campo label="Sexo">
           <select className={campo} value={valores.sexo} onChange={(e) => set('sexo', e.target.value)}>
             <option value="">Selecione</option>
             {SEXOS.map(([valor, rotulo]) => <option key={valor} value={valor}>{rotulo}</option>)}
@@ -318,7 +322,7 @@ export function FichaFuncionario({
         <Campo label="Naturalidade">
           <input className={campo} value={valores.naturalidade} placeholder="Cidade / UF" onChange={(e) => set('naturalidade', e.target.value)} />
         </Campo>
-        <Campo label="Nome da mãe" obrigatorio className="sm:col-span-2">
+        <Campo label="Nome da mãe" className="sm:col-span-2">
           <input className={campo} value={valores.nomeMae} onChange={(e) => set('nomeMae', e.target.value)} />
         </Campo>
         <Campo label="Nome do pai" className="sm:col-span-2">
@@ -362,8 +366,8 @@ export function FichaFuncionario({
         </Campo>
       </Secao>
 
-      <Secao titulo="Endereço">
-        <Campo label="CEP" obrigatorio>
+      <Secao titulo="Endereço" texto="Pode ficar em branco e ser completado depois.">
+        <Campo label="CEP">
           <div className="flex gap-2">
             <input className={campo} inputMode="numeric" autoComplete="postal-code" value={valores.cep} onChange={(e) => set('cep', mascaraCep(e.target.value))} />
             <button type="button" onClick={() => void buscarCep()} disabled={buscandoCep} className="shrink-0 border rounded-xl px-3 text-sm font-bold text-gray-700 disabled:opacity-60">
@@ -372,28 +376,38 @@ export function FichaFuncionario({
           </div>
           {avisoCep && <span className="text-xs font-bold text-red-700">{avisoCep}</span>}
         </Campo>
-        <Campo label="Número" obrigatorio>
+        <Campo label="Número">
           <input className={campo} value={valores.numero} placeholder="S/N" onChange={(e) => set('numero', e.target.value)} />
         </Campo>
-        <Campo label="Logradouro" obrigatorio className="sm:col-span-2">
+        <Campo label="Logradouro" className="sm:col-span-2">
           <input className={campo} autoComplete="address-line1" value={valores.logradouro} onChange={(e) => set('logradouro', e.target.value)} />
         </Campo>
         <Campo label="Complemento" className="sm:col-span-2">
           <input className={campo} value={valores.complemento} onChange={(e) => set('complemento', e.target.value)} />
         </Campo>
-        <Campo label="Bairro" obrigatorio>
+        <Campo label="Bairro">
           <input className={campo} value={valores.bairro} onChange={(e) => set('bairro', e.target.value)} />
         </Campo>
-        <Campo label="Cidade" obrigatorio>
+        <Campo label="Cidade">
           <input className={campo} autoComplete="address-level2" value={valores.cidade} onChange={(e) => set('cidade', e.target.value)} />
         </Campo>
-        <Campo label="UF" obrigatorio>
-          <Uf valor={valores.uf} obrigatorio onChange={(valor) => set('uf', valor)} />
+        <Campo label="UF">
+          <Uf valor={valores.uf} onChange={(valor) => set('uf', valor)} />
         </Campo>
       </Secao>
 
-      <Secao titulo="Contrato" texto="O que registra o vínculo da pessoa com a empresa nesta obra.">
-        <Campo label="Função" obrigatorio>
+      <Secao titulo="Contrato" texto="Pode ficar em branco. Completa o vínculo quando tiver o dado.">
+        {obras && obras.length > 0 && (
+          <Campo label="Lotado na obra" className="sm:col-span-2">
+            <select className={campo} value={valores.obraId} onChange={(e) => set('obraId', e.target.value)}>
+              <option value="">RH da empresa — sem obra ainda</option>
+              {obras.map((obra) => (
+                <option key={obra.id} value={obra.id}>{obra.nome}</option>
+              ))}
+            </select>
+          </Campo>
+        )}
+        <Campo label="Função">
           <input className={campo} value={valores.funcao} placeholder="Pedreiro, servente, encarregado" onChange={(e) => set('funcao', e.target.value)} />
         </Campo>
         <Campo label="CBO">
@@ -402,10 +416,10 @@ export function FichaFuncionario({
         <Campo label="Matrícula">
           <input className={campo} value={valores.matricula} onChange={(e) => set('matricula', e.target.value)} />
         </Campo>
-        <Campo label="Data de admissão" obrigatorio>
+        <Campo label="Data de admissão">
           <input className={campo} type="date" value={valores.dataAdmissao} onChange={(e) => set('dataAdmissao', e.target.value)} />
         </Campo>
-        <Campo label="Tipo de contrato" obrigatorio>
+        <Campo label="Tipo de contrato">
           <select className={campo} value={valores.tipoContrato} onChange={(e) => set('tipoContrato', e.target.value)}>
             <option value="">Selecione</option>
             {CONTRATOS.map(([valor, rotulo]) => <option key={valor} value={valor}>{rotulo}</option>)}

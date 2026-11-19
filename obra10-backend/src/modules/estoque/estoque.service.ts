@@ -1064,9 +1064,10 @@ export class EstoqueService {
     const entrega = await this.entregaEpi(empresaId, insumo.tipo, local.obraId, body);
     const assinatura = peloRh ? this.assinaturaPng(body.assinatura) : null;
 
+    let movimentoId = '';
     await this.prisma.$transaction(async (tx) => {
       await this.baixarSaldo(tx, empresaId, local.id, insumo.id, qtd);
-      await tx.movimentoEstoque.create({
+      const movimento = await tx.movimentoEstoque.create({
         data: {
           empresaId,
           tipo: 'SAIDA',
@@ -1082,7 +1083,9 @@ export class EstoqueService {
           ca: entrega?.ca || null,
           assinatura,
         },
+        select: { id: true },
       });
+      movimentoId = movimento.id;
       await tx.auditLog.create({
         data: {
           empresaId,
@@ -1100,7 +1103,7 @@ export class EstoqueService {
       });
     });
 
-    return { insumo, quantidade };
+    return { insumo, quantidade, id: movimentoId };
   }
 
   async transferir(

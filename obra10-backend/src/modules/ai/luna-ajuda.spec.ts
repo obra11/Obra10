@@ -8,6 +8,7 @@ describe('ajuda_obra10', () => {
     expect(texto).toContain('Relatório do dia');
     expect(texto).toContain('com fotos');
     expect(texto).toContain('/gestor/usuarios');
+    expect(texto).toContain('/rh');
   });
 
   it('explica Relatórios de todas as obras', () => {
