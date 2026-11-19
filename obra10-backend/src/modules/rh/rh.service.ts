@@ -20,7 +20,7 @@ import { CapabilitiesService } from '../../core/capabilities/capabilities.servic
 import { CryptoService } from '../../core/services/crypto.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { lerVisaoLuna } from '../ai/luna-visao';
-import { imagemParaVisao } from '../estoque/estoque-storage';
+import { arquivoEntradaValido, gravarArquivoEntrada, imagemParaVisao } from '../estoque/estoque-storage';
 import { EstoqueService } from '../estoque/estoque.service';
 import { FICHA_SYSTEM, jsonDaLuna, parsearFichaExtraida, pedidoFicha } from './rh-ficha-leitura';
 import { gerarPdfTermoEpi } from './rh-termo-pdf';
@@ -394,6 +394,9 @@ export class RhService {
       ...this.treinamentoPublico(item),
       assinatura: item.assinatura,
       observacao: item.observacao,
+      certificadoUrl: item.certificadoUrl,
+      certificadoNome: item.certificadoNome,
+      certificadoMime: item.certificadoMime,
     };
   }
 
@@ -412,6 +415,7 @@ export class RhService {
       observacao?: string;
       assinatura?: string;
     },
+    certificado?: Express.Multer.File,
   ) {
     const obraId = await this.resolverObraId(empresaId, body.obraId);
     await this.assertAcesso(empresaId, userId, obraId);
@@ -428,6 +432,15 @@ export class RhService {
     if (isoDe(validade)! < isoDe(dataRealizacao)!) {
       throw new BadRequestException('A validade do treinamento não pode ser anterior à realização.');
     }
+    let certificadoUrl: string | null = null;
+    let certificadoNome: string | null = null;
+    let certificadoMime: string | null = null;
+    if (certificado) {
+      const mime = arquivoEntradaValido(certificado);
+      certificadoUrl = await gravarArquivoEntrada(certificado, mime, 'certificados-treino');
+      certificadoNome = texto(certificado.originalname, 180) || 'certificado';
+      certificadoMime = mime;
+    }
     const criado = await this.prisma.treinamentoFuncionario.create({
       data: {
         empresaId,
@@ -441,6 +454,9 @@ export class RhService {
         instrutor: texto(body.instrutor, 120),
         observacao: texto(body.observacao, 400),
         assinatura: assinaturaPng(body.assinatura),
+        certificadoUrl,
+        certificadoNome,
+        certificadoMime,
       },
       include: { funcionario: { select: { id: true, nome: true, funcao: true } } },
     });
@@ -879,6 +895,9 @@ export class RhService {
     validade: Date;
     instrutor: string | null;
     assinatura: string | null;
+    certificadoUrl?: string | null;
+    certificadoNome?: string | null;
+    certificadoMime?: string | null;
     createdAt: Date;
     funcionario: { id: string; nome: string; funcao: string };
   }) {
@@ -894,6 +913,10 @@ export class RhService {
       instrutor: item.instrutor,
       funcionario: item.funcionario,
       temAssinatura: Boolean(item.assinatura),
+      temCertificado: Boolean(item.certificadoUrl),
+      certificadoUrl: item.certificadoUrl || null,
+      certificadoNome: item.certificadoNome || null,
+      certificadoMime: item.certificadoMime || null,
       createdAt: item.createdAt,
     };
   }

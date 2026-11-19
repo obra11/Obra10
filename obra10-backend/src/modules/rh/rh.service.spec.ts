@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { lerVisaoLuna } from '../ai/luna-visao';
+import * as estoqueStorage from '../estoque/estoque-storage';
 import { RhService } from './rh.service';
 
 jest.mock('../ai/luna-visao', () => ({
@@ -237,5 +238,62 @@ describe('RhService.avisos e exames', () => {
     }));
     expect(exame.nome).toBe('ASO');
     expect(exame.situacao).toBe('VIGENTE');
+  });
+});
+
+describe('RhService.registrarTreinamento', () => {
+  it('grava o certificado PDF junto com o treinamento', async () => {
+    const create = jest.fn().mockImplementation(async ({ data }: any) => ({
+      id: 't1',
+      createdAt: new Date('2026-01-01T12:00:00.000Z'),
+      assinatura: null,
+      ...data,
+      funcionario: { id: 'f1', nome: 'João', funcao: 'Pedreiro' },
+    }));
+    const { rh } = makeSvc({
+      funcionario: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'f1',
+          empresaId: 'emp-1',
+          ativo: true,
+          deletedAt: null,
+        }),
+      },
+      treinamentoFuncionario: { create },
+    });
+    const gravar = jest
+      .spyOn(estoqueStorage, 'gravarArquivoEntrada')
+      .mockResolvedValue('https://cdn/cert.pdf');
+    const pdf = {
+      buffer: Buffer.from('%PDF'),
+      size: 4,
+      mimetype: 'application/pdf',
+      originalname: 'nr18.pdf',
+    } as Express.Multer.File;
+    const treino = await rh.registrarTreinamento(
+      'emp-1',
+      'user-1',
+      {
+        funcionarioId: 'f1',
+        tipo: 'RECORRENTE',
+        nome: 'NR-18',
+        dataRealizacao: '2026-01-10',
+        validade: '2027-01-10',
+        assinatura: `data:image/png;base64,${'A'.repeat(220)}`,
+      },
+      pdf,
+    );
+    expect(gravar).toHaveBeenCalled();
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          certificadoUrl: 'https://cdn/cert.pdf',
+          certificadoNome: 'nr18.pdf',
+          certificadoMime: 'application/pdf',
+        }),
+      }),
+    );
+    expect(treino.temCertificado).toBe(true);
+    gravar.mockRestore();
   });
 });

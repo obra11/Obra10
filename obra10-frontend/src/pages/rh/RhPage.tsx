@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Activity, AlertTriangle, ArrowLeft, Camera, FileDown, GraduationCap, HardHat, Loader2, Mail, MessageCircle, Plus, Printer, ShieldCheck, Upload } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowLeft, Camera, FileDown, FileText, GraduationCap, HardHat, Loader2, Mail, MessageCircle, Plus, Printer, ShieldCheck, Upload, X } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { getImageUrl } from '../../utils/image';
 import { FichaFuncionario, fichaDe, fichaVazia, mesclarFicha, pendenciaFicha, type FichaValores } from './FichaFuncionario';
 
 type ContagemTreino = { admissionais: number; recorrentes: number; vencidos: number; aVencer: number };
@@ -51,6 +52,10 @@ type Treinamento = {
   instrutor?: string | null;
   funcionario?: { id: string; nome: string; funcao: string };
   temAssinatura?: boolean;
+  temCertificado?: boolean;
+  certificadoUrl?: string | null;
+  certificadoNome?: string | null;
+  certificadoMime?: string | null;
 };
 type TermoTreino = Treinamento & { assinatura?: string | null; observacao?: string | null };
 type TipoExame = 'ADMISSIONAL' | 'PERIODICO' | 'RETORNO_TRABALHO' | 'MUDANCA_FUNCAO' | 'DEMISSIONAL';
@@ -331,6 +336,10 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
   const [aviso, setAviso] = useState('');
   const cameraFichaRef = useRef<HTMLInputElement>(null);
   const arquivoFichaRef = useRef<HTMLInputElement>(null);
+  const cameraCertRef = useRef<HTMLInputElement>(null);
+  const arquivoCertRef = useRef<HTMLInputElement>(null);
+  const [certificado, setCertificado] = useState<File | null>(null);
+  const [certificadoPreview, setCertificadoPreview] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     if (!empresa && !obraId) return;
@@ -522,6 +531,39 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
 
   const nomeDoTreino = nomeTreino === '__outro' ? nomeOutro.trim() : nomeTreino;
 
+  const escolherCertificado = (file: File) => {
+    if (file.size > 15 * 1024 * 1024) {
+      setErro('O certificado passa de 15 MB.');
+      return;
+    }
+    const tipo = (file.type || '').toLowerCase();
+    const nome = file.name.toLowerCase();
+    const ok =
+      tipo.startsWith('image/') ||
+      tipo === 'application/pdf' ||
+      /\.(jpe?g|png|webp|gif|heic|heif|pdf)$/i.test(nome);
+    if (!ok) {
+      setErro('Use uma foto (JPG, PNG) ou um PDF do certificado.');
+      return;
+    }
+    setErro('');
+    setCertificado(file);
+    setCertificadoPreview((atual) => {
+      if (atual) URL.revokeObjectURL(atual);
+      return tipo.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(nome)
+        ? URL.createObjectURL(file)
+        : null;
+    });
+  };
+
+  const limparCertificado = () => {
+    setCertificado(null);
+    setCertificadoPreview((atual) => {
+      if (atual) URL.revokeObjectURL(atual);
+      return null;
+    });
+  };
+
   const prepararTreino = () => {
     if (!treinoFuncionarioId) {
       setErro('Escolha quem participou do treinamento.');
@@ -563,22 +605,28 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
     setEnviando(true);
     setErro('');
     try {
-      await api.post('/rh/treinamentos', {
-        ...(obraId ? { obraId } : {}),
-        funcionarioId: treinoFuncionarioId,
-        tipo: tipoTreino,
-        nome: nomeDoTreino,
-        dataRealizacao: dataTreino,
-        validade: validadeTreino,
-        cargaHoraria: cargaHoraria ? Number(cargaHoraria.replace(',', '.')) : undefined,
-        instrutor: instrutor.trim() || undefined,
-        assinatura,
-      });
+      const dados = new FormData();
+      if (obraId) dados.append('obraId', obraId);
+      dados.append('funcionarioId', treinoFuncionarioId);
+      dados.append('tipo', tipoTreino);
+      dados.append('nome', nomeDoTreino);
+      dados.append('dataRealizacao', dataTreino);
+      dados.append('validade', validadeTreino);
+      if (cargaHoraria) dados.append('cargaHoraria', String(Number(cargaHoraria.replace(',', '.'))));
+      if (instrutor.trim()) dados.append('instrutor', instrutor.trim());
+      dados.append('assinatura', assinatura);
+      if (certificado) dados.append('certificado', certificado);
+      await api.post('/rh/treinamentos', dados, { timeout: 90_000 });
       setAviso(tipoTreino === 'ADMISSIONAL' ? 'Treinamento admissional registrado.' : 'Reciclagem registrada.');
       setAssinatura(null);
       setTermoAberto(null);
       setCargaHoraria('');
       setInstrutor('');
+      setCertificado(null);
+      setCertificadoPreview((atual) => {
+        if (atual) URL.revokeObjectURL(atual);
+        return null;
+      });
       await carregar();
     } catch (err) {
       setErro(msg(err, 'Não foi possível registrar o treinamento.'));
@@ -1149,6 +1197,70 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
                 <input className={entrada} value={instrutor} onChange={(e) => setInstrutor(e.target.value)} />
               </label>
             </div>
+            <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3 space-y-2">
+              <p className="text-xs font-extrabold uppercase tracking-wider text-lunardeli-red">Certificado</p>
+              <p className="text-xs text-gray-500">
+                Opcional. Fotografe o certificado ou anexe o PDF.
+              </p>
+              <input
+                ref={cameraCertRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) escolherCertificado(file);
+                  e.target.value = '';
+                }}
+              />
+              <input
+                ref={arquivoCertRef}
+                type="file"
+                accept="image/*,application/pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) escolherCertificado(file);
+                  e.target.value = '';
+                }}
+              />
+              {certificado ? (
+                <div className="flex items-start gap-3 rounded-xl bg-white border border-gray-200 p-3">
+                  {certificadoPreview ? (
+                    <img src={certificadoPreview} alt="" className="h-16 w-16 rounded-lg object-cover bg-gray-100" />
+                  ) : (
+                    <div className="h-16 w-16 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center">
+                      <FileText size={22} />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-gray-900 truncate">{certificado.name}</p>
+                    <p className="text-xs text-gray-500">{Math.max(1, Math.round(certificado.size / 1024))} KB</p>
+                  </div>
+                  <button type="button" onClick={limparCertificado} className="text-gray-500 p-1" aria-label="Remover certificado">
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => cameraCertRef.current?.click()}
+                    className="flex items-center justify-center gap-2 bg-lunardeli-red text-white font-bold rounded-xl py-3 text-sm"
+                  >
+                    <Camera size={16} /> Foto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => arquivoCertRef.current?.click()}
+                    className="flex items-center justify-center gap-2 border border-gray-300 text-gray-900 font-bold rounded-xl py-3 text-sm"
+                  >
+                    <Upload size={16} /> PDF ou foto
+                  </button>
+                </div>
+              )}
+            </div>
             <button type="button" disabled={enviando} onClick={prepararTreino} className="w-full bg-gray-900 text-white font-bold rounded-xl py-3 disabled:opacity-60">
               Assinar presença
             </button>
@@ -1197,11 +1309,23 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
                       {item.validade ? ` · ${item.tipo === 'RECORRENTE' ? 'reciclagem' : 'válido'} até ${quando(item.validade)}` : ''}
                       {item.instrutor ? ` · ${item.instrutor}` : ''}
                     </p>
-                    {item.temAssinatura && (
-                      <button type="button" onClick={() => void verTermoTreino(item.id)} className="mt-2 text-xs font-bold text-lunardeli-red">
-                        Ver presença assinada
-                      </button>
-                    )}
+                    <div className="mt-2 flex flex-wrap gap-3">
+                      {item.temAssinatura && (
+                        <button type="button" onClick={() => void verTermoTreino(item.id)} className="text-xs font-bold text-lunardeli-red">
+                          Ver presença assinada
+                        </button>
+                      )}
+                      {item.temCertificado && item.certificadoUrl && (
+                        <a
+                          href={getImageUrl(item.certificadoUrl)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-bold text-lunardeli-red"
+                        >
+                          Ver certificado
+                        </a>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -1336,6 +1460,9 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
               Eu, {pessoaTreino?.nome || 'o funcionário'}, declaro que participei do treinamento {tipoTreino === 'ADMISSIONAL' ? 'admissional' : 'recorrente'} "{nomeDoTreino}" em {quando(dataTreino)}
               {cargaHoraria ? `, com carga horária de ${cargaHoraria.replace('.', ',')}h` : ''}, válido até {quando(validadeTreino)}.
             </p>
+            {certificado && (
+              <p className="text-xs text-gray-500">Certificado anexado: {certificado.name}</p>
+            )}
             <p className="text-xs text-gray-500">Assine com o dedo no quadro.</p>
             {erro && <p className="text-sm font-bold text-red-700">{erro}</p>}
             <QuadroAssinatura onChange={setAssinatura} />
@@ -1402,6 +1529,22 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
             </p>
             <Selo situacao={termoTreino.situacao} />
             {termoTreino.assinatura && <img src={termoTreino.assinatura} alt="Assinatura de quem participou" className="w-full rounded-xl border border-gray-200 bg-white" />}
+            {termoTreino.certificadoUrl && (
+              termoTreino.certificadoMime?.startsWith('image/') ? (
+                <a href={getImageUrl(termoTreino.certificadoUrl)} target="_blank" rel="noopener noreferrer">
+                  <img src={getImageUrl(termoTreino.certificadoUrl)} alt={termoTreino.certificadoNome || 'Certificado'} className="w-full rounded-xl border border-gray-200 bg-white" />
+                </a>
+              ) : (
+                <a
+                  href={getImageUrl(termoTreino.certificadoUrl)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 border rounded-xl py-3 text-sm font-bold text-lunardeli-red"
+                >
+                  <FileText size={16} /> {termoTreino.certificadoNome || 'Abrir certificado'}
+                </a>
+              )
+            )}
             <button type="button" onClick={() => setTermoTreino(null)} className="w-full border rounded-xl py-3 text-sm font-bold text-gray-700">Fechar</button>
           </div>
         </div>,

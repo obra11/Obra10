@@ -20,7 +20,7 @@ function mimeDe(file: Express.Multer.File): string {
 
 export function arquivoEntradaValido(file?: Express.Multer.File) {
   if (!file?.buffer?.length) {
-    throw new BadRequestException('Envie a foto ou o PDF da nota.');
+    throw new BadRequestException('Envie uma foto ou um PDF.');
   }
   if (file.size > MAX_BYTES) {
     throw new BadRequestException('O arquivo passa de 15 MB.');
@@ -41,6 +41,7 @@ export function imagemParaVisao(mime: string): boolean {
 export async function gravarArquivoEntrada(
   file: Express.Multer.File,
   mime: string,
+  pasta = 'notas-entrada',
 ): Promise<string> {
   const fileName = `${randomUUID()}${extname(file.originalname || '').toLowerCase() || (mime === 'application/pdf' ? '.pdf' : '.jpg')}`;
   const keyId = process.env.AWS_ACCESS_KEY_ID?.trim();
@@ -57,7 +58,7 @@ export async function gravarArquivoEntrada(
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
       },
     });
-    const s3Key = `uploads/notas-entrada/${fileName}`;
+    const s3Key = `uploads/${pasta}/${fileName}`;
     await s3.send(
       new PutObjectCommand({
         Bucket: bucket,

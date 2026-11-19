@@ -1050,12 +1050,15 @@ model TreinamentoFuncionario {
   dataRealizacao DateTime        @map("data_realizacao") @db.Date
   cargaHoraria   Decimal?        @map("carga_horaria") @db.Decimal(6, 2)
   validade       DateTime        @db.Date
-  instrutor      String?
-  observacao     String?
-  assinatura     String?         @db.Text
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
-  deletedAt      DateTime?       @map("deleted_at")
+  instrutor       String?
+  observacao      String?
+  assinatura      String?         @db.Text
+  certificadoUrl  String?         @map("certificado_url")
+  certificadoNome String?         @map("certificado_nome")
+  certificadoMime String?         @map("certificado_mime")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  deletedAt       DateTime?       @map("deleted_at")
 
   empresa     Empresa     @relation(fields: [empresaId], references: [id])
   obra        Obra?       @relation(fields: [obraId], references: [id])

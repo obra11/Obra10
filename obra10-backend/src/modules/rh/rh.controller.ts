@@ -8,11 +8,12 @@ import {
   Query,
   Req,
   Res,
+  UploadedFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { ModuloGuard } from '../../core/guards/modulo.guard';
@@ -131,7 +132,22 @@ export class RhController {
   }
 
   @Post('treinamentos')
-  registrarTreinamento(@Req() req: any, @Body() body: any) {
-    return this.rh.registrarTreinamento(this.empresaId(req), this.userId(req), body);
+  @UseInterceptors(
+    FileInterceptor('certificado', {
+      storage: memoryStorage(),
+      limits: { fileSize: 15 * 1024 * 1024 },
+    }),
+  )
+  registrarTreinamento(
+    @Req() req: any,
+    @Body() body: any,
+    @UploadedFile() certificado?: Express.Multer.File,
+  ) {
+    return this.rh.registrarTreinamento(
+      this.empresaId(req),
+      this.userId(req),
+      body,
+      certificado,
+    );
   }
 }
