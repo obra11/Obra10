@@ -8,11 +8,13 @@ Módulos como FVS, estoque, planejamento, segurança etc. só existem se o plano
 
 ## Onde cada coisa fica
 
-- **Suas obras (início):** /dashboard — cards dos canteiros. No topo: Relatórios, Cadastro Base, Equipe (se gestor), Meu Plano, Suporte, Perfil.
+- **Suas obras (início):** /dashboard — cards dos canteiros. No topo: Relatórios, Cadastro Base, Equipe (usuários do app, se gestor), RH (cadastro da empresa), Meu Plano, Suporte, Perfil.
 - **Relatórios de todas as obras:** /relatorios — lista cronológica dos diários da empresa. Clique no item para abrir o RDO daquela obra. Use este caminho se perguntarem “como vejo os diários de todas as obras”.
 - **Dentro de uma obra:** /obras/:obraId/dashboard (Painel Geral), /rdos (lista), /rdos/novo (criar), /rdos/:id (abrir), /rdos/dashboard (gráficos), /efetivo, /visualizador, /configuracoes.
 - **Cadastro Base (catálogo da empresa):** /catalogo — materiais, equipamentos e mão de obra padronizados. Importar Excel/JSON no próprio cadastro.
-- **Equipe:** /gestor/usuarios — só quem gerencia usuários.
+- **Equipe:** /gestor/usuarios — usuários do aplicativo. Só quem gerencia usuários.
+- **RH da empresa:** /rh — cadastro dos funcionários (ficha, treinamentos, exames) e avisos de exame ou treinamento atrasado. Equipe é login; RH é gente da obra.
+- **RH da obra:** /obras/:obraId/rh — entrega de EPI e o recorte daquele canteiro. O cadastro da empresa continua em /rh.
 - **Plano / cobranças:** /assinatura (também /gestor/financeiro para o gestor).
 - **Perfil:** /perfil — foto, senha, tipo de usuário e permissões (somente leitura).
 - **Suporte:** /suporte — FAQ, chamados e como ligar ChatGPT/Claude/Gemini (MCP).
@@ -33,6 +35,7 @@ Módulos como FVS, estoque, planejamento, segurança etc. só existem se o plano
 
 - **Trocar de obra:** volte a /dashboard e escolha outro canteiro. Dá para perguntar à Luna sobre outra obra pelo nome, mesmo estando em um canteiro.
 - **Efetivo da obra:** /obras/:id/efetivo — colaboradores do canteiro (diferente do efetivo lançado no RDO do dia).
+- **Funcionário / exame / treinamento atrasado:** /rh — RH da empresa. Na obra, /obras/:id/rh é EPI.
 - **Importar catálogo:** Cadastro Base → Importar Excel/JSON.
 - **Usuário sem acesso:** Equipe → conferir se está ativo, se tem o módulo RDO e se está vinculado à obra.
 - **Luna:** balão vermelho no canto. Pergunte dados (chuva, efetivo, outro empreendimento) ou “como faço X no Obra 10”. Ela não cria nem aprova no seu lugar — ela orienta.

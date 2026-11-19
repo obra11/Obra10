@@ -1,16 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams } from 'react-router-dom';
-import { Camera, FileDown, GraduationCap, HardHat, Loader2, Mail, MessageCircle, Plus, Printer, ShieldCheck, Upload } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Activity, AlertTriangle, ArrowLeft, Camera, FileDown, GraduationCap, HardHat, Loader2, Mail, MessageCircle, Plus, Printer, ShieldCheck, Upload } from 'lucide-react';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { FichaFuncionario, fichaDe, fichaVazia, mesclarFicha, pendenciaFicha, type FichaValores } from './FichaFuncionario';
 
 type ContagemTreino = { admissionais: number; recorrentes: number; vencidos: number; aVencer: number };
+type ContagemExame = { vencidos: number; aVencer: number };
 type Funcionario = {
   id: string;
   nome: string;
   funcao: string;
   ativo: boolean;
+  obraId?: string | null;
+  obraNome?: string | null;
   cpfMascarado?: string | null;
   cidade?: string | null;
   uf?: string | null;
@@ -18,6 +22,7 @@ type Funcionario = {
   tipoContrato?: string | null;
   fichaCompleta?: boolean;
   treinamentos?: ContagemTreino;
+  exames?: ContagemExame;
 };
 type Epi = { id: string; nome: string; unidade?: string | null; quantidade: number };
 type Situacao = 'VIGENTE' | 'A_VENCER' | 'VENCIDO' | null;
@@ -48,6 +53,28 @@ type Treinamento = {
   temAssinatura?: boolean;
 };
 type TermoTreino = Treinamento & { assinatura?: string | null; observacao?: string | null };
+type TipoExame = 'ADMISSIONAL' | 'PERIODICO' | 'RETORNO_TRABALHO' | 'MUDANCA_FUNCAO' | 'DEMISSIONAL';
+type Exame = {
+  id: string;
+  tipo: TipoExame;
+  nome: string;
+  dataRealizacao?: string | null;
+  validade?: string | null;
+  situacao?: Situacao;
+  resultado?: string | null;
+  clinica?: string | null;
+  funcionario?: { id: string; nome: string; funcao: string };
+};
+type AvisoItem = (Treinamento | Exame) & { especie: 'TREINAMENTO' | 'EXAME' };
+type Avisos = {
+  vencidos: number;
+  aVencer: number;
+  examesVencidos: number;
+  examesAVencer: number;
+  treinamentosVencidos: number;
+  treinamentosAVencer: number;
+  itens: AvisoItem[];
+};
 
 const TREINOS = [
   'Integração admissional',
@@ -70,6 +97,29 @@ const CONTRATOS: Record<string, string> = {
   AUTONOMO: 'Autônomo',
   TERCEIRIZADO: 'Terceirizado',
 };
+
+const EXAMES = [
+  'ASO',
+  'Audiometria',
+  'Acuidade visual',
+  'Espirometria',
+  'Hemograma',
+  'Raio-X de tórax',
+];
+
+const TIPOS_EXAME: [TipoExame, string][] = [
+  ['ADMISSIONAL', 'Admissional'],
+  ['PERIODICO', 'Periódico'],
+  ['RETORNO_TRABALHO', 'Retorno ao trabalho'],
+  ['MUDANCA_FUNCAO', 'Mudança de função'],
+  ['DEMISSIONAL', 'Demissional'],
+];
+
+const RESULTADOS_EXAME: [string, string][] = [
+  ['APTO', 'Apto'],
+  ['APTO_RESTRICOES', 'Apto com restrições'],
+  ['INAPTO', 'Inapto'],
+];
 
 function QuadroAssinatura({ onChange }: { onChange: (valor: string | null) => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -222,13 +272,22 @@ function Selo({ situacao }: { situacao?: Situacao }) {
 
 const entrada = 'w-full border border-gray-200 rounded-xl p-3 text-sm bg-white';
 
-export const RhPage: React.FC = () => {
-  const { obraId } = useParams();
-  const [aba, setAba] = useState<'pessoas' | 'epi' | 'treinamentos'>('pessoas');
+export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' }) => {
+  const { obraId: obraParam } = useParams();
+  const { obras, user } = useAuth();
+  const navigate = useNavigate();
+  const empresa = modo === 'empresa';
+  const obraId = empresa ? undefined : obraParam;
+  const podeRhEmpresa = user?.perfilGlobal === 'GESTOR' || user?.perfilGlobal === 'SUPER_ADMIN'
+    || user?.capabilities?.gerenciarUsuarios === true
+    || user?.capabilities?.acessoTodasObras === true;
+  const [aba, setAba] = useState<'avisos' | 'pessoas' | 'epi' | 'treinamentos' | 'exames'>(empresa ? 'avisos' : 'pessoas');
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
   const [epis, setEpis] = useState<Epi[]>([]);
   const [entregas, setEntregas] = useState<Entrega[]>([]);
   const [treinamentos, setTreinamentos] = useState<Treinamento[]>([]);
+  const [exames, setExames] = useState<Exame[]>([]);
+  const [avisos, setAvisos] = useState<Avisos | null>(null);
   const [fichaAberta, setFichaAberta] = useState(false);
   const [fichaId, setFichaId] = useState<string | null>(null);
   const [ficha, setFicha] = useState<FichaValores>(fichaVazia());
@@ -249,6 +308,16 @@ export const RhPage: React.FC = () => {
   const [cargaHoraria, setCargaHoraria] = useState('');
   const [instrutor, setInstrutor] = useState('');
   const [filtroTreino, setFiltroTreino] = useState<'TODOS' | 'ADMISSIONAL' | 'RECORRENTE' | 'VENCIDO'>('TODOS');
+  const [exameFuncionarioId, setExameFuncionarioId] = useState('');
+  const [tipoExame, setTipoExame] = useState<TipoExame>('PERIODICO');
+  const [nomeExame, setNomeExame] = useState('ASO');
+  const [nomeExameOutro, setNomeExameOutro] = useState('');
+  const [dataExame, setDataExame] = useState(hoje);
+  const [validadeExame, setValidadeExame] = useState(maisUmAno(hoje()));
+  const validadeExameAuto = useRef(true);
+  const [resultadoExame, setResultadoExame] = useState('APTO');
+  const [clinicaExame, setClinicaExame] = useState('');
+  const [filtroExame, setFiltroExame] = useState<'TODOS' | 'VENCIDO' | 'A_VENCER'>('TODOS');
   const [assinatura, setAssinatura] = useState<string | null>(null);
   const [termoAberto, setTermoAberto] = useState<'epi' | 'treino' | null>(null);
   const [termoEpi, setTermoEpi] = useState<TermoEpi | null>(null);
@@ -264,19 +333,31 @@ export const RhPage: React.FC = () => {
   const arquivoFichaRef = useRef<HTMLInputElement>(null);
 
   const carregar = useCallback(async () => {
-    if (!obraId) return;
+    if (!empresa && !obraId) return;
     setCarregando(true);
     setErro('');
+    const params = obraId ? { obraId } : {};
     try {
-      const [pessoas, locais, entregasRes, treinosRes] = await Promise.all([
-        api.get('/rh/funcionarios', { params: { obraId } }),
-        api.get('/estoque/locais', { params: { obraId } }),
-        api.get('/rh/entregas', { params: { obraId } }),
-        api.get('/rh/treinamentos', { params: { obraId } }),
+      const [pessoas, treinosRes, avisosRes, examesRes] = await Promise.all([
+        api.get('/rh/funcionarios', { params }),
+        api.get('/rh/treinamentos', { params }),
+        api.get('/rh/avisos', { params }),
+        api.get('/rh/exames', { params }),
       ]);
       setFuncionarios(pessoas.data || []);
-      setEntregas(entregasRes.data || []);
       setTreinamentos(treinosRes.data || []);
+      setAvisos(avisosRes.data || null);
+      setExames(examesRes.data || []);
+      if (empresa || !obraId) {
+        setEntregas([]);
+        setEpis([]);
+        return;
+      }
+      const [locais, entregasRes] = await Promise.all([
+        api.get('/estoque/locais', { params: { obraId } }),
+        api.get('/rh/entregas', { params: { obraId } }),
+      ]);
+      setEntregas(entregasRes.data || []);
       const almox = (locais.data?.locais || []).find((local: { tipo: string }) => local.tipo === 'ALMOXARIFADO');
       if (almox) {
         const saldos = await api.get('/estoque/saldos', { params: { localId: almox.id } });
@@ -298,20 +379,20 @@ export const RhPage: React.FC = () => {
     } finally {
       setCarregando(false);
     }
-  }, [obraId]);
+  }, [empresa, obraId]);
 
   useEffect(() => {
     carregar().catch(() => {});
   }, [carregar]);
 
   const lerFotoFicha = async (file?: File) => {
-    if (!file || !obraId) return;
+    if (!file) return;
     setLendoFicha(true);
     setErro('');
     try {
       const fd = new FormData();
       fd.append('files', file);
-      fd.append('obraId', obraId);
+      if (obraId) fd.append('obraId', obraId);
       const res = await api.post('/rh/funcionarios/ler-ficha', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 120000,
@@ -329,7 +410,7 @@ export const RhPage: React.FC = () => {
     setErro('');
     setAviso('');
     setFichaId(id || null);
-    setFicha(fichaVazia());
+    setFicha({ ...fichaVazia(), obraId: obraId || '' });
     setFichaAberta(true);
     if (!id) return;
     setCarregandoFicha(true);
@@ -353,8 +434,9 @@ export const RhPage: React.FC = () => {
     setEnviando(true);
     setErro('');
     try {
-      if (fichaId) await api.patch(`/rh/funcionarios/${fichaId}`, ficha);
-      else await api.post('/rh/funcionarios', { ...ficha, obraId });
+      const corpo = { ...ficha, obraId: ficha.obraId || obraId || null };
+      if (fichaId) await api.patch(`/rh/funcionarios/${fichaId}`, corpo);
+      else await api.post('/rh/funcionarios', corpo);
       setAviso(fichaId ? 'Ficha atualizada.' : 'Funcionário incluído.');
       setFichaAberta(false);
       await carregar();
@@ -482,7 +564,7 @@ export const RhPage: React.FC = () => {
     setErro('');
     try {
       await api.post('/rh/treinamentos', {
-        obraId,
+        ...(obraId ? { obraId } : {}),
         funcionarioId: treinoFuncionarioId,
         tipo: tipoTreino,
         nome: nomeDoTreino,
@@ -500,6 +582,52 @@ export const RhPage: React.FC = () => {
       await carregar();
     } catch (err) {
       setErro(msg(err, 'Não foi possível registrar o treinamento.'));
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const nomeDoExame = nomeExame === '__outro' ? nomeExameOutro.trim() : nomeExame;
+
+  const salvarExame = async () => {
+    if (!exameFuncionarioId) {
+      setErro('Escolha o funcionário.');
+      return;
+    }
+    if (nomeDoExame.length < 3) {
+      setErro('Informe o nome do exame.');
+      return;
+    }
+    if (!dataExame) {
+      setErro('Informe a data do exame.');
+      return;
+    }
+    if (!validadeExame) {
+      setErro('Informe a validade do exame.');
+      return;
+    }
+    if (validadeExame < dataExame) {
+      setErro('A validade do exame não pode ser anterior à realização.');
+      return;
+    }
+    setEnviando(true);
+    setErro('');
+    try {
+      await api.post('/rh/exames', {
+        ...(obraId ? { obraId } : {}),
+        funcionarioId: exameFuncionarioId,
+        tipo: tipoExame,
+        nome: nomeDoExame,
+        dataRealizacao: dataExame,
+        validade: validadeExame,
+        resultado: resultadoExame || undefined,
+        clinica: clinicaExame.trim() || undefined,
+      });
+      setAviso('Exame registrado.');
+      setClinicaExame('');
+      await carregar();
+    } catch (err) {
+      setErro(msg(err, 'Não foi possível registrar o exame.'));
     } finally {
       setEnviando(false);
     }
@@ -607,33 +735,69 @@ export const RhPage: React.FC = () => {
   });
   const vencidos = treinamentos.filter((item) => item.situacao === 'VENCIDO').length;
   const aVencer = treinamentos.filter((item) => item.situacao === 'A_VENCER').length;
+  const listaExames = exames.filter((item) => {
+    if (filtroExame === 'TODOS') return true;
+    if (filtroExame === 'VENCIDO') return item.situacao === 'VENCIDO';
+    return item.situacao === 'A_VENCER';
+  });
+  const fichas = empresa ? funcionarios : funcionarios.filter((pessoa) => pessoa.obraId === obraId);
+  const abas = empresa
+    ? ([['avisos', 'Avisos'], ['pessoas', 'Fichas'], ['treinamentos', 'Treinamentos'], ['exames', 'Exames']] as const)
+    : ([['pessoas', 'Fichas'], ['epi', 'EPI'], ['treinamentos', 'Treinamentos']] as const);
+  const atraso = (avisos?.vencidos || 0) + (avisos?.aVencer || 0);
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <div className={`${empresa ? 'min-h-screen bg-lunardeli-gray' : ''} p-4 md:p-6 space-y-4 ${empresa ? 'max-w-7xl mx-auto' : ''}`}>
       {erro && !fichaAberta && !termoAberto && <p className="text-sm font-bold text-red-700 bg-red-50 rounded-xl px-3 py-2">{erro}</p>}
       {aviso && <p className="text-sm font-bold text-emerald-800 bg-emerald-50 rounded-xl px-3 py-2">{aviso}</p>}
 
       <div className="bg-white p-5 md:p-6 rounded-2xl border border-gray-100">
-        <div className="flex items-center gap-2 text-lunardeli-red font-bold text-xs uppercase tracking-wider">
-          <HardHat size={16} /> RH
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-lunardeli-red font-bold text-xs uppercase tracking-wider">
+            <HardHat size={16} /> {empresa ? 'RH da empresa' : 'RH da obra'}
+          </div>
+          {empresa && (
+            <button type="button" onClick={() => navigate('/dashboard')} className="flex items-center gap-1.5 text-sm font-bold text-gray-600">
+              <ArrowLeft size={16} /> Voltar
+            </button>
+          )}
         </div>
         <div className="mt-1 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-extrabold text-gray-900">Funcionários</h1>
+            <h1 className="text-2xl font-extrabold text-gray-900">{empresa ? 'Pessoas da empresa' : 'Funcionários'}</h1>
             <p className="text-sm text-gray-500 mt-1">
-              Ficha de cadastro (nome completo e CPF). Entrega de EPI com termo assinado, PDF e envio.
+              {empresa
+                ? 'Cadastro na empresa, treinamentos e exames. O aviso aparece quando algum vence ou já venceu.'
+                : 'Entrega de EPI nesta obra. O cadastro, os exames e o aviso de atraso ficam no RH da empresa.'}
             </p>
           </div>
-          <button type="button" onClick={() => void abrirFicha()} className="hidden sm:inline-flex items-center justify-center gap-2 bg-lunardeli-red text-white font-bold rounded-xl px-4 py-3">
-            <Plus size={16} /> Incluir funcionário
-          </button>
+          <div className="hidden sm:flex items-center gap-2">
+            {!empresa && podeRhEmpresa && (
+              <button type="button" onClick={() => navigate('/rh')} className="inline-flex items-center justify-center gap-2 border border-gray-200 text-gray-800 font-bold rounded-xl px-4 py-3">
+                RH da empresa
+              </button>
+            )}
+            <button type="button" onClick={() => void abrirFicha()} className="inline-flex items-center justify-center gap-2 bg-lunardeli-red text-white font-bold rounded-xl px-4 py-3">
+              <Plus size={16} /> Incluir funcionário
+            </button>
+          </div>
         </div>
+        {atraso > 0 && aba !== 'avisos' && (
+          <button
+            type="button"
+            onClick={() => { if (empresa) setAba('avisos'); else if (podeRhEmpresa) navigate('/rh'); }}
+            className="mt-4 w-full text-left rounded-xl bg-red-50 border border-red-100 px-4 py-3"
+          >
+            <p className="text-sm font-extrabold text-red-800 flex items-center gap-2">
+              <AlertTriangle size={16} />
+              {avisos?.vencidos || 0} atrasado{(avisos?.vencidos || 0) === 1 ? '' : 's'}
+              {(avisos?.aVencer || 0) > 0 ? ` · ${avisos?.aVencer} a vencer` : ''}
+            </p>
+            <p className="text-xs text-red-700 mt-1">Exame ou treinamento com validade vencida ou perto de vencer.</p>
+          </button>
+        )}
         <div className="mt-4 flex gap-2 overflow-x-auto">
-          {([
-            ['pessoas', 'Fichas'],
-            ['epi', 'EPI'],
-            ['treinamentos', 'Treinamentos'],
-          ] as const).map(([id, rotulo]) => (
+          {abas.map(([id, rotulo]) => (
             <button
               key={id}
               type="button"
@@ -641,25 +805,57 @@ export const RhPage: React.FC = () => {
               className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold ${aba === id ? 'bg-lunardeli-red text-white' : 'bg-gray-100 text-gray-700'}`}
             >
               {rotulo}
+              {id === 'avisos' && atraso > 0 ? ` (${atraso})` : ''}
             </button>
           ))}
         </div>
       </div>
 
+      {aba === 'avisos' && empresa && (
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          {carregando ? (
+            <p className="p-8 text-sm text-gray-500 flex items-center justify-center gap-2"><Loader2 className="animate-spin" size={16} /> Carregando avisos...</p>
+          ) : !avisos || avisos.itens.length === 0 ? (
+            <p className="p-8 text-sm text-gray-500 text-center">Nenhum exame ou treinamento atrasado. Quando a validade chegar, o aviso aparece aqui.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {avisos.itens.map((item) => (
+                <li key={`${item.especie}-${item.id}`} className="p-4">
+                  <div className="flex justify-between gap-3">
+                    <p className="font-bold text-gray-900">{item.nome}</p>
+                    <Selo situacao={item.situacao} />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {item.especie === 'EXAME' ? 'Exame' : 'Treinamento'}
+                    {' · '}
+                    {item.funcionario?.nome || 'Funcionário'}
+                    {item.validade ? ` · válido até ${quando(item.validade)}` : ''}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {aba === 'pessoas' && (
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
           {carregando ? (
             <p className="p-8 text-sm text-gray-500 flex items-center justify-center gap-2"><Loader2 className="animate-spin" size={16} /> Carregando funcionários...</p>
-          ) : funcionarios.length === 0 ? (
-            <p className="p-8 text-sm text-gray-500 text-center">Nenhum funcionário nesta obra. Inclua o primeiro com a ficha de registro.</p>
+          ) : fichas.length === 0 ? (
+            <p className="p-8 text-sm text-gray-500 text-center">
+              {empresa
+                ? 'Nenhum funcionário na empresa. Inclua o primeiro com a ficha de registro.'
+                : 'Ninguém lotado nesta obra. Inclua aqui ou cadastre no RH da empresa.'}
+            </p>
           ) : (
             <ul className="divide-y divide-gray-100">
-              {funcionarios.map((pessoa) => (
+              {fichas.map((pessoa) => (
                 <li key={pessoa.id} className="p-4 flex items-start justify-between gap-3">
                   <button type="button" onClick={() => void abrirFicha(pessoa.id)} className="min-w-0 text-left">
                     <p className={`font-bold truncate ${pessoa.ativo ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{pessoa.nome}</p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {[pessoa.funcao, pessoa.cpfMascarado, pessoa.cidade ? `${pessoa.cidade}${pessoa.uf ? `/${pessoa.uf}` : ''}` : '']
+                      {[pessoa.funcao, pessoa.cpfMascarado, pessoa.obraNome || (empresa && !pessoa.obraId ? 'Sem obra' : ''), pessoa.cidade ? `${pessoa.cidade}${pessoa.uf ? `/${pessoa.uf}` : ''}` : '']
                         .filter(Boolean)
                         .join(' · ') || 'Só cadastro inicial'}
                     </p>
@@ -671,6 +867,8 @@ export const RhPage: React.FC = () => {
                       {pessoa.fichaCompleta === false && <span className="text-[11px] font-bold uppercase text-amber-800 bg-amber-50 rounded-full px-2 py-0.5">Ficha incompleta</span>}
                       {(pessoa.treinamentos?.vencidos || 0) > 0 && <span className="text-[11px] font-bold uppercase text-red-700 bg-red-50 rounded-full px-2 py-0.5">Treinamento vencido</span>}
                       {(pessoa.treinamentos?.aVencer || 0) > 0 && <span className="text-[11px] font-bold uppercase text-amber-800 bg-amber-50 rounded-full px-2 py-0.5">Treinamento a vencer</span>}
+                      {(pessoa.exames?.vencidos || 0) > 0 && <span className="text-[11px] font-bold uppercase text-red-700 bg-red-50 rounded-full px-2 py-0.5">Exame vencido</span>}
+                      {(pessoa.exames?.aVencer || 0) > 0 && <span className="text-[11px] font-bold uppercase text-amber-800 bg-amber-50 rounded-full px-2 py-0.5">Exame a vencer</span>}
                     </div>
                   </button>
                   <button type="button" onClick={() => void alternar(pessoa)} className="shrink-0 text-xs font-bold text-gray-700 border rounded-lg px-3 py-2">
@@ -683,7 +881,124 @@ export const RhPage: React.FC = () => {
         </div>
       )}
 
-      {aba === 'epi' && (
+      {aba === 'exames' && empresa && (
+        <>
+          <div className="bg-white p-5 rounded-2xl border border-gray-100 space-y-3">
+            <div className="flex items-center gap-2">
+              <Activity size={18} className="text-lunardeli-red" />
+              <h2 className="font-extrabold text-gray-900">Registrar exame</h2>
+            </div>
+            <p className="text-sm text-gray-500">ASO e exames periódicos. A validade gera o aviso quando atrasar.</p>
+            <select className={entrada} value={exameFuncionarioId} onChange={(e) => setExameFuncionarioId(e.target.value)} aria-label="Funcionário do exame">
+              <option value="">Quem fez o exame</option>
+              {ativos.map((pessoa) => (
+                <option key={pessoa.id} value={pessoa.id}>{pessoa.funcao ? `${pessoa.nome} · ${pessoa.funcao}` : pessoa.nome}</option>
+              ))}
+            </select>
+            <select className={entrada} value={tipoExame} onChange={(e) => setTipoExame(e.target.value as TipoExame)} aria-label="Tipo do exame">
+              {TIPOS_EXAME.map(([valor, rotulo]) => <option key={valor} value={valor}>{rotulo}</option>)}
+            </select>
+            <select
+              className={entrada}
+              value={EXAMES.includes(nomeExame) || nomeExame === '__outro' ? nomeExame : '__outro'}
+              onChange={(e) => setNomeExame(e.target.value)}
+              aria-label="Exame"
+            >
+              {EXAMES.map((nome) => <option key={nome} value={nome}>{nome}</option>)}
+              <option value="__outro">Outro</option>
+            </select>
+            {(nomeExame === '__outro' || (!EXAMES.includes(nomeExame) && nomeExame !== '__outro')) && (
+              <input className={entrada} placeholder="Nome do exame" value={nomeExame === '__outro' ? nomeExameOutro : nomeExame} onChange={(e) => { setNomeExame('__outro'); setNomeExameOutro(e.target.value); }} />
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <label className="block space-y-1">
+                <span className="text-xs font-bold text-gray-600">Realizado em</span>
+                <input
+                  className={entrada}
+                  type="date"
+                  value={dataExame}
+                  onChange={(e) => {
+                    setDataExame(e.target.value);
+                    if (validadeExameAuto.current) setValidadeExame(maisUmAno(e.target.value));
+                  }}
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs font-bold text-gray-600">Válido até</span>
+                <input className={entrada} type="date" value={validadeExame} onChange={(e) => { validadeExameAuto.current = false; setValidadeExame(e.target.value); }} />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs font-bold text-gray-600">Resultado</span>
+                <select className={entrada} value={resultadoExame} onChange={(e) => setResultadoExame(e.target.value)}>
+                  <option value="">Sem resultado</option>
+                  {RESULTADOS_EXAME.map(([valor, rotulo]) => <option key={valor} value={valor}>{rotulo}</option>)}
+                </select>
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs font-bold text-gray-600">Clínica</span>
+                <input className={entrada} value={clinicaExame} onChange={(e) => setClinicaExame(e.target.value)} />
+              </label>
+            </div>
+            <button type="button" disabled={enviando} onClick={() => void salvarExame()} className="w-full bg-gray-900 text-white font-bold rounded-xl py-3 disabled:opacity-60">
+              {enviando ? 'Salvando...' : 'Registrar exame'}
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="px-4 pt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <h2 className="font-extrabold text-gray-900">Histórico</h2>
+              <p className="text-xs text-gray-500">
+                {exames.filter((item) => item.situacao === 'VENCIDO').length} vencido{exames.filter((item) => item.situacao === 'VENCIDO').length === 1 ? '' : 's'}
+                {' · '}
+                {exames.filter((item) => item.situacao === 'A_VENCER').length} a vencer
+              </p>
+            </div>
+            <div className="px-4 pt-3 flex gap-2 overflow-x-auto">
+              {([
+                ['TODOS', 'Todos'],
+                ['VENCIDO', 'Vencidos'],
+                ['A_VENCER', 'A vencer'],
+              ] as const).map(([id, rotulo]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setFiltroExame(id)}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold ${filtroExame === id ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}
+                >
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+            {listaExames.length === 0 ? (
+              <p className="p-8 text-sm text-gray-500 text-center">Nenhum exame neste filtro.</p>
+            ) : (
+              <ul className="divide-y divide-gray-100 mt-3">
+                {listaExames.map((item) => (
+                  <li key={item.id} className="p-4">
+                    <div className="flex justify-between gap-3">
+                      <p className="font-bold text-gray-900">{item.nome}</p>
+                      <Selo situacao={item.situacao} />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {TIPOS_EXAME.find(([valor]) => valor === item.tipo)?.[1] || item.tipo}
+                      {' · '}
+                      {item.funcionario?.nome || 'Sem funcionário'}
+                      {item.resultado ? ` · ${RESULTADOS_EXAME.find(([valor]) => valor === item.resultado)?.[1] || item.resultado}` : ''}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Realizado {quando(item.dataRealizacao)}
+                      {item.validade ? ` · válido até ${quando(item.validade)}` : ''}
+                      {item.clinica ? ` · ${item.clinica}` : ''}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+
+      {aba === 'epi' && !empresa && (
         <>
           <div className="bg-white p-5 rounded-2xl border border-gray-100 space-y-3">
             <div className="flex items-center gap-2">
@@ -973,7 +1288,7 @@ export const RhPage: React.FC = () => {
                   {aviso && fichaAberta && (
                     <p className="mb-4 text-sm font-bold text-emerald-800 bg-emerald-50 rounded-xl px-3 py-2">{aviso}</p>
                   )}
-                  <FichaFuncionario valores={ficha} onChange={setFicha} />
+                  <FichaFuncionario valores={ficha} onChange={setFicha} obras={obras} />
                 </>
               )}
               {erro && <p className="mt-4 text-sm font-bold text-red-700 bg-red-50 rounded-xl px-3 py-2">{erro}</p>}

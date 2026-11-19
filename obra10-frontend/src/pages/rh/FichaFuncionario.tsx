@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 
 export type FichaValores = {
+  obraId: string;
   nome: string;
   cpf: string;
   rg: string;
@@ -92,6 +93,7 @@ const campo = 'w-full border border-gray-200 rounded-xl px-3 py-3 text-sm bg-whi
 
 export function fichaVazia(): FichaValores {
   return {
+    obraId: '',
     nome: '',
     cpf: '',
     rg: '',
@@ -249,9 +251,11 @@ function Uf({ valor, onChange, obrigatorio }: { valor: string; onChange: (valor:
 export function FichaFuncionario({
   valores,
   onChange,
+  obras,
 }: {
   valores: FichaValores;
   onChange: (valores: FichaValores) => void;
+  obras?: { id: string; nome: string }[];
 }) {
   const [avisoCep, setAvisoCep] = useState('');
   const [buscandoCep, setBuscandoCep] = useState(false);
@@ -393,6 +397,16 @@ export function FichaFuncionario({
       </Secao>
 
       <Secao titulo="Contrato" texto="Pode ficar em branco. Completa o vínculo quando tiver o dado.">
+        {obras && obras.length > 0 && (
+          <Campo label="Lotado na obra" className="sm:col-span-2">
+            <select className={campo} value={valores.obraId} onChange={(e) => set('obraId', e.target.value)}>
+              <option value="">RH da empresa — sem obra ainda</option>
+              {obras.map((obra) => (
+                <option key={obra.id} value={obra.id}>{obra.nome}</option>
+              ))}
+            </select>
+          </Campo>
+        )}
         <Campo label="Função">
           <input className={campo} value={valores.funcao} placeholder="Pedreiro, servente, encarregado" onChange={(e) => set('funcao', e.target.value)} />
         </Campo>

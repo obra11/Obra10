@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -8,11 +9,14 @@ import {
   EstadoCivil,
   Escolaridade,
   Prisma,
+  ResultadoExame,
   Sexo,
   TipoContaBancaria,
   TipoContrato,
+  TipoExameOcupacional,
   TipoTreinamento,
 } from '@prisma/client';
+import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 import { CryptoService } from '../../core/services/crypto.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { lerVisaoLuna } from '../ai/luna-visao';
@@ -36,6 +40,8 @@ const ESCOLARIDADES = [
 const CONTRATOS = ['CLT', 'TEMPORARIO', 'ESTAGIO', 'APRENDIZ', 'AUTONOMO', 'TERCEIRIZADO'] as const;
 const CONTAS = ['CORRENTE', 'POUPANCA', 'SALARIO'] as const;
 const TREINAMENTOS = ['ADMISSIONAL', 'RECORRENTE'] as const;
+const EXAMES = ['ADMISSIONAL', 'PERIODICO', 'RETORNO_TRABALHO', 'MUDANCA_FUNCAO', 'DEMISSIONAL'] as const;
+const RESULTADOS_EXAME = ['APTO', 'APTO_RESTRICOES', 'INAPTO'] as const;
 
 export type FichaBody = {
   obraId?: string;
@@ -129,19 +135,20 @@ export class RhService {
     private readonly prisma: PrismaService,
     private readonly estoque: EstoqueService,
     private readonly crypto: CryptoService,
+    private readonly capabilities: CapabilitiesService,
   ) {}
 
   async listar(empresaId: string, userId: string, obraId?: string) {
-    if (!obraId) throw new BadRequestException('Escolha a obra.');
-    await this.estoque.listarLocais(empresaId, userId, obraId);
+    await this.assertAcesso(empresaId, userId, obraId);
     const pessoas = await this.prisma.funcionario.findMany({
-      where: {
-        empresaId,
-        deletedAt: null,
-        ...(obraId ? { obraId } : {}),
-      },
+      where: { empresaId, deletedAt: null },
       include: {
+        obra: { select: { id: true, nome: true } },
         treinamentos: {
+          where: { deletedAt: null },
+          select: { tipo: true, validade: true },
+        },
+        exames: {
           where: { deletedAt: null },
           select: { tipo: true, validade: true },
         },
@@ -153,7 +160,7 @@ export class RhService {
 
   async obter(empresaId: string, userId: string, id: string) {
     const pessoa = await this.buscar(empresaId, id);
-    await this.estoque.listarLocais(empresaId, userId, pessoa.obraId);
+    await this.assertPodeFuncionario(empresaId, userId, pessoa.obraId);
     return this.ficha(pessoa);
   }
 
@@ -163,8 +170,7 @@ export class RhService {
     files: Express.Multer.File[] | undefined,
     obraId?: string,
   ) {
-    if (!obraId) throw new BadRequestException('Escolha a obra.');
-    await this.estoque.listarLocais(empresaId, userId, obraId);
+    await this.assertAcesso(empresaId, userId, obraId);
     const fotos = (files || []).filter((file) => file?.buffer?.length).slice(0, 4);
     if (!fotos.length) throw new BadRequestException('Envie a foto da ficha existente.');
 
@@ -212,33 +218,41 @@ export class RhService {
   }
 
   async criar(empresaId: string, userId: string, body: FichaBody) {
-    if (!body.obraId) throw new BadRequestException('Escolha a obra.');
-    await this.estoque.listarLocais(empresaId, userId, body.obraId);
     const ficha = this.normalizar(body);
+    const obraId = await this.resolverObraId(empresaId, body.obraId);
+    await this.assertAcesso(empresaId, userId, obraId);
     await this.garantirDocumentosLivres(empresaId, ficha);
     const criada = await this.prisma.funcionario.create({
-      data: { empresaId, obraId: body.obraId, ...ficha },
+      data: { empresaId, obraId, ...ficha },
     });
     return this.ficha(criada);
   }
 
   async atualizar(empresaId: string, userId: string, id: string, body: FichaBody) {
     const atual = await this.buscar(empresaId, id);
-    await this.estoque.listarLocais(empresaId, userId, atual.obraId);
+    await this.assertPodeFuncionario(empresaId, userId, atual.obraId);
     if (somenteAtivo(body)) {
       if (typeof body.ativo !== 'boolean') throw new BadRequestException('Informe se o funcionário continua ativo.');
       const salvo = await this.prisma.funcionario.update({
         where: { id: atual.id },
         data: { ativo: body.ativo },
       });
-      return this.resumo({ ...salvo, treinamentos: [] });
+      return this.resumo({ ...salvo, obra: null, treinamentos: [], exames: [] });
     }
     const ficha = this.normalizar(body);
     await this.garantirDocumentosLivres(empresaId, ficha, atual.id);
+    const obraId = body.obraId === undefined
+      ? atual.obraId
+      : await this.resolverObraId(empresaId, body.obraId);
+    if (obraId !== atual.obraId) {
+      await this.assertPodeRhEmpresa(empresaId, userId);
+      if (obraId) await this.obraDaEmpresa(empresaId, obraId);
+    }
     const salva = await this.prisma.funcionario.update({
       where: { id: atual.id },
       data: {
         ...ficha,
+        obraId,
         ...(typeof body.ativo === 'boolean' ? { ativo: body.ativo } : {}),
       },
     });
@@ -355,10 +369,13 @@ export class RhService {
   }
 
   async treinamentos(empresaId: string, userId: string, obraId?: string) {
-    if (!obraId) throw new BadRequestException('Escolha a obra.');
-    await this.estoque.listarLocais(empresaId, userId, obraId);
+    await this.assertAcesso(empresaId, userId, obraId);
     const linhas = await this.prisma.treinamentoFuncionario.findMany({
-      where: { empresaId, obraId, deletedAt: null },
+      where: {
+        empresaId,
+        deletedAt: null,
+        ...(obraId ? { OR: [{ obraId }, { funcionario: { obraId } }] } : {}),
+      },
       include: { funcionario: { select: { id: true, nome: true, funcao: true } } },
       orderBy: [{ dataRealizacao: 'desc' }, { createdAt: 'desc' }],
       take: 200,
@@ -369,10 +386,10 @@ export class RhService {
   async treinamento(empresaId: string, userId: string, id: string) {
     const item = await this.prisma.treinamentoFuncionario.findFirst({
       where: { id, empresaId, deletedAt: null },
-      include: { funcionario: { select: { id: true, nome: true, funcao: true } } },
+      include: { funcionario: { select: { id: true, nome: true, funcao: true, obraId: true } } },
     });
     if (!item) throw new NotFoundException('Treinamento não encontrado.');
-    await this.estoque.listarLocais(empresaId, userId, item.obraId);
+    await this.assertPodeFuncionario(empresaId, userId, item.obraId || item.funcionario.obraId);
     return {
       ...this.treinamentoPublico(item),
       assinatura: item.assinatura,
@@ -396,13 +413,13 @@ export class RhService {
       assinatura?: string;
     },
   ) {
-    if (!body.obraId) throw new BadRequestException('Escolha a obra.');
-    await this.estoque.listarLocais(empresaId, userId, body.obraId);
+    const obraId = await this.resolverObraId(empresaId, body.obraId);
+    await this.assertAcesso(empresaId, userId, obraId);
     if (!body.funcionarioId) throw new BadRequestException('Escolha o funcionário.');
     const funcionario = await this.prisma.funcionario.findFirst({
-      where: { id: body.funcionarioId, empresaId, obraId: body.obraId, ativo: true, deletedAt: null },
+      where: { id: body.funcionarioId, empresaId, ativo: true, deletedAt: null },
     });
-    if (!funcionario) throw new NotFoundException('Funcionário não encontrado nesta obra.');
+    if (!funcionario) throw new NotFoundException('Funcionário não encontrado.');
     if (!eUmDe(body.tipo, TREINAMENTOS)) throw new BadRequestException('Escolha se o treinamento é admissional ou recorrente.');
     const nome = texto(body.nome, 120);
     if (!nome || nome.length < 3) throw new BadRequestException('Informe o nome do treinamento.');
@@ -414,7 +431,7 @@ export class RhService {
     const criado = await this.prisma.treinamentoFuncionario.create({
       data: {
         empresaId,
-        obraId: body.obraId,
+        obraId,
         funcionarioId: funcionario.id,
         tipo: body.tipo,
         nome,
@@ -430,12 +447,169 @@ export class RhService {
     return this.treinamentoPublico(criado);
   }
 
+  async exames(empresaId: string, userId: string, obraId?: string) {
+    await this.assertAcesso(empresaId, userId, obraId);
+    const linhas = await this.prisma.exameFuncionario.findMany({
+      where: {
+        empresaId,
+        deletedAt: null,
+        ...(obraId ? { funcionario: { obraId } } : {}),
+      },
+      include: { funcionario: { select: { id: true, nome: true, funcao: true } } },
+      orderBy: [{ validade: 'asc' }, { dataRealizacao: 'desc' }],
+      take: 200,
+    });
+    return linhas.map((item) => this.examePublico(item));
+  }
+
+  async registrarExame(
+    empresaId: string,
+    userId: string,
+    body: {
+      obraId?: string;
+      funcionarioId?: string;
+      tipo?: string;
+      nome?: string;
+      dataRealizacao?: string;
+      validade?: string;
+      resultado?: string;
+      clinica?: string;
+      observacao?: string;
+    },
+  ) {
+    const obraId = await this.resolverObraId(empresaId, body.obraId);
+    await this.assertAcesso(empresaId, userId, obraId);
+    if (!body.funcionarioId) throw new BadRequestException('Escolha o funcionário.');
+    const funcionario = await this.prisma.funcionario.findFirst({
+      where: { id: body.funcionarioId, empresaId, ativo: true, deletedAt: null },
+    });
+    if (!funcionario) throw new NotFoundException('Funcionário não encontrado.');
+    if (!eUmDe(body.tipo, EXAMES)) throw new BadRequestException('Escolha o tipo do exame.');
+    const nome = texto(body.nome, 120);
+    if (!nome || nome.length < 3) throw new BadRequestException('Informe o nome do exame.');
+    const dataRealizacao = dataObrigatoria(body.dataRealizacao, 'a data do exame');
+    const validade = dataObrigatoria(body.validade, 'a validade do exame');
+    if (isoDe(validade)! < isoDe(dataRealizacao)!) {
+      throw new BadRequestException('A validade do exame não pode ser anterior à realização.');
+    }
+    const criado = await this.prisma.exameFuncionario.create({
+      data: {
+        empresaId,
+        funcionarioId: funcionario.id,
+        tipo: body.tipo as TipoExameOcupacional,
+        nome,
+        dataRealizacao,
+        validade,
+        resultado: opcional(body.resultado, RESULTADOS_EXAME, 'Resultado inválido.') as ResultadoExame | null,
+        clinica: texto(body.clinica, 120),
+        observacao: texto(body.observacao, 400),
+      },
+      include: { funcionario: { select: { id: true, nome: true, funcao: true } } },
+    });
+    return this.examePublico(criado);
+  }
+
+  async avisos(empresaId: string, userId: string, obraId?: string) {
+    await this.assertAcesso(empresaId, userId, obraId);
+    const [treinamentos, exames] = await Promise.all([
+      this.prisma.treinamentoFuncionario.findMany({
+        where: {
+          empresaId,
+          deletedAt: null,
+          ...(obraId ? { OR: [{ obraId }, { funcionario: { obraId } }] } : {}),
+        },
+        include: { funcionario: { select: { id: true, nome: true, funcao: true, ativo: true } } },
+      }),
+      this.prisma.exameFuncionario.findMany({
+        where: {
+          empresaId,
+          deletedAt: null,
+          ...(obraId ? { funcionario: { obraId } } : {}),
+        },
+        include: { funcionario: { select: { id: true, nome: true, funcao: true, ativo: true } } },
+      }),
+    ]);
+    const treinos = treinamentos
+      .filter((item) => item.funcionario.ativo)
+      .map((item) => ({ ...this.treinamentoPublico(item), especie: 'TREINAMENTO' as const }));
+    const ocupacionais = exames
+      .filter((item) => item.funcionario.ativo)
+      .map((item) => ({ ...this.examePublico(item), especie: 'EXAME' as const }));
+    const pendentes = [...ocupacionais, ...treinos].filter(
+      (item) => item.situacao === 'VENCIDO' || item.situacao === 'A_VENCER',
+    );
+    const vencidos = pendentes.filter((item) => item.situacao === 'VENCIDO');
+    const aVencer = pendentes.filter((item) => item.situacao === 'A_VENCER');
+    return {
+      vencidos: vencidos.length,
+      aVencer: aVencer.length,
+      examesVencidos: ocupacionais.filter((item) => item.situacao === 'VENCIDO').length,
+      examesAVencer: ocupacionais.filter((item) => item.situacao === 'A_VENCER').length,
+      treinamentosVencidos: treinos.filter((item) => item.situacao === 'VENCIDO').length,
+      treinamentosAVencer: treinos.filter((item) => item.situacao === 'A_VENCER').length,
+      itens: [...vencidos, ...aVencer],
+    };
+  }
+
   private async buscar(empresaId: string, id: string) {
     const pessoa = await this.prisma.funcionario.findFirst({
       where: { id, empresaId, deletedAt: null },
     });
     if (!pessoa) throw new NotFoundException('Funcionário não encontrado.');
     return pessoa;
+  }
+
+  private async assertAcesso(empresaId: string, userId: string, obraId?: string | null) {
+    if (obraId) {
+      await this.obraDaEmpresa(empresaId, obraId);
+      await this.estoque.listarLocais(empresaId, userId, obraId);
+      return;
+    }
+    await this.assertPodeRhEmpresa(empresaId, userId);
+  }
+
+  private async assertPodeFuncionario(empresaId: string, userId: string, obraId?: string | null) {
+    if (obraId) {
+      try {
+        await this.estoque.listarLocais(empresaId, userId, obraId);
+        return;
+      } catch {
+        /* tenta o RH da empresa */
+      }
+    }
+    await this.assertPodeRhEmpresa(empresaId, userId);
+  }
+
+  private async assertPodeRhEmpresa(empresaId: string, userId: string) {
+    const usuario = await this.prisma.usuario.findFirst({
+      where: { id: userId, empresaId, deletedAt: null, ativo: true },
+      select: { perfilGlobal: true, capabilities: true },
+    });
+    if (!usuario) throw new ForbiddenException('Sem acesso ao RH da empresa.');
+    if (usuario.perfilGlobal === 'GESTOR' || usuario.perfilGlobal === 'SUPER_ADMIN') return;
+    const caps = await this.capabilities.resolveForUser({
+      empresaId,
+      perfilGlobal: usuario.perfilGlobal,
+      capabilitiesOverride: usuario.capabilities,
+    });
+    if (caps.acessoTodasObras || caps.gerenciarUsuarios) return;
+    throw new ForbiddenException('O RH da empresa é para quem gerencia a empresa.');
+  }
+
+  private async resolverObraId(empresaId: string, obraId?: string | null) {
+    const limpo = String(obraId || '').trim();
+    if (!limpo) return null;
+    await this.obraDaEmpresa(empresaId, limpo);
+    return limpo;
+  }
+
+  private async obraDaEmpresa(empresaId: string, obraId: string) {
+    const obra = await this.prisma.obra.findFirst({
+      where: { id: obraId, empresaId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!obra) throw new BadRequestException('Obra não encontrada nesta empresa.');
+    return obra;
   }
 
   private async garantirDocumentosLivres(empresaId: string, ficha: FichaPronta, ignorarId?: string) {
@@ -544,7 +718,7 @@ export class RhService {
 
   private resumo(pessoa: {
     id: string;
-    obraId: string;
+    obraId: string | null;
     nome: string;
     funcao: string;
     ativo: boolean;
@@ -560,7 +734,9 @@ export class RhService {
     uf: string | null;
     dataAdmissao: Date | null;
     tipoContrato: TipoContrato | null;
+    obra?: { id: string; nome: string } | null;
     treinamentos: { tipo: TipoTreinamento; validade: Date }[];
+    exames?: { tipo: TipoExameOcupacional; validade: Date }[];
   }) {
     const cpf = pessoa.cpf ? this.crypto.decrypt(pessoa.cpf) : null;
     let vencidos = 0;
@@ -574,6 +750,13 @@ export class RhService {
       if (estado === 'VENCIDO') vencidos += 1;
       if (estado === 'A_VENCER') aVencer += 1;
     }
+    let examesVencidos = 0;
+    let examesAVencer = 0;
+    for (const item of pessoa.exames || []) {
+      const estado = situacao(isoDe(item.validade));
+      if (estado === 'VENCIDO') examesVencidos += 1;
+      if (estado === 'A_VENCER') examesAVencer += 1;
+    }
     const fichaCompleta = Boolean(
       cpf && pessoa.nome && pessoa.dataNascimento && pessoa.sexo && pessoa.nomeMae && pessoa.cep
       && pessoa.logradouro && pessoa.numero && pessoa.bairro && pessoa.cidade
@@ -582,6 +765,7 @@ export class RhService {
     return {
       id: pessoa.id,
       obraId: pessoa.obraId,
+      obraNome: pessoa.obra?.nome || null,
       nome: pessoa.nome,
       funcao: pessoa.funcao,
       ativo: pessoa.ativo,
@@ -592,12 +776,13 @@ export class RhService {
       tipoContrato: pessoa.tipoContrato,
       fichaCompleta,
       treinamentos: { admissionais, recorrentes, vencidos, aVencer },
+      exames: { vencidos: examesVencidos, aVencer: examesAVencer },
     };
   }
 
   private ficha(pessoa: {
     id: string;
-    obraId: string;
+    obraId: string | null;
     nome: string;
     funcao: string;
     ativo: boolean;
@@ -709,6 +894,34 @@ export class RhService {
       instrutor: item.instrutor,
       funcionario: item.funcionario,
       temAssinatura: Boolean(item.assinatura),
+      createdAt: item.createdAt,
+    };
+  }
+
+  private examePublico(item: {
+    id: string;
+    tipo: TipoExameOcupacional;
+    nome: string;
+    dataRealizacao: Date;
+    validade: Date;
+    resultado: ResultadoExame | null;
+    clinica: string | null;
+    observacao: string | null;
+    createdAt: Date;
+    funcionario: { id: string; nome: string; funcao: string };
+  }) {
+    const validade = isoDe(item.validade);
+    return {
+      id: item.id,
+      tipo: item.tipo,
+      nome: item.nome,
+      dataRealizacao: isoDe(item.dataRealizacao),
+      validade,
+      situacao: situacao(validade),
+      resultado: item.resultado,
+      clinica: item.clinica,
+      observacao: item.observacao,
+      funcionario: item.funcionario,
       createdAt: item.createdAt,
     };
   }

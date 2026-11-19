@@ -59,6 +59,7 @@ model Empresa {
   movimentosEstoque   MovimentoEstoque[]
   funcionarios        Funcionario[]
   treinamentos        TreinamentoFuncionario[]
+  exames              ExameFuncionario[]
   agendasManutencao   AgendaManutencao[]
   fichasManutencao    FichaManutencao[]
   despesasManutencao  FichaManutencaoDespesa[]
@@ -964,10 +965,24 @@ enum TipoTreinamento {
   RECORRENTE
 }
 
+enum TipoExameOcupacional {
+  ADMISSIONAL
+  PERIODICO
+  RETORNO_TRABALHO
+  MUDANCA_FUNCAO
+  DEMISSIONAL
+}
+
+enum ResultadoExame {
+  APTO
+  APTO_RESTRICOES
+  INAPTO
+}
+
 model Funcionario {
   id             String             @id @default(uuid())
   empresaId      String             @map("empresa_id")
-  obraId         String             @map("obra_id")
+  obraId         String?            @map("obra_id")
   nome           String
   funcao         String
   cpf            String?            @db.Text
@@ -1014,9 +1029,10 @@ model Funcionario {
   deletedAt      DateTime?          @map("deleted_at")
 
   empresa      Empresa                  @relation(fields: [empresaId], references: [id])
-  obra         Obra                     @relation(fields: [obraId], references: [id])
+  obra         Obra?                    @relation(fields: [obraId], references: [id])
   movimentos   MovimentoEstoque[]
   treinamentos TreinamentoFuncionario[]
+  exames       ExameFuncionario[]
 
   @@unique([empresaId, cpfHash])
   @@unique([empresaId, pisHash])
@@ -1027,7 +1043,7 @@ model Funcionario {
 model TreinamentoFuncionario {
   id             String          @id @default(uuid())
   empresaId      String          @map("empresa_id")
-  obraId         String          @map("obra_id")
+  obraId         String?         @map("obra_id")
   funcionarioId  String          @map("funcionario_id")
   tipo           TipoTreinamento
   nome           String
@@ -1042,12 +1058,35 @@ model TreinamentoFuncionario {
   deletedAt      DateTime?       @map("deleted_at")
 
   empresa     Empresa     @relation(fields: [empresaId], references: [id])
-  obra        Obra        @relation(fields: [obraId], references: [id])
+  obra        Obra?       @relation(fields: [obraId], references: [id])
   funcionario Funcionario @relation(fields: [funcionarioId], references: [id])
 
   @@index([empresaId, obraId, validade])
   @@index([funcionarioId, tipo])
   @@map("treinamentos_funcionario")
+}
+
+model ExameFuncionario {
+  id             String                @id @default(uuid())
+  empresaId      String                @map("empresa_id")
+  funcionarioId  String                @map("funcionario_id")
+  tipo           TipoExameOcupacional
+  nome           String
+  dataRealizacao DateTime              @map("data_realizacao") @db.Date
+  validade       DateTime              @db.Date
+  resultado      ResultadoExame?
+  clinica        String?
+  observacao     String?
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+  deletedAt      DateTime?             @map("deleted_at")
+
+  empresa     Empresa     @relation(fields: [empresaId], references: [id])
+  funcionario Funcionario @relation(fields: [funcionarioId], references: [id])
+
+  @@index([empresaId, validade])
+  @@index([funcionarioId, tipo])
+  @@map("exames_funcionario")
 }
 
 model AgendaManutencao {

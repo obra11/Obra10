@@ -105,6 +105,21 @@ export class RhController {
     return this.rh.entregar(this.empresaId(req), this.userId(req), body);
   }
 
+  @Get('avisos')
+  avisos(@Req() req: any, @Query('obraId') obraId?: string) {
+    return this.rh.avisos(this.empresaId(req), this.userId(req), obraId);
+  }
+
+  @Get('exames')
+  exames(@Req() req: any, @Query('obraId') obraId?: string) {
+    return this.rh.exames(this.empresaId(req), this.userId(req), obraId);
+  }
+
+  @Post('exames')
+  registrarExame(@Req() req: any, @Body() body: any) {
+    return this.rh.registrarExame(this.empresaId(req), this.userId(req), body);
+  }
+
   @Get('treinamentos')
   treinamentos(@Req() req: any, @Query('obraId') obraId?: string) {
     return this.rh.treinamentos(this.empresaId(req), this.userId(req), obraId);
