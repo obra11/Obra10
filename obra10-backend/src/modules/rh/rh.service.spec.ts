@@ -50,3 +50,51 @@ describe('RhService.lerFicha', () => {
     );
   });
 });
+
+describe('RhService.criar', () => {
+  it('cadastra a ficha só com nome completo e CPF', async () => {
+    const estoque = { listarLocais: jest.fn().mockResolvedValue({ locais: [] }) };
+    const crypto = {
+      encrypt: (s: string) => `enc:${s}`,
+      decrypt: (s: string) => String(s).replace(/^enc:/, ''),
+    };
+    const prisma = {
+      funcionario: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockImplementation(async ({ data }: any) => ({
+          id: 'f1',
+          ativo: true,
+          ...data,
+        })),
+      },
+    };
+    const rh = new RhService(prisma as any, estoque as any, crypto as any);
+    const ficha = await rh.criar('emp-1', 'user-1', {
+      obraId: 'obra-1',
+      nome: 'João da Silva',
+      cpf: '111.444.777-35',
+    });
+    expect(estoque.listarLocais).toHaveBeenCalledWith('emp-1', 'user-1', 'obra-1');
+    expect(prisma.funcionario.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          empresaId: 'emp-1',
+          obraId: 'obra-1',
+          nome: 'João da Silva',
+          funcao: '',
+          cpfHash: expect.any(String),
+        }),
+      }),
+    );
+    expect(ficha.nome).toBe('João da Silva');
+    expect(ficha.cpf).toBe('111.444.777-35');
+  });
+
+  it('recusa cadastro sem CPF', async () => {
+    const estoque = { listarLocais: jest.fn().mockResolvedValue({ locais: [] }) };
+    const rh = new RhService({} as any, estoque as any, { encrypt: (s: string) => s } as any);
+    await expect(
+      rh.criar('emp-1', 'user-1', { obraId: 'obra-1', nome: 'João da Silva' }),
+    ).rejects.toThrow(/CPF/i);
+  });
+});

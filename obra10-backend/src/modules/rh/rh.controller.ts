@@ -7,6 +7,7 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -70,6 +71,28 @@ export class RhController {
   @Get('entregas')
   entregas(@Req() req: any, @Query('obraId') obraId?: string) {
     return this.rh.entregas(this.empresaId(req), this.userId(req), obraId);
+  }
+
+  @Get('entregas/:id/pdf')
+  async termoPdf(@Req() req: any, @Param('id') id: string, @Res() res: any) {
+    try {
+      const buffer = await this.rh.termoPdf(this.empresaId(req), this.userId(req), id);
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': 'attachment; filename="termo-epi.pdf"',
+        'Content-Length': buffer.length,
+      });
+      res.end(buffer);
+    } catch (err: any) {
+      if (res.headersSent) return;
+      const status = typeof err?.getStatus === 'function' ? err.getStatus() : 500;
+      const corpo = typeof err?.getResponse === 'function' ? err.getResponse() : null;
+      const message =
+        typeof corpo === 'string'
+          ? corpo
+          : corpo?.message || err?.message || 'Não foi possível gerar o PDF do termo.';
+      res.status(status).json({ message });
+    }
   }
 
   @Get('entregas/:id')
