@@ -74,12 +74,14 @@ function makeSvc() {
     localEstoque: { findFirst: jest.fn() },
     catalogoInsumo: { findFirst: jest.fn() },
     usuario: { findFirst: jest.fn() },
+    obra: { findFirst: jest.fn() },
+    userObraRole: { findUnique: jest.fn() },
     $transaction: jest.fn(async (fn: any) => fn(tx)),
   };
   const capabilities = { resolveForUser: jest.fn() };
   const extracao = { extrair: jest.fn() };
   const svc = new EstoqueService(prisma as any, capabilities as any, extracao as any);
-  return { svc, prisma, tx };
+  return { svc, prisma, tx, capabilities };
 }
 
 describe('EstoqueService', () => {
@@ -177,6 +179,7 @@ describe('EstoqueService', () => {
       id: 'ins-1',
       nome: 'Cimento',
       codigoBarras: 'O10ABC',
+      tipo: 'MATERIAL',
     });
     tx.saldoEstoque.findFirst.mockResolvedValue({
       id: 's1',
@@ -185,5 +188,194 @@ describe('EstoqueService', () => {
     await expect(
       svc.saida('emp-1', 'user-1', { localId: 'loc-1', codigo: 'O10ABC', quantidade: 5 }),
     ).rejects.toThrow(/insuficiente/i);
+  });
+
+  it('transfere do almoxarifado da obra para o depósito central', async () => {
+    const { svc, prisma, tx, capabilities } = makeSvc();
+    const origem = {
+      id: 'loc-a',
+      empresaId: 'emp-1',
+      obraId: 'obra-a',
+      tipo: 'ALMOXARIFADO',
+      nome: 'Almoxarifado — Obra A',
+      codigo: 'obra-a',
+      ativo: true,
+    };
+    const central = {
+      id: 'loc-central',
+      empresaId: 'emp-1',
+      obraId: null,
+      tipo: 'DEPOSITO_CENTRAL',
+      nome: 'Depósito central',
+      codigo: 'CENTRAL',
+      ativo: true,
+    };
+    prisma.localEstoque.findFirst.mockImplementation(async ({ where }: any) => {
+      if (where.id === 'loc-a') return origem;
+      if (where.id === 'loc-central') return central;
+      return null;
+    });
+    prisma.obra.findFirst.mockResolvedValue({ id: 'obra-a' });
+    prisma.usuario.findFirst.mockResolvedValue({
+      id: 'user-1',
+      perfilGlobal: 'ENCARREGADO',
+      capabilities: null,
+    });
+    capabilities.resolveForUser.mockResolvedValue({
+      acessoTodasObras: false,
+      modulosPadrao: { MATERIAIS: 'EDIT' },
+    });
+    prisma.userObraRole.findUnique.mockResolvedValue({
+      permissoes: { MATERIAIS: 'EDIT' },
+    });
+    prisma.catalogoInsumo.findFirst.mockResolvedValue({ id: 'ins-1', nome: 'Cimento' });
+    tx.saldoEstoque.findFirst.mockResolvedValue({ id: 's1', quantidade: new Prisma.Decimal(8) });
+    tx.saldoEstoque.findUnique.mockResolvedValue(null);
+
+    await svc.transferir('emp-1', 'user-1', {
+      origemLocalId: 'loc-a',
+      destinoLocalId: 'loc-central',
+      insumoId: 'ins-1',
+      quantidade: 2,
+    });
+
+    expect(tx.movimentoEstoque.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tipo: 'TRANSFERENCIA',
+          localOrigemId: 'loc-a',
+          localDestinoId: 'loc-central',
+        }),
+      }),
+    );
+  });
+
+  it('transfere do almoxarifado da obra para outra obra sem exigir escrita no destino', async () => {
+    const { svc, prisma, tx, capabilities } = makeSvc();
+    const origem = {
+      id: 'loc-a',
+      empresaId: 'emp-1',
+      obraId: 'obra-a',
+      tipo: 'ALMOXARIFADO',
+      nome: 'Almoxarifado — Obra A',
+      codigo: 'obra-a',
+      ativo: true,
+    };
+    const dest = {
+      id: 'loc-b',
+      empresaId: 'emp-1',
+      obraId: 'obra-b',
+      tipo: 'ALMOXARIFADO',
+      nome: 'Almoxarifado — Obra B',
+      codigo: 'obra-b',
+      ativo: true,
+    };
+    prisma.localEstoque.findFirst.mockImplementation(async ({ where }: any) => {
+      if (where.id === 'loc-a') return origem;
+      if (where.id === 'loc-b') return dest;
+      if (where.codigo === 'obra-b') return dest;
+      return null;
+    });
+    prisma.obra.findFirst.mockImplementation(async ({ where }: any) => {
+      if (where.id === 'obra-a' || where.id === 'obra-b') return { id: where.id };
+      return null;
+    });
+    prisma.usuario.findFirst.mockResolvedValue({
+      id: 'user-1',
+      perfilGlobal: 'ENCARREGADO',
+      capabilities: null,
+    });
+    capabilities.resolveForUser.mockResolvedValue({
+      acessoTodasObras: false,
+      modulosPadrao: {},
+    });
+    prisma.userObraRole.findUnique.mockImplementation(async ({ where }: any) => {
+      if (where.usuarioId_obraId.obraId === 'obra-a') {
+        return { permissoes: { MATERIAIS: 'EDIT' } };
+      }
+      return null;
+    });
+    prisma.catalogoInsumo.findFirst.mockResolvedValue({ id: 'ins-1', nome: 'Cimento' });
+    tx.saldoEstoque.findFirst.mockResolvedValue({ id: 's1', quantidade: new Prisma.Decimal(10) });
+    tx.saldoEstoque.findUnique.mockResolvedValue(null);
+
+    await svc.transferir('emp-1', 'user-1', {
+      origemLocalId: 'loc-a',
+      obraDestinoId: 'obra-b',
+      insumoId: 'ins-1',
+      quantidade: 3,
+    });
+
+    expect(tx.saldoEstoque.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          empresaId: 'emp-1',
+          localId: 'loc-b',
+          insumoId: 'ins-1',
+        }),
+      }),
+    );
+    expect(tx.movimentoEstoque.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tipo: 'TRANSFERENCIA',
+          localOrigemId: 'loc-a',
+          localDestinoId: 'loc-b',
+        }),
+      }),
+    );
+  });
+
+  it('não transfere para a própria origem nem para obra inexistente', async () => {
+    const { svc, prisma, capabilities } = makeSvc();
+    const origem = {
+      id: 'loc-a',
+      empresaId: 'emp-1',
+      obraId: 'obra-a',
+      tipo: 'ALMOXARIFADO',
+      nome: 'Almoxarifado — Obra A',
+      codigo: 'obra-a',
+      ativo: true,
+    };
+    prisma.localEstoque.findFirst.mockResolvedValue(origem);
+    prisma.obra.findFirst.mockImplementation(async ({ where }: any) => {
+      if (where.id === 'obra-a') return { id: 'obra-a' };
+      return null;
+    });
+    prisma.usuario.findFirst.mockResolvedValue({
+      id: 'user-1',
+      perfilGlobal: 'ENCARREGADO',
+      capabilities: null,
+    });
+    capabilities.resolveForUser.mockResolvedValue({
+      acessoTodasObras: false,
+      modulosPadrao: { MATERIAIS: 'EDIT' },
+    });
+    prisma.userObraRole.findUnique.mockResolvedValue({
+      permissoes: { MATERIAIS: 'EDIT' },
+    });
+
+    await expect(
+      svc.transferir('emp-1', 'user-1', {
+        origemLocalId: 'loc-a',
+        destinoLocalId: 'loc-a',
+        insumoId: 'ins-1',
+        quantidade: 1,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    await expect(
+      svc.transferir('emp-1', 'user-1', {
+        origemLocalId: 'loc-a',
+        obraDestinoId: 'obra-x',
+        insumoId: 'ins-1',
+        quantidade: 1,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.obra.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: 'obra-x', empresaId: 'emp-1' }),
+      }),
+    );
   });
 });

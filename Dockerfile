@@ -1,12 +1,12 @@
 ﻿# ============================================
 # Obra 10 — Production Dockerfile
-# Force rebuild: 2026-11-18-rh-ficha-2.9.57
+# Force rebuild: 2026-11-19-estoque-transferencia-2.9.60
 # ============================================
 
 # --- Build stage ---
 FROM node:22-bookworm-slim AS builder
 
-ARG OBRA10_BUILD_ID=2.9.57-20261118
+ARG OBRA10_BUILD_ID=2.9.60-20261119
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 
 # Install build tools for native modules (bcrypt)
@@ -36,7 +36,7 @@ ENV PRISMA_BUILD_PLACEHOLDER=
 # --- Production stage ---
 FROM node:22-bookworm-slim
 
-ARG OBRA10_BUILD_ID=2.9.57-20261118
+ARG OBRA10_BUILD_ID=2.9.60-20261119
 ENV OBRA10_BUILD_ID=$OBRA10_BUILD_ID
 ENV NODE_ENV=production
 
