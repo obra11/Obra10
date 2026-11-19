@@ -23,7 +23,11 @@ import {
   erroAsaasSemDocumento,
   normalizarDocumentoFiscal,
 } from '../../core/utils/documento-fiscal';
-import { motivoEncerrarFatura } from './cobranca-fatura';
+import {
+  dataPagamentoAsaas,
+  isAsaasPago,
+  motivoEncerrarFatura,
+} from './cobranca-fatura';
 
 const PLANO_PRECOS: Record<string, number> = {};
 
@@ -369,7 +373,11 @@ export class CobrancaService {
       return;
     }
     if (cobranca.status !== 'PAGO') {
-      await this.processarPagamentoLocal(cobranca);
+      await this.processarPagamentoLocal(
+        cobranca,
+        undefined,
+        dataPagamentoAsaas(paymentPayload),
+      );
     }
     await this.enriquecerCobrancaAsaas(cobranca.id, idAsaas, paymentPayload);
   }
@@ -472,8 +480,88 @@ export class CobrancaService {
     });
   }
 
-  /** Backfill líquido/taxas/NF para cobranças PAGO com idAsaas. */
+  /**
+   * PIX/cartão já creditado na Asaas mas ainda PENDENTE no Obra 10
+   * (webhook não chegou). Confirma e devolve a lista para o admin ver.
+   */
+  async confirmarPendentesAsaas(limit = 80) {
+    const confirmados: Array<{
+      cobrancaId: string;
+      empresaId: string;
+      empresaNome: string;
+      valor: number;
+      idAsaas: string;
+      dataPagamento: string | null;
+    }> = [];
+    if (!this.asaas.configured) return { confirmados };
+
+    const abertas = await this.prisma.cobranca.findMany({
+      where: {
+        status: { in: ['PENDENTE', 'VENCIDO', 'OVERDUE'] },
+        idAsaas: { not: null },
+      },
+      include: {
+        empresa: {
+          select: { razaoSocial: true, nomeFantasia: true, nomeCompleto: true },
+        },
+      },
+      take: Math.min(100, Math.max(1, limit)),
+      orderBy: { dataVencimento: 'desc' },
+    });
+
+    for (const c of abertas) {
+      if (!c.idAsaas || c.idAsaas.startsWith('mock-')) continue;
+      try {
+        const info = await this.asaas.buscarPagamento(c.idAsaas);
+        if (!isAsaasPago(info?.status)) continue;
+        await this.confirmarPagamento(c.idAsaas, info);
+        confirmados.push({
+          cobrancaId: c.id,
+          empresaId: c.empresaId,
+          empresaNome:
+            c.empresa.nomeFantasia ||
+            c.empresa.razaoSocial ||
+            c.empresa.nomeCompleto ||
+            'Empresa',
+          valor: Number(c.valor || 0),
+          idAsaas: c.idAsaas,
+          dataPagamento: info?.paymentDate || null,
+        });
+      } catch (err: any) {
+        this.logger.warn(
+          `Confirmar pendente Asaas falhou cobranca=${c.id}: ${err?.message || err}`,
+        );
+      }
+    }
+    return { confirmados };
+  }
+
+  async listarDepositosAsaasOrfaos() {
+    if (!this.asaas.configured) return [];
+    const pagos = await this.asaas.listarPagamentosRecebidos(50);
+    if (pagos.length === 0) return [];
+    const ids = pagos.map((p) => p.id).filter(Boolean);
+    const existentes = await this.prisma.cobranca.findMany({
+      where: { idAsaas: { in: ids } },
+      select: { idAsaas: true },
+    });
+    const known = new Set(existentes.map((e) => e.idAsaas));
+    return pagos
+      .filter((p) => !known.has(p.id))
+      .map((p) => ({
+        idAsaas: p.id,
+        valor: p.value,
+        valorLiquido: p.netValue,
+        status: p.status,
+        forma: p.billingType,
+        descricao: p.description || null,
+        dataPagamento: p.paymentDate || p.dateCreated || null,
+      }));
+  }
+
+  /** Confirma depósitos Asaas e backfill líquido/taxas/NF. */
   async sincronizarAsaasFinanceiro(limit = 50) {
+    const { confirmados } = await this.confirmarPendentesAsaas(limit);
     const items = await this.prisma.cobranca.findMany({
       where: {
         status: 'PAGO',
@@ -514,7 +602,13 @@ export class CobrancaService {
         );
       }
     }
-    return { processados: items.length, atualizados };
+    const orfaos = await this.listarDepositosAsaasOrfaos();
+    return {
+      processados: items.length,
+      atualizados,
+      confirmados,
+      orfaos,
+    };
   }
 
   // Confirmação chamada pelo frontend após sucesso no PayPal SDK
@@ -533,13 +627,17 @@ export class CobrancaService {
     return { success: true };
   }
 
-  private async processarPagamentoLocal(cobranca: any, formaPagamento?: string) {
+  private async processarPagamentoLocal(
+    cobranca: any,
+    formaPagamento?: string,
+    dataPagamento?: Date | null,
+  ) {
 
     await this.prisma.cobranca.update({
       where: { id: cobranca.id },
       data: {
         status: 'PAGO',
-        dataPagamento: new Date(),
+        dataPagamento: dataPagamento ?? new Date(),
         ...(formaPagamento ? { formaPagamento } : {}),
       },
     });
@@ -741,6 +839,18 @@ export class CobrancaService {
     if (!cobranca) throw new NotFoundException('Cobrança não encontrada.');
     if (empresaId && cobranca.empresaId !== empresaId)
       throw new ForbiddenException('Acesso negado.');
+    if (
+      cobranca.status !== 'PAGO' &&
+      this.asaas.configured &&
+      cobranca.idAsaas &&
+      !cobranca.idAsaas.startsWith('mock-')
+    ) {
+      const info = await this.asaas.buscarPagamento(cobranca.idAsaas);
+      if (isAsaasPago(info?.status)) {
+        await this.confirmarPagamento(cobranca.idAsaas, info);
+        return { id: cobranca.id, status: 'PAGO', pago: true };
+      }
+    }
     return {
       id: cobranca.id,
       status: cobranca.status,

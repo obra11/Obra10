@@ -5,6 +5,7 @@ import {
   mensagemDocumentoAusenteAsaas,
   normalizarDocumentoFiscal,
 } from '../../core/utils/documento-fiscal';
+import { isAsaasPago } from './cobranca-fatura';
 
 export type AsaasPaymentInfo = {
   id: string;
@@ -12,6 +13,11 @@ export type AsaasPaymentInfo = {
   value: number;
   netValue: number | null;
   invoiceUrl?: string;
+  billingType?: string;
+  dateCreated?: string;
+  paymentDate?: string;
+  description?: string;
+  customer?: string;
 };
 
 export type AsaasInvoiceInfo = {
@@ -456,24 +462,69 @@ export class AsaasService implements OnModuleInit {
       const { data } = await axios.get(`${this.baseUrl}/payments/${idAsaas}`, {
         headers: this.headers,
       });
-      const value = Number(data.value || 0);
-      const net =
-        data.netValue != null && data.netValue !== ''
-          ? Number(data.netValue)
-          : null;
-      return {
-        id: data.id,
-        status: data.status,
-        value,
-        netValue: net != null && !Number.isNaN(net) ? net : null,
-        invoiceUrl: data.invoiceUrl,
-      };
+      return this.mapPayment(data);
     } catch (err: any) {
       this.logger.warn(
         `Falha ao buscar payment ${idAsaas}: ${err?.message || err}`,
       );
       return null;
     }
+  }
+
+  /** PIX/cartão já creditado na Asaas (últimos 90 dias). */
+  async listarPagamentosRecebidos(limit = 50): Promise<AsaasPaymentInfo[]> {
+    if (this.mockMode) return [];
+    const since = new Date();
+    since.setDate(since.getDate() - 90);
+    const dateCreatedGe = since.toISOString().slice(0, 10);
+    const items: AsaasPaymentInfo[] = [];
+    for (const status of ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH']) {
+      try {
+        const { data } = await axios.get(`${this.baseUrl}/payments`, {
+          headers: this.headers,
+          params: {
+            status,
+            limit: Math.min(100, Math.max(1, limit)),
+            'dateCreated[ge]': dateCreatedGe,
+          },
+        });
+        const dataItems = Array.isArray(data?.data) ? data.data : [];
+        for (const row of dataItems) {
+          items.push(this.mapPayment(row));
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `Asaas listar ${status}: ${asaasApiMessage(err)}`,
+        );
+      }
+    }
+    const seen = new Set<string>();
+    return items.filter((p) => {
+      if (!p.id || seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
+  }
+
+  private mapPayment(data: any): AsaasPaymentInfo {
+    const value = Number(data?.value || 0);
+    const net =
+      data?.netValue != null && data?.netValue !== ''
+        ? Number(data.netValue)
+        : null;
+    return {
+      id: data?.id,
+      status: data?.status,
+      value,
+      netValue: net != null && !Number.isNaN(net) ? net : null,
+      invoiceUrl: data?.invoiceUrl,
+      billingType: data?.billingType,
+      dateCreated: data?.dateCreated,
+      paymentDate:
+        data?.clientPaymentDate || data?.paymentDate || data?.confirmedDate,
+      description: data?.description,
+      customer: data?.customer,
+    };
   }
 
   /**
@@ -486,17 +537,11 @@ export class AsaasService implements OnModuleInit {
     if (!idAsaas || idAsaas.startsWith('mock-')) return 'ausente';
     if (this.mockMode) return 'cancelado';
 
-    const pagos = new Set([
-      'RECEIVED',
-      'CONFIRMED',
-      'RECEIVED_IN_CASH',
-      'DUNNING_RECEIVED',
-    ]);
     try {
       const { data } = await axios.get(`${this.baseUrl}/payments/${idAsaas}`, {
         headers: this.headers,
       });
-      if (pagos.has(String(data?.status || ''))) return 'ja_pago';
+      if (isAsaasPago(data?.status)) return 'ja_pago';
     } catch (err: any) {
       if (err?.response?.status === 404) return 'ausente';
       this.logger.warn(`Asaas consultar ${idAsaas}: ${asaasApiMessage(err)}`);

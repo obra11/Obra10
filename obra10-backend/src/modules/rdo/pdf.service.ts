@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { rotuloStatusAtividade } from './rdo-atividade-status';
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, PDFName, PDFString, degrees } from 'pdf-lib';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import * as fs from 'fs';
@@ -640,7 +641,10 @@ export class PdfService {
       if (atividadesTexto) {
         if (Array.isArray(atividadesTexto)) {
           for (const a of atividadesTexto) {
-            const label = `- [${a.status.toUpperCase()}] ${a.descricao}`;
+            const desc = typeof a === 'string' ? a : a?.descricao || '';
+            const status = typeof a === 'string' ? 'em andamento' : a?.status;
+            const percentual = typeof a === 'string' ? undefined : a?.percentual;
+            const label = `- [${rotuloStatusAtividade(status, percentual)}] ${desc}`;
             drawMultiLineText(label, m.l + 4, 8, reg, 12);
           }
         } else {

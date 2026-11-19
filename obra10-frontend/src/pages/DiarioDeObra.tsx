@@ -23,6 +23,14 @@ import {
 import { compressImageFile } from '../utils/compressImage';
 import { mapWithConcurrency, RDO_UPLOAD_CONCURRENCY } from '../utils/uploadQueue';
 import {
+  tipoDeExtras,
+  rotuloTipoRelatorio,
+  tituloTipoRelatorio,
+  devePedirTipoRelatorio,
+  devePersistirRascunhoLocal,
+  type TipoRelatorio,
+} from '../utils/tipoRelatorioRdo';
+import {
   generateUUID,
   saveOfflineAttachment,
   getOfflineAttachments,
@@ -214,6 +222,30 @@ function BotoesOrdem({
 interface AtividadeExecutadaItem {
   descricao: string;
   status: 'em andamento' | 'pausado' | 'finalizada';
+  percentual?: string;
+}
+
+function limitarPercentual(valor: string) {
+  const limpo = valor.replace(/\D/g, '');
+  if (!limpo) return '';
+  const n = Number(limpo);
+  if (!Number.isFinite(n)) return '';
+  return String(Math.min(100, n));
+}
+
+function atividadeExecutadaDe(item: unknown): AtividadeExecutadaItem {
+  const bruto = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+  const statusBruto = String(bruto.status || '').toLowerCase();
+  const status: AtividadeExecutadaItem['status'] =
+    statusBruto === 'pausado' || statusBruto === 'finalizada' ? statusBruto : 'em andamento';
+  const percentual = bruto.percentual == null || bruto.percentual === ''
+    ? ''
+    : limitarPercentual(String(bruto.percentual));
+  return {
+    descricao: String(bruto.descricao || ''),
+    status,
+    percentual,
+  };
 }
 
 interface ObservacaoItem {
@@ -227,17 +259,10 @@ interface AtividadePendenteItem {
   status: 'pendente' | 'finalizada';
 }
 
-type TipoRelatorio = 'DIA' | 'PERIODO';
-
 function isoDateOnly(value: any, fallback: string): string {
   if (!value) return fallback;
   const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
   return match ? match[1] : fallback;
-}
-
-function tipoDeExtras(extras: any, rdo?: any): TipoRelatorio {
-  const raw = String(extras?.tipoRelatorio || rdo?.tipoRelatorio || 'DIA').toUpperCase();
-  return raw === 'PERIODO' ? 'PERIODO' : 'DIA';
 }
 
 /** Move item uma posição para cima (-1) ou para baixo (+1). */
@@ -468,6 +493,8 @@ export const DiarioDeObra: React.FC = () => {
   const mediaUploadLockRef = useRef<Promise<void> | null>(null);
   const autoUploadFnRef = useRef<() => Promise<void>>(async () => {});
   const rdoIdAtualRef = useRef<string | null>(rdoId || null);
+  const pendingNewDraftRef = useRef<OfflineRdoDraft | null>(null);
+  const [tipoRascunhoLocal, setTipoRascunhoLocal] = useState<TipoRelatorio | null>(null);
 
   const [status, setStatus] = useState<RdoStatus>('rascunho');
   const [toast, setToast] = useState<string | null>(null);
@@ -599,9 +626,9 @@ export const DiarioDeObra: React.FC = () => {
               .split(/\r?\n/)
               .map(line => line.trim().replace(/^[-*•\d.]+\s*/, '').trim())
               .filter(Boolean)
-              .map(line => ({ descricao: line, status: 'em andamento' as const }));
+              .map(line => ({ descricao: line, status: 'em andamento' as const, percentual: '' }));
           } else if (Array.isArray(rawAtv)) {
-            parsedAtividades = rawAtv;
+            parsedAtividades = rawAtv.map(atividadeExecutadaDe);
           }
           setAtividadesExecutadas(parsedAtividades);
 
@@ -639,7 +666,7 @@ export const DiarioDeObra: React.FC = () => {
               setMateriais(le.materiais || []);
               setEquipamentos(le.equipamentos || []);
               const rawLocalAtv = le.atividadesExecutadas;
-              if (Array.isArray(rawLocalAtv)) setAtividadesExecutadas(rawLocalAtv);
+              if (Array.isArray(rawLocalAtv)) setAtividadesExecutadas(rawLocalAtv.map(atividadeExecutadaDe));
               setAtividadesPendentes(parseAtividadesPendentes(le.atividadesPendentes));
               setObservacoes(parseObservacoes(le.observacoes || le.observacoesGerais));
               if (local.aprovadorId) setAprovadorIdSelecionado(local.aprovadorId);
@@ -672,7 +699,7 @@ export const DiarioDeObra: React.FC = () => {
               setProfissionais(le.profissionais || []);
               setMateriais(le.materiais || []);
               setEquipamentos(le.equipamentos || []);
-              if (Array.isArray(le.atividadesExecutadas)) setAtividadesExecutadas(le.atividadesExecutadas);
+              if (Array.isArray(le.atividadesExecutadas)) setAtividadesExecutadas(le.atividadesExecutadas.map(atividadeExecutadaDe));
               setAtividadesPendentes(parseAtividadesPendentes(le.atividadesPendentes));
               setObservacoes(parseObservacoes(le.observacoes || le.observacoesGerais));
               if (local.aprovadorId) setAprovadorIdSelecionado(local.aprovadorId);
@@ -698,32 +725,10 @@ export const DiarioDeObra: React.FC = () => {
         try {
           const local = await getOfflineRdoDraft(offlineDraftKey(obraId, null));
           if (local?.dadosExtras) {
-            const le = local.dadosExtras;
-            setData(le.data || today);
-            setTipoRelatorio(tipoDeExtras(le));
-            setDataFim(isoDateOnly(le.dataFim, le.data || today));
-            setDiasChuva(String(le.diasChuva ?? 0));
-            setResponsavel(le.responsavel || '');
-            setClimaManha(le.climaManha || '');
-            setClimaTarde(le.climaTarde || '');
-            setClimaNoite(le.climaNoite || '');
-            setTempMin(le.tempMin || '');
-            setTempMax(le.tempMax || '');
-            setPessoas(le.pessoas?.length ? le.pessoas : [{ nome: '', funcao: '', empresa: '' }]);
-            setProfissionais(le.profissionais || []);
-            setMateriais(le.materiais || []);
-            setEquipamentos(le.equipamentos || []);
-            if (Array.isArray(le.atividadesExecutadas)) setAtividadesExecutadas(le.atividadesExecutadas);
-            setAtividadesPendentes(parseAtividadesPendentes(le.atividadesPendentes));
-            setObservacoes(parseObservacoes(le.observacoes || le.observacoesGerais));
-            if (local.aprovadorId) setAprovadorIdSelecionado(local.aprovadorId);
-            if (le.ordemMidia) setOrdemMidia(normalizarOrdemMidia(le.ordemMidia));
-            if (local.rdoNumberStr) setRdoNumberStr(local.rdoNumberStr);
-            if (local.nomeObra) setNomeObra(local.nomeObra);
-            if (local.tempId) tempRdoId.current = local.tempId;
-            setDraftPendingSync(!!local.pendingSync);
-            setLastLocalSaveAt(local.updatedAt);
-            setToast('📴 Rascunho local restaurado neste aparelho.');
+            // Nunca pular a escolha dia/período num RDO novo: rascunho local
+            // (inclusive o gravado ao trocar de aba) assumia DIA e escondia o seletor.
+            pendingNewDraftRef.current = local;
+            setTipoRascunhoLocal(tipoDeExtras(local.dadosExtras));
           }
         } catch { /* ignore */ }
         setInitLoading(false);
@@ -1040,9 +1045,9 @@ export const DiarioDeObra: React.FC = () => {
           .split(/\r?\n/)
           .map(line => line.trim().replace(/^[-*•\d.]+\s*/, '').trim())
           .filter(Boolean)
-          .map(line => ({ descricao: line, status: 'em andamento' as const }));
+          .map(line => ({ descricao: line, status: 'em andamento' as const, percentual: '' }));
       } else if (Array.isArray(rawAtv)) {
-        parsedAtividades = rawAtv;
+        parsedAtividades = rawAtv.map(atividadeExecutadaDe);
       }
       setAtividadesExecutadas(parsedAtividades);
       setAtividadesPendentes(parseAtividadesPendentes(extras.atividadesPendentes));
@@ -1596,7 +1601,7 @@ export const DiarioDeObra: React.FC = () => {
   };
 
   const persistDraftLocal = useCallback(async (opts?: { pendingSync?: boolean }) => {
-    if (!obraId || isReadOnly || status !== 'rascunho') return;
+    if (!obraId || !devePersistirRascunhoLocal({ tipoRelatorio, status, isReadOnly })) return;
     const pendingSync = opts?.pendingSync ?? draftPendingSync;
     const localKey = offlineDraftKey(obraId, rdoIdAtual);
     const draft: OfflineRdoDraft = {
@@ -1622,6 +1627,48 @@ export const DiarioDeObra: React.FC = () => {
     atividadesExecutadas, atividadesPendentes, observacoes,
     ordemMidia, fotos, videos, anexos, savedFiles,
   ]);
+
+  const aplicarRascunhoNovo = (local: OfflineRdoDraft) => {
+    const le = local.dadosExtras || {};
+    setData(le.data || today);
+    setDataFim(isoDateOnly(le.dataFim, le.data || today));
+    setDiasChuva(String(le.diasChuva ?? 0));
+    setResponsavel(le.responsavel || '');
+    setClimaManha(le.climaManha || '');
+    setClimaTarde(le.climaTarde || '');
+    setClimaNoite(le.climaNoite || '');
+    setTempMin(le.tempMin || '');
+    setTempMax(le.tempMax || '');
+    setPessoas(le.pessoas?.length ? le.pessoas : [{ nome: '', funcao: '', empresa: '' }]);
+    setProfissionais(le.profissionais || []);
+    setMateriais(le.materiais || []);
+    setEquipamentos(le.equipamentos || []);
+    if (Array.isArray(le.atividadesExecutadas)) setAtividadesExecutadas(le.atividadesExecutadas.map(atividadeExecutadaDe));
+    setAtividadesPendentes(parseAtividadesPendentes(le.atividadesPendentes));
+    setObservacoes(parseObservacoes(le.observacoes || le.observacoesGerais));
+    if (local.aprovadorId) setAprovadorIdSelecionado(local.aprovadorId);
+    if (le.ordemMidia) setOrdemMidia(normalizarOrdemMidia(le.ordemMidia));
+    if (local.rdoNumberStr) setRdoNumberStr(local.rdoNumberStr);
+    if (local.nomeObra) setNomeObra(local.nomeObra);
+    if (local.tempId) tempRdoId.current = local.tempId;
+    setDraftPendingSync(!!local.pendingSync);
+    setLastLocalSaveAt(local.updatedAt);
+  };
+
+  const escolherTipoRelatorio = (tipo: TipoRelatorio) => {
+    const local = pendingNewDraftRef.current;
+    pendingNewDraftRef.current = null;
+    if (local?.dadosExtras && tipoDeExtras(local.dadosExtras) === tipo) {
+      aplicarRascunhoNovo(local);
+      setToast(
+        local.pendingSync
+          ? '📴 Rascunho local restaurado neste aparelho.'
+          : 'Rascunho local restaurado neste aparelho.',
+      );
+    }
+    setTipoRelatorio(tipo);
+    setTipoRascunhoLocal(null);
+  };
 
   const ensureRdoIdOnServer = async (): Promise<string | null> => {
     if (!obraId || !navigator.onLine) return null;
@@ -1666,12 +1713,9 @@ export const DiarioDeObra: React.FC = () => {
     }
   };
 
-  const midiasSoNoCelular = () =>
-    fotosRef.current.length + videosRef.current.length + anexosRef.current.length;
-
   const autoUploadPendingMedia = async () => {
-    if (!navigator.onLine || !obraId) return;
-    if (midiasSoNoCelular() === 0) return;
+    if (!navigator.onLine || !obraId || isReadOnly) return;
+    if (status !== 'rascunho') return;
     if (mediaUploadLockRef.current) {
       await mediaUploadLockRef.current;
     }
@@ -1688,15 +1732,11 @@ export const DiarioDeObra: React.FC = () => {
 
     const run = (async () => {
       let lastKeys = '';
-      while (navigator.onLine && obraId) {
+      while (navigator.onLine && obraId && !isReadOnly) {
         const keys = pendingKeys();
         if (!keys || keys === lastKeys) break;
         lastKeys = keys;
-        let rdoIdAlvo = rdoIdAtualRef.current;
-        if (!rdoIdAlvo) {
-          if (isReadOnly || status !== 'rascunho') break;
-          rdoIdAlvo = await ensureRdoIdOnServer();
-        }
+        const rdoIdAlvo = await ensureRdoIdOnServer();
         if (!rdoIdAlvo || !navigator.onLine) break;
         await uploadMidas(rdoIdAlvo);
         await syncOfflineFiles(rdoIdAlvo);
@@ -1859,9 +1899,9 @@ export const DiarioDeObra: React.FC = () => {
     };
   }, [initLoading, obraId, rdoIdAtual, rdoId, hydratePendingMediaFromIdb]);
 
-  // Com internet, envia foto/vídeo/anexo assim que entram no RDO — também depois de enviado ou aprovado
+  // Com internet, envia foto/vídeo/anexo assim que entram no RDO — sem esperar o Salvar
   useEffect(() => {
-    if (initLoading || !isOnline || !obraId) return;
+    if (initLoading || !isOnline || !obraId || isReadOnly || status !== 'rascunho') return;
     const pending = fotos.length + videos.length + anexos.length;
     if (pending === 0) return;
     const timer = window.setTimeout(() => {
@@ -1874,6 +1914,8 @@ export const DiarioDeObra: React.FC = () => {
     initLoading,
     isOnline,
     obraId,
+    isReadOnly,
+    status,
     fotos.length,
     videos.length,
     anexos.length,
@@ -2065,6 +2107,10 @@ export const DiarioDeObra: React.FC = () => {
   // ── Salvar Rascunho ──
   const handleSalvarRascunho = async () => {
     if (!obraId) return;
+    if (!tipoRelatorio) {
+      showToast('Escolha se este relatório é do dia ou de período.');
+      return;
+    }
     if (!validarPeriodo()) return;
     setSaving(true);
     let releaseLock: (() => void) | undefined;
@@ -2166,6 +2212,10 @@ export const DiarioDeObra: React.FC = () => {
   // ── Enviar para aprovação ──
   const handleEnviar = async () => {
     if (!obraId) return;
+    if (!tipoRelatorio) {
+      showToast('Escolha se este relatório é do dia ou de período.');
+      return;
+    }
     if (!validarPeriodo()) return;
     if (!navigator.onLine) {
       await flushPendingMediaToIdb();
@@ -2209,13 +2259,6 @@ export const DiarioDeObra: React.FC = () => {
 
       await uploadMidas(idParaSubmeter!);
       await syncOfflineFiles(idParaSubmeter!);
-      const aindaNoCelular = midiasSoNoCelular();
-      if (aindaNoCelular > 0) {
-        showToast(
-          `⚠️ ${aindaNoCelular} arquivo(s) continuam só no celular. O diário não foi enviado.`,
-        );
-        return;
-      }
 
       // Submeter com aprovador selecionado
       await api.put(`/rdos/${idParaSubmeter}/submeter`,
@@ -2240,26 +2283,9 @@ export const DiarioDeObra: React.FC = () => {
   };
 
   // ── Aprovar ──
-  const enviarMidiasDoCelular = async (precisaDasFotos: boolean): Promise<boolean> => {
-    if (midiasSoNoCelular() === 0) return true;
-    if (!navigator.onLine) {
-      showToast('⚠️ As fotos ainda estão só neste celular. Conecte para enviá-las à nuvem.');
-      return !precisaDasFotos;
-    }
-    showToast('☁️ Enviando as fotos do celular para a nuvem...');
-    await autoUploadFnRef.current();
-    const restam = midiasSoNoCelular();
-    if (restam === 0) return true;
-    showToast(
-      `⚠️ ${restam} arquivo(s) continuam só no celular. O relatório não leva essas fotos até o envio terminar.`,
-    );
-    return !precisaDasFotos;
-  };
-
   const handleAprovar = async () => {
     if (!obraId || !rdoIdAtual) return;
     try {
-      if (!(await enviarMidiasDoCelular(true))) return;
       await api.put(`/rdos/${rdoIdAtual}/aprovar`, {}, { headers: { 'x-obra-id': obraId } });
       setStatus('aprovado');
       setDataAprovacao(new Date().toLocaleDateString('pt-BR'));
@@ -2370,25 +2396,21 @@ export const DiarioDeObra: React.FC = () => {
             </button>
             <div className="min-w-0">
               <h1 className="text-lg md:text-2xl font-bold text-gray-900 tracking-tight truncate">
-                {tipoRelatorio === 'PERIODO' ? 'Relatório de período' : 'Diário de Obra'}
+                {tituloTipoRelatorio(tipoRelatorio)}
               </h1>
               <p className="text-xs md:text-sm text-gray-500 font-medium truncate">{initLoading ? 'Carregando...' : `${rdoNumberStr}`}</p>
+              {status === 'rascunho' && !isReadOnly && tipoRelatorio && (
+                <button
+                  type="button"
+                  onClick={() => setTipoRelatorio(null)}
+                  className="text-xs font-semibold text-lunardeli-red hover:underline mt-0.5"
+                >
+                  Trocar tipo (dia ou período)
+                </button>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-            {rdoIdAtual && obraId && !initLoading && (
-              <RdoShareBar
-                rdoId={rdoIdAtual}
-                obraId={obraId}
-                rdoLabel={`${rdoNumberStr.replace(/[^a-zA-Z0-9]/g, '_')}_${nomeObra.replace(/[^a-zA-Z0-9]/g, '_')}`}
-                apenasImprimir
-                incluirFotosNaImpressao={
-                  fotos.length > 0 ||
-                  savedFiles.some((item) => item.mimeType?.startsWith('image/'))
-                }
-                antesDeExportar={enviarMidiasDoCelular}
-              />
-            )}
             {!isOnline && (
               <span className="px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border whitespace-nowrap bg-amber-50 text-amber-800 border-amber-200">
                 SEM SINAL
@@ -2426,15 +2448,26 @@ export const DiarioDeObra: React.FC = () => {
 
       <div className="max-w-4xl mx-auto px-3 md:px-8 py-5 md:py-8 space-y-4 md:space-y-6">
 
-        {!initLoading && tipoRelatorio === null ? (
+        {initLoading ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 md:p-8 text-sm text-gray-500">
+            Carregando...
+          </div>
+        ) : devePedirTipoRelatorio({ initLoading, tipoRelatorio }) ? (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 md:p-8">
             <h2 className="text-xl font-bold text-gray-900 mb-1">Que tipo de relatório?</h2>
-            <p className="text-sm text-gray-500 mb-6">Escolha se este documento cobre um dia ou um prazo entre duas datas.</p>
+            <p className="text-sm text-gray-500 mb-4">Escolha se este documento cobre um dia ou um prazo entre duas datas.</p>
+            {tipoRascunhoLocal && (
+              <p className="mb-6 text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-xl px-3 py-2">
+                Há um rascunho de {rotuloTipoRelatorio(tipoRascunhoLocal)} neste aparelho. Escolha o mesmo tipo para continuar, ou o outro para começar um relatório novo.
+              </p>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <button
                 type="button"
-                onClick={() => setTipoRelatorio('DIA')}
-                className="text-left p-5 rounded-xl border-2 border-gray-200 hover:border-lunardeli-red hover:bg-red-50/50 active:bg-red-50 transition-colors"
+                onClick={() => escolherTipoRelatorio('DIA')}
+                className={`text-left p-5 rounded-xl border-2 hover:border-lunardeli-red hover:bg-red-50/50 active:bg-red-50 transition-colors ${
+                  tipoRascunhoLocal === 'DIA' ? 'border-lunardeli-red bg-red-50/40' : 'border-gray-200'
+                }`}
               >
                 <span className="flex items-center gap-2 text-lunardeli-red font-bold mb-2">
                   <Calendar size={20} /> Relatório do dia
@@ -2445,14 +2478,16 @@ export const DiarioDeObra: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setTipoRelatorio('PERIODO')}
-                className="text-left p-5 rounded-xl border-2 border-gray-200 hover:border-lunardeli-red hover:bg-red-50/50 active:bg-red-50 transition-colors"
+                onClick={() => escolherTipoRelatorio('PERIODO')}
+                className={`text-left p-5 rounded-xl border-2 hover:border-lunardeli-red hover:bg-red-50/50 active:bg-red-50 transition-colors ${
+                  tipoRascunhoLocal === 'PERIODO' ? 'border-lunardeli-red bg-red-50/40' : 'border-gray-200'
+                }`}
               >
                 <span className="flex items-center gap-2 text-lunardeli-red font-bold mb-2">
                   <Calendar size={20} /> Relatório de período
                 </span>
                 <span className="block text-sm text-gray-600 leading-relaxed">
-                  Um prazo entre duas datas: você informa quantos dias choveu, o efetivo e as mesmas seções do diário.
+                  Semana, mês (ex.: dezembro) ou qualquer intervalo: informe a data de início, a data de fim e quantos dias choveu.
                 </span>
               </button>
             </div>
@@ -2759,19 +2794,41 @@ export const DiarioDeObra: React.FC = () => {
                         }}
                         disabled={isReadOnly}
                       />
-                      <select
-                        className="w-full sm:w-44 border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red bg-white text-gray-700 font-medium"
-                        value={atv.status}
-                        onChange={e => {
-                          const newVal = e.target.value as 'em andamento' | 'pausado' | 'finalizada';
-                          setAtividadesExecutadas(prev => prev.map((item, idx) => idx === i ? { ...item, status: newVal } : item));
-                        }}
-                        disabled={isReadOnly}
-                      >
-                        <option value="em andamento">Em andamento</option>
-                        <option value="pausado">Pausado</option>
-                        <option value="finalizada">Finalizada</option>
-                      </select>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <select
+                          className="w-full sm:w-44 border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red bg-white text-gray-700 font-medium"
+                          value={atv.status}
+                          onChange={e => {
+                            const newVal = e.target.value as 'em andamento' | 'pausado' | 'finalizada';
+                            setAtividadesExecutadas(prev => prev.map((item, idx) => idx === i ? { ...item, status: newVal } : item));
+                          }}
+                          disabled={isReadOnly}
+                          aria-label="Andamento da atividade"
+                        >
+                          <option value="em andamento">Em andamento</option>
+                          <option value="pausado">Pausado</option>
+                          <option value="finalizada">Finalizada</option>
+                        </select>
+                        {atv.status === 'em andamento' && (
+                          <label className="flex items-center gap-2 w-full sm:w-52">
+                            <span className="shrink-0 text-xs font-bold text-gray-600">Percentual</span>
+                            <input
+                              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-lunardeli-red bg-white text-gray-700 font-medium"
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="0 a 100"
+                              value={atv.percentual || ''}
+                              onChange={e => {
+                                const percentual = limitarPercentual(e.target.value);
+                                setAtividadesExecutadas(prev => prev.map((item, idx) => idx === i ? { ...item, percentual } : item));
+                              }}
+                              disabled={isReadOnly}
+                              aria-label="Percentual da atividade"
+                            />
+                            <span className="shrink-0 text-sm font-bold text-gray-600">%</span>
+                          </label>
+                        )}
+                      </div>
                     </div>
                     <ItemSideActions
                       index={i}
@@ -2794,7 +2851,7 @@ export const DiarioDeObra: React.FC = () => {
                )}
                <button 
                  type="button" 
-                 onClick={() => setAtividadesExecutadas(prev => [...prev, { descricao: '', status: 'em andamento' }])} 
+                 onClick={() => setAtividadesExecutadas(prev => [...prev, { descricao: '', status: 'em andamento', percentual: '' }])} 
                  className="text-sm font-semibold text-lunardeli-red hover:text-red-700 flex items-center gap-1 mt-1 disabled:opacity-50"
                  disabled={isReadOnly}
                >
@@ -3107,7 +3164,7 @@ export const DiarioDeObra: React.FC = () => {
                                  {!f.isUploading && !f.uploadFalhou && (
                                     <div className="flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-amber-600">
                                        <span>☁️</span>
-                                       <span>{isOnline ? 'Só no celular' : 'Offline'}</span>
+                                       <span>{isOnline ? 'Na fila' : 'Offline'}</span>
                                     </div>
                                  )}
                                  {f.isUploading && (
@@ -3301,7 +3358,7 @@ export const DiarioDeObra: React.FC = () => {
                               <div className="w-full flex items-center justify-between gap-2 border-t border-gray-100 pt-1.5">
                                  {!v.isUploading && !v.uploadFalhou && (
                                     <div className="w-full flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-amber-600">
-                                       <span>{isOnline ? '☁️ Só no celular' : '☁️ Offline'}</span>
+                                       <span>{isOnline ? '☁️ Na fila' : '☁️ Offline'}</span>
                                     </div>
                                  )}
                                  {v.isUploading && (
@@ -3435,7 +3492,7 @@ export const DiarioDeObra: React.FC = () => {
                               <div className="w-full flex items-center justify-between gap-2 border-t border-gray-100 pt-1.5">
                                  {!a.isUploading && !a.uploadFalhou && (
                                     <div className="w-full flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase py-0.5 rounded shadow border border-amber-600">
-                                       <span>{isOnline ? '☁️ Só no celular' : '☁️ Offline'}</span>
+                                       <span>{isOnline ? '☁️ Na fila' : '☁️ Offline'}</span>
                                     </div>
                                  )}
                                  {a.isUploading && (
@@ -3617,11 +3674,6 @@ export const DiarioDeObra: React.FC = () => {
                             rdoId={rdoIdAtual}
                             obraId={obraId}
                             rdoLabel={`${rdoNumberStr.replace(/[^a-zA-Z0-9]/g, '_')}_${nomeObra.replace(/[^a-zA-Z0-9]/g, '_')}`}
-                            incluirFotosNaImpressao={
-                              fotos.length > 0 ||
-                              savedFiles.some((item) => item.mimeType?.startsWith('image/'))
-                            }
-                            antesDeExportar={enviarMidiasDoCelular}
                           />
                         </div>
                       )}

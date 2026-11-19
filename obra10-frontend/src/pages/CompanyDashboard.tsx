@@ -177,6 +177,7 @@ export const CompanyDashboard: React.FC = () => {
     { label: 'Relatórios', icon: FileText, onClick: () => navigate('/relatorios'), visible: true },
     { label: 'Cadastro Base', icon: Boxes, onClick: () => navigate('/catalogo'), visible: true },
     { label: 'Equipe', icon: Users, onClick: () => navigate('/gestor/usuarios'), visible: canManageUsers },
+    { label: 'RH', icon: HardHat, onClick: () => navigate('/rh'), visible: canManageUsers || user?.capabilities?.acessoTodasObras === true },
     { label: 'Meu Plano', icon: Building2, onClick: () => navigate('/assinatura'), visible: canManageFinanceiro },
     { label: 'Suporte', icon: Headphones, onClick: () => navigate('/suporte'), visible: true },
     { label: 'Perfil', icon: User, onClick: () => navigate('/perfil'), visible: true },

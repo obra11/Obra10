@@ -273,7 +273,7 @@ export const PhotoAnnotateModal: React.FC<PhotoAnnotateModalProps> = ({
   const selectedRef = useRef<number | null>(null);
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
-  const [tool, setTool] = useState<AnnotateTool>('pen');
+  const [tool, setTool] = useState<AnnotateTool | null>(null);
   const [color, setColor] = useState<string>(COLORS[0].value);
   const [size, setSize] = useState<SizeId>('m');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -408,10 +408,15 @@ export const PhotoAnnotateModal: React.FC<PhotoAnnotateModalProps> = ({
 
     selectedRef.current = null;
     setSelected(null);
+    const active = toolRef.current;
+    if (!active) {
+      redraw();
+      return;
+    }
     const imgW = canvas?.width || 1080;
     const width = strokeWidthFor(imgW, sizeRef.current);
 
-    if (toolRef.current === 'text') {
+    if (active === 'text') {
       setTextDraft(pt);
       setTextValue('');
       window.setTimeout(() => textInputRef.current?.focus(), 50);
@@ -420,9 +425,9 @@ export const PhotoAnnotateModal: React.FC<PhotoAnnotateModalProps> = ({
     }
 
     drawingRef.current = true;
-    if (toolRef.current === 'pen') {
+    if (active === 'pen') {
       liveRef.current = { kind: 'stroke', color: colorRef.current, width, points: [pt] };
-    } else if (toolRef.current === 'circle') {
+    } else if (active === 'circle') {
       liveRef.current = { kind: 'circle', color: colorRef.current, width, cx: pt.x, cy: pt.y, r: 0 };
     } else {
       liveRef.current = { kind: 'arrow', color: colorRef.current, width, from: pt, to: pt };
@@ -569,7 +574,9 @@ export const PhotoAnnotateModal: React.FC<PhotoAnnotateModalProps> = ({
               ? `${index + 1} de ${total}`
               : selectedKind
                 ? 'Arraste para mover · mude a espessura abaixo'
-                : 'Risco, seta, círculo ou texto'}
+                : tool
+                  ? 'Risco, seta, círculo ou texto'
+                  : 'Toque numa ferramenta para marcar'}
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -611,7 +618,12 @@ export const PhotoAnnotateModal: React.FC<PhotoAnnotateModalProps> = ({
           <button
             key={item.id}
             type="button"
-            onClick={() => setTool(item.id)}
+            aria-pressed={tool === item.id}
+            onClick={() => {
+              setTextDraft(null);
+              setTextValue('');
+              setTool((current) => (current === item.id ? null : item.id));
+            }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 ${
               tool === item.id ? 'bg-lunardeli-red text-white' : 'bg-white/10 text-white/80'
             }`}
@@ -661,7 +673,12 @@ export const PhotoAnnotateModal: React.FC<PhotoAnnotateModalProps> = ({
           <canvas
             ref={canvasRef}
             className="block"
-            style={{ touchAction: 'none', maxWidth: '100%', maxHeight: '100%' }}
+            style={{
+              touchAction: 'none',
+              maxWidth: '100%',
+              maxHeight: '100%',
+              cursor: tool ? 'crosshair' : 'default',
+            }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}

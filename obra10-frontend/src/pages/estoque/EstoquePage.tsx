@@ -347,6 +347,7 @@ export const EstoquePage: React.FC<{ modo: Modo }> = ({ modo }) => {
   const [cameraOn, setCameraOn] = useState(false);
 
   const [destinoTransf, setDestinoTransf] = useState('');
+  const [tipoDestinoTransf, setTipoDestinoTransf] = useState<'central' | 'obra'>('central');
   const [obraDestino, setObraDestino] = useState('');
   const [insumoTransf, setInsumoTransf] = useState('');
   const [qtdTransf, setQtdTransf] = useState('1');
@@ -397,7 +398,7 @@ export const EstoquePage: React.FC<{ modo: Modo }> = ({ modo }) => {
         await carregarLocais();
         const [rec, obrasRes] = await Promise.all([
           api.get('/estoque/recebedores').catch(() => ({ data: [] })),
-          modo === 'central' ? api.get('/estoque/obras') : Promise.resolve({ data: [] }),
+          api.get('/estoque/obras').catch(() => ({ data: [] })),
         ]);
         if (!vivo) return;
         setRecebedores(rec.data || []);
@@ -833,13 +834,45 @@ export const EstoquePage: React.FC<{ modo: Modo }> = ({ modo }) => {
     };
   }, [cameraOn]);
 
+  const abrirTransferir = () => {
+    const central = locais.find((l) => l.tipo === 'DEPOSITO_CENTRAL');
+    const origemEhCentral = locais.find((l) => l.id === localId)?.tipo === 'DEPOSITO_CENTRAL';
+    setTipoDestinoTransf(origemEhCentral ? 'obra' : 'central');
+    setDestinoTransf(origemEhCentral ? '' : (central?.id || ''));
+    setObraDestino('');
+    setInsumoTransf('');
+    setQtdTransf('1');
+    setPainel('transferir');
+  };
+
   const transferir = async () => {
+    const centralId = locais.find((l) => l.tipo === 'DEPOSITO_CENTRAL')?.id || '';
+    const paraOutraObra = modo === 'central' || tipoDestinoTransf === 'obra';
+    if (paraOutraObra && !obraDestino) {
+      setErro('Escolha a obra de destino.');
+      return;
+    }
+    if (!paraOutraObra && !destinoTransf && !centralId) {
+      setErro('Não achei o depósito central.');
+      return;
+    }
+    if (!insumoTransf) {
+      setErro(
+        tipoOperacao === 'MAO_DE_OBRA'
+          ? 'Escolha a função com saldo.'
+          : tipoOperacao === 'EQUIPAMENTO'
+            ? 'Escolha o equipamento.'
+            : 'Escolha o material com saldo.',
+      );
+      return;
+    }
     setEnviando(true);
+    setErro('');
     try {
       await api.post('/estoque/transferencias', {
         origemLocalId: localId,
-        destinoLocalId: obraDestino ? undefined : destinoTransf,
-        obraDestinoId: obraDestino || undefined,
+        destinoLocalId: paraOutraObra ? undefined : (destinoTransf || centralId),
+        obraDestinoId: paraOutraObra ? obraDestino : undefined,
         insumoId: insumoTransf,
         quantidade: Number(qtdTransf),
       });
@@ -910,7 +943,9 @@ export const EstoquePage: React.FC<{ modo: Modo }> = ({ modo }) => {
             </div>
             <h1 className="text-2xl font-extrabold text-gray-900">{titulo}</h1>
             <p className="text-sm text-gray-500 mt-1">
-              A nota fica arquivada. O saldo só muda depois que quem recebe confirma cada item.
+              {modo === 'obra'
+                ? 'Para enviar material ao depósito central ou a outra obra, use Transferir. Saída é só baixa de uso na obra.'
+                : 'A nota fica arquivada. O saldo só muda depois que quem recebe confirma cada item.'}
             </p>
           </div>
           {modo === 'central' && (
@@ -1220,22 +1255,67 @@ export const EstoquePage: React.FC<{ modo: Modo }> = ({ modo }) => {
         <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3 max-w-lg w-full max-h-[92vh] overflow-y-auto">
           <div className="flex justify-between items-center gap-3">
             <h2 className="font-bold text-gray-900">
-              {ehMao ? 'Transferir mão de obra' : ehEquip ? 'Transferir equipamento' : 'Transferir material'} a partir do local selecionado
+              {ehMao ? 'Transferir mão de obra' : ehEquip ? 'Transferir equipamento' : 'Transferir material'}
             </h2>
             <button type="button" onClick={() => setPainel(null)} aria-label="Fechar"><X size={18} /></button>
           </div>
+          {modo === 'obra' && (
+            <p className="text-sm text-gray-500">
+              Envia o saldo deste almoxarifado para o depósito central ou para o almoxarifado de outra obra.
+            </p>
+          )}
           {modo === 'central' ? (
             <select className="w-full border rounded-xl p-3 text-sm" value={obraDestino} onChange={(e) => setObraDestino(e.target.value)}>
               <option value="">Escolha a obra de destino</option>
               {obras.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}
             </select>
           ) : (
-            <select className="w-full border rounded-xl p-3 text-sm" value={destinoTransf} onChange={(e) => setDestinoTransf(e.target.value)}>
-              <option value="">Destino</option>
-              {locais.filter((l) => l.id !== localId).map((l) => (
-                <option key={l.id} value={l.id}>{l.nome}</option>
-              ))}
-            </select>
+            <div className="space-y-2">
+              <p className="text-xs font-bold uppercase text-gray-500">Para onde vai</p>
+              {locais.find((l) => l.id === localId)?.tipo !== 'DEPOSITO_CENTRAL' && (
+                <label className="flex items-center gap-3 border border-gray-200 rounded-xl p-3 text-sm font-medium text-gray-900">
+                  <input
+                    type="radio"
+                    name="destino-transf"
+                    checked={tipoDestinoTransf === 'central'}
+                    onChange={() => {
+                      setTipoDestinoTransf('central');
+                      setObraDestino('');
+                      setDestinoTransf(locais.find((l) => l.tipo === 'DEPOSITO_CENTRAL')?.id || '');
+                    }}
+                  />
+                  Depósito central
+                </label>
+              )}
+              <label className="flex items-center gap-3 border border-gray-200 rounded-xl p-3 text-sm font-medium text-gray-900">
+                <input
+                  type="radio"
+                  name="destino-transf"
+                  checked={tipoDestinoTransf === 'obra'}
+                  onChange={() => {
+                    setTipoDestinoTransf('obra');
+                    setDestinoTransf('');
+                  }}
+                />
+                Outra obra
+              </label>
+              {tipoDestinoTransf === 'obra' && (
+                obras.filter((o) => o.id !== obraId).length === 0 ? (
+                  <p className="text-sm text-gray-500">Não há outra obra cadastrada para receber esta transferência.</p>
+                ) : (
+                  <select
+                    className="w-full border rounded-xl p-3 text-sm"
+                    value={obraDestino}
+                    onChange={(e) => setObraDestino(e.target.value)}
+                  >
+                    <option value="">Escolha a obra de destino</option>
+                    {obras.filter((o) => o.id !== obraId).map((o) => (
+                      <option key={o.id} value={o.id}>{o.nome}</option>
+                    ))}
+                  </select>
+                )
+              )}
+            </div>
           )}
           <select className="w-full border rounded-xl p-3 text-sm" value={insumoTransf} onChange={(e) => setInsumoTransf(e.target.value)}>
             <option value="">{ehMao ? 'Função com saldo de horas' : ehEquip ? 'Equipamento na origem' : 'Material com saldo na origem'}</option>
@@ -1271,20 +1351,30 @@ export const EstoquePage: React.FC<{ modo: Modo }> = ({ modo }) => {
             </button>
             <button
               type="button"
+              onClick={abrirTransferir}
+              className={`w-full border border-gray-300 text-gray-900 font-bold rounded-xl py-3 ${modo === 'obra' ? 'text-left px-4' : ''}`}
+            >
+              Transferir
+              {modo === 'obra' && (
+                <span className="block text-xs font-normal text-gray-500 mt-0.5">
+                  Depósito central ou outra obra
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 if (ehMao) setModoSaida('manual');
                 setPainel('saida');
               }}
-              className="w-full border border-gray-300 text-gray-900 font-bold rounded-xl py-3"
+              className={`w-full border border-gray-300 text-gray-900 font-bold rounded-xl py-3 ${modo === 'obra' ? 'text-left px-4' : ''}`}
             >
               Saída
-            </button>
-            <button
-              type="button"
-              onClick={() => setPainel('transferir')}
-              className="w-full border border-gray-300 text-gray-900 font-bold rounded-xl py-3"
-            >
-              Transferir
+              {modo === 'obra' && (
+                <span className="block text-xs font-normal text-gray-500 mt-0.5">
+                  Baixa de uso na obra — não envia para outro local
+                </span>
+              )}
             </button>
           </div>
         </div>
