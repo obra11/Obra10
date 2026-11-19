@@ -1121,7 +1121,11 @@ export class EstoqueService {
     await this.assertPodeLocal(empresaId, userId, origem, true);
     let destinoId = body.destinoLocalId;
     if (!destinoId && body.obraDestinoId) {
-      await this.assertObra(empresaId, userId, body.obraDestinoId);
+      const obraDestino = await this.prisma.obra.findFirst({
+        where: { id: body.obraDestinoId, empresaId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!obraDestino) throw new NotFoundException('Obra de destino não encontrada.');
       destinoId = (await this.garantirAlmox(empresaId, body.obraDestinoId)).id;
     }
     if (!destinoId) throw new BadRequestException('Escolha o destino.');
@@ -1129,7 +1133,6 @@ export class EstoqueService {
       throw new BadRequestException('Origem e destino são o mesmo local.');
     }
     const destino = await this.obterLocal(empresaId, destinoId);
-    await this.assertPodeLocal(empresaId, userId, destino, true);
     const quantidade = Number(body.quantidade);
     if (!Number.isFinite(quantidade) || quantidade <= 0) {
       throw new BadRequestException('Informe a quantidade.');
