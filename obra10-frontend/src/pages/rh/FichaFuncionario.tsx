@@ -143,6 +143,18 @@ export function fichaDe(data: Partial<FichaValores> | null | undefined): FichaVa
   return base;
 }
 
+export function mesclarFicha(atual: FichaValores, extraida: Partial<FichaValores> | null | undefined): FichaValores {
+  const next = { ...atual };
+  if (!extraida) return next;
+  (Object.keys(next) as (keyof FichaValores)[]).forEach((chave) => {
+    const novo = extraida[chave];
+    if (typeof novo === 'string' && novo.trim() && !String(atual[chave] || '').trim()) {
+      next[chave] = novo;
+    }
+  });
+  return next;
+}
+
 export function pendenciaFicha(valores: FichaValores) {
   if (valores.nome.trim().length < 3) return 'Informe o nome completo.';
   const cpf = valores.cpf.replace(/\D/g, '');

@@ -15,7 +15,10 @@ import {
 } from '@prisma/client';
 import { CryptoService } from '../../core/services/crypto.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { lerVisaoLuna } from '../ai/luna-visao';
+import { imagemParaVisao } from '../estoque/estoque-storage';
 import { EstoqueService } from '../estoque/estoque.service';
+import { FICHA_SYSTEM, jsonDaLuna, parsearFichaExtraida, pedidoFicha } from './rh-ficha-leitura';
 
 const UFS = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS',
@@ -151,6 +154,60 @@ export class RhService {
     const pessoa = await this.buscar(empresaId, id);
     await this.estoque.listarLocais(empresaId, userId, pessoa.obraId);
     return this.ficha(pessoa);
+  }
+
+  async lerFicha(
+    empresaId: string,
+    userId: string,
+    files: Express.Multer.File[] | undefined,
+    obraId?: string,
+  ) {
+    if (!obraId) throw new BadRequestException('Escolha a obra.');
+    await this.estoque.listarLocais(empresaId, userId, obraId);
+    const fotos = (files || []).filter((file) => file?.buffer?.length).slice(0, 4);
+    if (!fotos.length) throw new BadRequestException('Envie a foto da ficha existente.');
+
+    const partes: Array<Record<string, unknown>> = [{ type: 'text', text: pedidoFicha() }];
+    for (const file of fotos) {
+      if (file.size > 15 * 1024 * 1024) throw new BadRequestException('A foto passa de 15 MB.');
+      const mime = mimeDaFicha(file);
+      if (mime === 'application/pdf') {
+        partes.push({
+          type: 'file',
+          file: {
+            filename: 'ficha.pdf',
+            file_data: `data:application/pdf;base64,${file.buffer.toString('base64')}`,
+          },
+        });
+      } else if (imagemParaVisao(mime)) {
+        partes.push({
+          type: 'image_url',
+          image_url: { url: `data:${mime};base64,${file.buffer.toString('base64')}`, detail: 'high' },
+        });
+      } else {
+        throw new BadRequestException('Use JPG, PNG, WEBP ou PDF. HEIC não é lido.');
+      }
+    }
+
+    let raw: string;
+    try {
+      raw = await lerVisaoLuna(partes as never, FICHA_SYSTEM);
+    } catch (err: any) {
+      if (String(err?.message || '') === 'SEM_CHAVE') {
+        throw new BadRequestException('A Luna não está disponível para ler a ficha. Preencha os dados na tela.');
+      }
+      throw new BadRequestException('A Luna não conseguiu ler a ficha. Tire outra foto ou preencha na tela.');
+    }
+
+    const { ficha, preenchidos } = parsearFichaExtraida(jsonDaLuna(raw));
+    if (!preenchidos.length) {
+      throw new BadRequestException('Não deu para ler dados nesta foto. Tente outra, mais nítida, ou preencha na tela.');
+    }
+    return {
+      ficha,
+      preenchidos,
+      aviso: `A Luna preencheu ${preenchidos.length} campo${preenchidos.length === 1 ? '' : 's'}. Confira antes de salvar.`,
+    };
   }
 
   async criar(empresaId: string, userId: string, body: FichaBody) {
@@ -644,6 +701,17 @@ export class RhService {
       createdAt: item.createdAt,
     };
   }
+}
+
+function mimeDaFicha(file: Express.Multer.File) {
+  const nome = (file.originalname || '').toLowerCase();
+  if (file.mimetype && file.mimetype !== 'application/octet-stream') return file.mimetype;
+  if (nome.endsWith('.pdf')) return 'application/pdf';
+  if (nome.endsWith('.png')) return 'image/png';
+  if (nome.endsWith('.webp')) return 'image/webp';
+  if (nome.endsWith('.gif')) return 'image/gif';
+  if (nome.endsWith('.heic') || nome.endsWith('.heif')) return 'image/heic';
+  return 'image/jpeg';
 }
 
 function somenteAtivo(body: FichaBody) {

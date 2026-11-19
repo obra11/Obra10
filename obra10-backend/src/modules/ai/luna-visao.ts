@@ -18,6 +18,10 @@ type Parte = {
 };
 
 export async function lerNotaLuna(content: Parte[]): Promise<string> {
+  return lerVisaoLuna(content, SYSTEM);
+}
+
+export async function lerVisaoLuna(content: Parte[], system: string): Promise<string> {
   const openai = process.env.OPENAI_API_KEY?.trim();
   const anthropic = process.env.ANTHROPIC_API_KEY?.trim();
   if (!openai && !anthropic) throw new Error('SEM_CHAVE');
@@ -25,7 +29,7 @@ export async function lerNotaLuna(content: Parte[]): Promise<string> {
   let falhaOpenAi = '';
   if (openai) {
     try {
-      return await pedirOpenAi(openai, content);
+      return await pedirOpenAi(openai, content, system);
     } catch (err: any) {
       falhaOpenAi = String(err?.message || err);
       if (!anthropic) throw err;
@@ -33,14 +37,14 @@ export async function lerNotaLuna(content: Parte[]): Promise<string> {
   }
 
   try {
-    return await pedirAnthropic(anthropic as string, content);
+    return await pedirAnthropic(anthropic as string, content, system);
   } catch (err: any) {
     const detalhe = falhaOpenAi ? ` OpenAI: ${falhaOpenAi}.` : '';
     throw new Error(`Anthropic: ${String(err?.message || err)}.${detalhe}`);
   }
 }
 
-async function pedirOpenAi(key: string, content: Parte[]): Promise<string> {
+async function pedirOpenAi(key: string, content: Parte[], system: string): Promise<string> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -54,7 +58,7 @@ async function pedirOpenAi(key: string, content: Parte[]): Promise<string> {
       max_tokens: 4096,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: SYSTEM },
+        { role: 'system', content: system },
         { role: 'user', content },
       ],
     }),
@@ -69,13 +73,13 @@ async function pedirOpenAi(key: string, content: Parte[]): Promise<string> {
   return body.choices?.[0]?.message?.content || '';
 }
 
-async function pedirAnthropic(key: string, content: Parte[]): Promise<string> {
+async function pedirAnthropic(key: string, content: Parte[], system: string): Promise<string> {
   const Anthropic = (await import('@anthropic-ai/sdk')).default;
   const client = new Anthropic({ apiKey: key });
   const response = await client.messages.create({
     model: ANTHROPIC_MODEL,
     max_tokens: 4096,
-    system: SYSTEM,
+    system,
     messages: [{ role: 'user', content: paraAnthropic(content) as never }],
   });
   return (response.content || [])

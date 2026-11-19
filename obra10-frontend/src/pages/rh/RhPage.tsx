@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams } from 'react-router-dom';
-import { GraduationCap, HardHat, Loader2, Plus, ShieldCheck } from 'lucide-react';
+import { Camera, GraduationCap, HardHat, Loader2, Plus, ShieldCheck, Upload } from 'lucide-react';
 import api from '../../services/api';
-import { FichaFuncionario, fichaDe, fichaVazia, pendenciaFicha, type FichaValores } from './FichaFuncionario';
+import { FichaFuncionario, fichaDe, fichaVazia, mesclarFicha, pendenciaFicha, type FichaValores } from './FichaFuncionario';
 
 type ContagemTreino = { admissionais: number; recorrentes: number; vencidos: number; aVencer: number };
 type Funcionario = {
@@ -230,8 +230,11 @@ export const RhPage: React.FC = () => {
   const [termoTreino, setTermoTreino] = useState<TermoTreino | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [enviando, setEnviando] = useState(false);
+  const [lendoFicha, setLendoFicha] = useState(false);
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
+  const cameraFichaRef = useRef<HTMLInputElement>(null);
+  const arquivoFichaRef = useRef<HTMLInputElement>(null);
 
   const carregar = useCallback(async () => {
     if (!obraId) return;
@@ -273,6 +276,27 @@ export const RhPage: React.FC = () => {
   useEffect(() => {
     carregar().catch(() => {});
   }, [carregar]);
+
+  const lerFotoFicha = async (file?: File) => {
+    if (!file || !obraId) return;
+    setLendoFicha(true);
+    setErro('');
+    try {
+      const fd = new FormData();
+      fd.append('files', file);
+      fd.append('obraId', obraId);
+      const res = await api.post('/rh/funcionarios/ler-ficha', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000,
+      });
+      setFicha((atual) => mesclarFicha(atual, res.data?.ficha));
+      setAviso(res.data?.aviso || 'A Luna preencheu o que conseguiu ler. Confira antes de salvar.');
+    } catch (err) {
+      setErro(msg(err, 'Não foi possível ler a foto da ficha.'));
+    } finally {
+      setLendoFicha(false);
+    }
+  };
 
   const abrirFicha = async (id?: string) => {
     setErro('');
@@ -788,19 +812,76 @@ export const RhPage: React.FC = () => {
           <div className="bg-white w-full sm:max-w-2xl sm:rounded-2xl max-h-[100dvh] flex flex-col">
             <div className="px-4 pt-4 pb-3 border-b border-gray-100">
               <h2 className="text-xl font-extrabold text-gray-900">{fichaId ? 'Ficha do funcionário' : 'Incluir funcionário'}</h2>
-              <p className="text-sm text-gray-500 mt-1">Estes dados registram a pessoa na empresa: identidade, endereço, documentos e contrato.</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {fichaId
+                  ? 'Estes dados registram a pessoa na empresa: identidade, endereço, documentos e contrato.'
+                  : 'Pode preencher na tela ou fotografar a ficha de papel. A Luna lança o que estiver legível; o restante você completa.'}
+              </p>
             </div>
             <div className="overflow-y-auto px-4 py-4 flex-1">
               {carregandoFicha ? (
                 <p className="py-10 text-sm text-gray-500 flex items-center justify-center gap-2"><Loader2 className="animate-spin" size={16} /> Abrindo ficha...</p>
               ) : (
-                <FichaFuncionario valores={ficha} onChange={setFicha} />
+                <>
+                  <div className="mb-5 rounded-2xl border border-gray-100 bg-gray-50 p-3 space-y-2">
+                    <p className="text-xs font-extrabold uppercase tracking-wider text-lunardeli-red">Foto da ficha existente</p>
+                    <p className="text-xs text-gray-500">
+                      Tire uma foto nítida da ficha de registro. Se tiver verso, mande outra depois — só entra o que ainda estiver em branco.
+                    </p>
+                    <input
+                      ref={cameraFichaRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void lerFotoFicha(file);
+                        e.target.value = '';
+                      }}
+                    />
+                    <input
+                      ref={arquivoFichaRef}
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void lerFotoFicha(file);
+                        e.target.value = '';
+                      }}
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={lendoFicha}
+                        onClick={() => cameraFichaRef.current?.click()}
+                        className="flex items-center justify-center gap-2 bg-lunardeli-red text-white font-bold rounded-xl py-3 text-sm disabled:opacity-60"
+                      >
+                        {lendoFicha ? <Loader2 className="animate-spin" size={16} /> : <Camera size={16} />}
+                        {lendoFicha ? 'Lendo...' : 'Tirar foto'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={lendoFicha}
+                        onClick={() => arquivoFichaRef.current?.click()}
+                        className="flex items-center justify-center gap-2 border border-gray-300 text-gray-900 font-bold rounded-xl py-3 text-sm disabled:opacity-60"
+                      >
+                        <Upload size={16} /> Galeria
+                      </button>
+                    </div>
+                  </div>
+                  {aviso && fichaAberta && (
+                    <p className="mb-4 text-sm font-bold text-emerald-800 bg-emerald-50 rounded-xl px-3 py-2">{aviso}</p>
+                  )}
+                  <FichaFuncionario valores={ficha} onChange={setFicha} />
+                </>
               )}
               {erro && <p className="mt-4 text-sm font-bold text-red-700 bg-red-50 rounded-xl px-3 py-2">{erro}</p>}
             </div>
             <div className="px-4 py-3 border-t border-gray-100 grid grid-cols-2 gap-2">
               <button type="button" onClick={() => { setFichaAberta(false); setErro(''); }} className="border rounded-xl py-3 text-sm font-bold text-gray-700">Cancelar</button>
-              <button type="button" disabled={enviando || carregandoFicha} onClick={() => void salvarFicha()} className="bg-lunardeli-red text-white rounded-xl py-3 text-sm font-bold disabled:opacity-50">
+              <button type="button" disabled={enviando || carregandoFicha || lendoFicha} onClick={() => void salvarFicha()} className="bg-lunardeli-red text-white rounded-xl py-3 text-sm font-bold disabled:opacity-50">
                 {enviando ? 'Salvando...' : 'Salvar ficha'}
               </button>
             </div>

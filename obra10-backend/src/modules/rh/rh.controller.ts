@@ -1,4 +1,18 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UploadedFiles,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../core/guards/jwt-auth.guard';
 import { ModuloGuard } from '../../core/guards/modulo.guard';
 import { Modulo } from '../../core/decorators/modulo.decorator';
@@ -21,6 +35,21 @@ export class RhController {
   @Get('funcionarios')
   listar(@Req() req: any, @Query('obraId') obraId?: string) {
     return this.rh.listar(this.empresaId(req), this.userId(req), obraId);
+  }
+
+  @Post('funcionarios/ler-ficha')
+  @UseInterceptors(
+    FilesInterceptor('files', 4, {
+      storage: memoryStorage(),
+      limits: { fileSize: 15 * 1024 * 1024 },
+    }),
+  )
+  lerFicha(
+    @Req() req: any,
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body() body: { obraId?: string },
+  ) {
+    return this.rh.lerFicha(this.empresaId(req), this.userId(req), files, body?.obraId);
   }
 
   @Get('funcionarios/:id')
