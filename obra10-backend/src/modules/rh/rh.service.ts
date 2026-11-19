@@ -15,7 +15,11 @@ import {
 } from '@prisma/client';
 import { CryptoService } from '../../core/services/crypto.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { lerVisaoLuna } from '../ai/luna-visao';
+import { imagemParaVisao } from '../estoque/estoque-storage';
 import { EstoqueService } from '../estoque/estoque.service';
+import { FICHA_SYSTEM, jsonDaLuna, parsearFichaExtraida, pedidoFicha } from './rh-ficha-leitura';
+import { gerarPdfTermoEpi } from './rh-termo-pdf';
 
 const UFS = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS',
@@ -153,6 +157,60 @@ export class RhService {
     return this.ficha(pessoa);
   }
 
+  async lerFicha(
+    empresaId: string,
+    userId: string,
+    files: Express.Multer.File[] | undefined,
+    obraId?: string,
+  ) {
+    if (!obraId) throw new BadRequestException('Escolha a obra.');
+    await this.estoque.listarLocais(empresaId, userId, obraId);
+    const fotos = (files || []).filter((file) => file?.buffer?.length).slice(0, 4);
+    if (!fotos.length) throw new BadRequestException('Envie a foto da ficha existente.');
+
+    const partes: Array<Record<string, unknown>> = [{ type: 'text', text: pedidoFicha() }];
+    for (const file of fotos) {
+      if (file.size > 15 * 1024 * 1024) throw new BadRequestException('A foto passa de 15 MB.');
+      const mime = mimeDaFicha(file);
+      if (mime === 'application/pdf') {
+        partes.push({
+          type: 'file',
+          file: {
+            filename: 'ficha.pdf',
+            file_data: `data:application/pdf;base64,${file.buffer.toString('base64')}`,
+          },
+        });
+      } else if (imagemParaVisao(mime)) {
+        partes.push({
+          type: 'image_url',
+          image_url: { url: `data:${mime};base64,${file.buffer.toString('base64')}`, detail: 'high' },
+        });
+      } else {
+        throw new BadRequestException('Use JPG, PNG, WEBP ou PDF. HEIC não é lido.');
+      }
+    }
+
+    let raw: string;
+    try {
+      raw = await lerVisaoLuna(partes as never, FICHA_SYSTEM);
+    } catch (err: any) {
+      if (String(err?.message || '') === 'SEM_CHAVE') {
+        throw new BadRequestException('A Luna não está disponível para ler a ficha. Preencha os dados na tela.');
+      }
+      throw new BadRequestException('A Luna não conseguiu ler a ficha. Tire outra foto ou preencha na tela.');
+    }
+
+    const { ficha, preenchidos } = parsearFichaExtraida(jsonDaLuna(raw));
+    if (!preenchidos.length) {
+      throw new BadRequestException('Não deu para ler dados nesta foto. Tente outra, mais nítida, ou preencha na tela.');
+    }
+    return {
+      ficha,
+      preenchidos,
+      aviso: `A Luna preencheu ${preenchidos.length} campo${preenchidos.length === 1 ? '' : 's'}. Confira antes de salvar.`,
+    };
+  }
+
   async criar(empresaId: string, userId: string, body: FichaBody) {
     if (!body.obraId) throw new BadRequestException('Escolha a obra.');
     await this.estoque.listarLocais(empresaId, userId, body.obraId);
@@ -253,7 +311,7 @@ export class RhService {
       where: { id, empresaId, tipo: 'SAIDA', insumo: { tipo: 'EPI' } },
       include: {
         insumo: { select: { nome: true, unidade: true } },
-        funcionario: { select: { nome: true, funcao: true } },
+        funcionario: { select: { nome: true, funcao: true, telefone: true, email: true } },
         localOrigem: { select: { obraId: true, nome: true } },
       },
     });
@@ -273,6 +331,27 @@ export class RhService {
       funcionario: movimento.funcionario,
       local: movimento.localOrigem.nome,
     };
+  }
+
+  async termoPdf(empresaId: string, userId: string, id: string) {
+    const termo = await this.termo(empresaId, userId, id);
+    const empresa = await this.prisma.empresa.findFirst({
+      where: { id: empresaId },
+      select: { nomeFantasia: true, razaoSocial: true, nomeCompleto: true },
+    });
+    return gerarPdfTermoEpi({
+      empresa: empresa?.nomeFantasia || empresa?.razaoSocial || empresa?.nomeCompleto || 'Obra 10',
+      local: termo.local,
+      funcionario: termo.funcionario?.nome || 'Funcionário',
+      funcao: termo.funcionario?.funcao || '',
+      epi: termo.insumo.nome,
+      unidade: termo.insumo.unidade || 'un',
+      quantidade: Number(termo.quantidade),
+      dataRecebimento: termo.dataRecebimento,
+      validadeEpi: termo.validadeEpi,
+      ca: termo.ca,
+      assinatura: termo.assinatura,
+    });
   }
 
   async treinamentos(empresaId: string, userId: string, obraId?: string) {
@@ -379,56 +458,45 @@ export class RhService {
   private normalizar(body: FichaBody): FichaPronta {
     const nome = texto(body.nome, 120);
     if (!nome || nome.length < 3) throw new BadRequestException('Informe o nome completo.');
-    const funcao = texto(body.funcao, 80);
-    if (!funcao || funcao.length < 2) throw new BadRequestException('Informe a função.');
     if (!String(body.cpf ?? '').replace(/\D/g, '')) throw new BadRequestException('Informe o CPF.');
     const cpf = this.documento(body.cpf, cpfValido, 'CPF inválido.');
     const pis = this.documento(body.pis, pisValido, 'PIS/PASEP/NIT inválido.', false);
-    const dataNascimento = dataObrigatoria(body.dataNascimento, 'a data de nascimento');
-    const dataAdmissao = dataObrigatoria(body.dataAdmissao, 'a data de admissão');
-    const nascimento = isoDe(dataNascimento)!;
-    const admissao = isoDe(dataAdmissao)!;
+    const dataNascimento = dataOpcional(body.dataNascimento, 'a data de nascimento');
+    const dataAdmissao = dataOpcional(body.dataAdmissao, 'a data de admissão');
+    const nascimento = isoDe(dataNascimento);
+    const admissao = isoDe(dataAdmissao);
     const hoje = hojeIso();
-    if (nascimento > hoje) throw new BadRequestException('A data de nascimento não pode ser futura.');
-    if (nascimento < '1900-01-01') throw new BadRequestException('Confira a data de nascimento.');
-    if (admissao < somaAnos(nascimento, 14)) {
+    if (nascimento) {
+      if (nascimento > hoje) throw new BadRequestException('A data de nascimento não pode ser futura.');
+      if (nascimento < '1900-01-01') throw new BadRequestException('Confira a data de nascimento.');
+    }
+    if (admissao && admissao > somaDias(hoje, 60)) {
+      throw new BadRequestException('A data de admissão está longe demais.');
+    }
+    if (nascimento && admissao && admissao < somaAnos(nascimento, 14)) {
       throw new BadRequestException('A admissão fica antes dos 14 anos. Confira as datas.');
     }
-    if (admissao > somaDias(hoje, 60)) throw new BadRequestException('A data de admissão está longe demais.');
-    if (!eUmDe(body.sexo, SEXOS)) throw new BadRequestException('Informe o sexo.');
-    const nomeMae = texto(body.nomeMae, 120);
-    if (!nomeMae || nomeMae.length < 3) throw new BadRequestException('Informe o nome da mãe.');
+    const cepDigitos = String(body.cep ?? '').replace(/\D/g, '');
     const cep = digitos(body.cep, 8);
-    if (!cep) throw new BadRequestException('Informe o CEP.');
-    const logradouro = texto(body.logradouro, 120);
-    if (!logradouro || logradouro.length < 2) throw new BadRequestException('Informe o logradouro.');
-    const numero = texto(body.numero, 20);
-    if (!numero) throw new BadRequestException('Informe o número. Use S/N se não houver.');
-    const bairro = texto(body.bairro, 80);
-    if (!bairro || bairro.length < 2) throw new BadRequestException('Informe o bairro.');
-    const cidade = texto(body.cidade, 80);
-    if (!cidade || cidade.length < 2) throw new BadRequestException('Informe a cidade.');
-    const uf = ufDe(body.uf);
-    if (!uf) throw new BadRequestException('Informe a UF.');
-    if (!eUmDe(body.tipoContrato, CONTRATOS)) throw new BadRequestException('Informe o tipo de contrato.');
+    if (cepDigitos && !cep) throw new BadRequestException('CEP inválido.');
     const email = emailDe(body.email);
     const telefone = telefoneDe(body.telefone);
     const rgUf = ufDe(body.rgUf, true);
     const ctpsUf = ufDe(body.ctpsUf, true);
     return {
       nome,
-      funcao,
+      funcao: texto(body.funcao, 80) || '',
       cpf: cpf.sigilo,
       cpfHash: cpf.hash,
       rg: texto(body.rg, 20),
       rgOrgao: texto(body.rgOrgao, 20),
       rgUf,
       dataNascimento,
-      sexo: body.sexo,
+      sexo: opcional(body.sexo, SEXOS, 'Sexo inválido.'),
       estadoCivil: opcional(body.estadoCivil, ESTADOS_CIVIS, 'Estado civil inválido.'),
-      nacionalidade: texto(body.nacionalidade, 40) || 'Brasileira',
+      nacionalidade: texto(body.nacionalidade, 40),
       naturalidade: texto(body.naturalidade, 80),
-      nomeMae,
+      nomeMae: texto(body.nomeMae, 120),
       nomePai: texto(body.nomePai, 120),
       pis: pis.sigilo,
       pisHash: pis.hash,
@@ -439,16 +507,16 @@ export class RhService {
       telefone,
       email,
       cep,
-      logradouro,
-      numero,
+      logradouro: texto(body.logradouro, 120),
+      numero: texto(body.numero, 20),
       complemento: texto(body.complemento, 80),
-      bairro,
-      cidade,
-      uf,
+      bairro: texto(body.bairro, 80),
+      cidade: texto(body.cidade, 80),
+      uf: ufDe(body.uf, true),
       cbo: cboDe(body.cbo),
       matricula: texto(body.matricula, 30),
       dataAdmissao,
-      tipoContrato: body.tipoContrato,
+      tipoContrato: opcional(body.tipoContrato, CONTRATOS, 'Tipo de contrato inválido.'),
       salario: dinheiro(body.salario),
       jornada: texto(body.jornada, 80),
       banco: texto(body.banco, 60),
@@ -507,9 +575,9 @@ export class RhService {
       if (estado === 'A_VENCER') aVencer += 1;
     }
     const fichaCompleta = Boolean(
-      cpf && pessoa.dataNascimento && pessoa.sexo && pessoa.nomeMae && pessoa.cep
+      cpf && pessoa.nome && pessoa.dataNascimento && pessoa.sexo && pessoa.nomeMae && pessoa.cep
       && pessoa.logradouro && pessoa.numero && pessoa.bairro && pessoa.cidade
-      && pessoa.uf && pessoa.dataAdmissao && pessoa.tipoContrato,
+      && pessoa.uf && pessoa.funcao && pessoa.dataAdmissao && pessoa.tipoContrato,
     );
     return {
       id: pessoa.id,
@@ -646,6 +714,17 @@ export class RhService {
   }
 }
 
+function mimeDaFicha(file: Express.Multer.File) {
+  const nome = (file.originalname || '').toLowerCase();
+  if (file.mimetype && file.mimetype !== 'application/octet-stream') return file.mimetype;
+  if (nome.endsWith('.pdf')) return 'application/pdf';
+  if (nome.endsWith('.png')) return 'image/png';
+  if (nome.endsWith('.webp')) return 'image/webp';
+  if (nome.endsWith('.gif')) return 'image/gif';
+  if (nome.endsWith('.heic') || nome.endsWith('.heif')) return 'image/heic';
+  return 'image/jpeg';
+}
+
 function somenteAtivo(body: FichaBody) {
   return Object.keys(body).every((chave) => chave === 'ativo');
 }
@@ -744,6 +823,12 @@ function dataObrigatoria(valor: unknown, campo: string) {
   const data = new Date(`${valor}T12:00:00.000-03:00`);
   if (Number.isNaN(data.getTime())) throw new BadRequestException(`Informe ${campo}.`);
   return data;
+}
+
+function dataOpcional(valor: unknown, campo: string) {
+  const limpo = String(valor ?? '').trim();
+  if (!limpo) return null;
+  return dataObrigatoria(valor, campo);
 }
 
 function isoDe(valor?: Date | null) {

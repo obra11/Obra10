@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams } from 'react-router-dom';
-import { GraduationCap, HardHat, Loader2, Plus, ShieldCheck } from 'lucide-react';
+import { Camera, FileDown, GraduationCap, HardHat, Loader2, Mail, MessageCircle, Plus, Printer, ShieldCheck, Upload } from 'lucide-react';
 import api from '../../services/api';
-import { FichaFuncionario, fichaDe, fichaVazia, pendenciaFicha, type FichaValores } from './FichaFuncionario';
+import { FichaFuncionario, fichaDe, fichaVazia, mesclarFicha, pendenciaFicha, type FichaValores } from './FichaFuncionario';
 
 type ContagemTreino = { admissionais: number; recorrentes: number; vencidos: number; aVencer: number };
 type Funcionario = {
@@ -30,8 +30,9 @@ type Entrega = {
   situacao?: Situacao;
   createdAt: string;
   insumo: { nome: string; unidade?: string | null };
-  funcionario?: { nome: string; funcao: string } | null;
+  funcionario?: { nome: string; funcao: string; telefone?: string | null; email?: string | null } | null;
   temAssinatura?: boolean;
+  local?: string;
 };
 type TermoEpi = Entrega & { assinatura?: string | null };
 type Treinamento = {
@@ -180,6 +181,30 @@ function quando(valor?: string | null) {
   return data.toLocaleDateString('pt-BR');
 }
 
+function textoTermoEpi(item: TermoEpi) {
+  return (
+    `${item.funcionario?.nome || 'Funcionário'} recebeu ${Number(item.quantidade)} ${item.insumo.unidade || 'un'} de ${item.insumo.nome}` +
+    `${item.dataRecebimento ? ` em ${quando(item.dataRecebimento)}` : ''}` +
+    `${item.validadeEpi ? `, com validade até ${quando(item.validadeEpi)}` : ''}` +
+    `${item.ca ? `, CA ${item.ca}` : ''}.`
+  );
+}
+
+function abrirWhatsapp(telefone: string, texto: string) {
+  const digitos = telefone.replace(/\D/g, '');
+  if (digitos.length < 10) return false;
+  const numero = digitos.startsWith('55') || digitos.length > 11 ? digitos : `55${digitos}`;
+  window.open(`https://wa.me/${numero}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener,noreferrer');
+  return true;
+}
+
+function abrirEmail(email: string, assunto: string, texto: string) {
+  const destino = email.trim();
+  if (!destino.includes('@')) return false;
+  window.location.href = `mailto:${encodeURIComponent(destino)}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(texto)}`;
+  return true;
+}
+
 function msg(err: unknown, fallback: string) {
   const corpo = err && typeof err === 'object' && 'response' in err
     ? (err as { response?: { data?: { message?: unknown } } }).response?.data?.message
@@ -228,10 +253,15 @@ export const RhPage: React.FC = () => {
   const [termoAberto, setTermoAberto] = useState<'epi' | 'treino' | null>(null);
   const [termoEpi, setTermoEpi] = useState<TermoEpi | null>(null);
   const [termoTreino, setTermoTreino] = useState<TermoTreino | null>(null);
+  const [destinoWhats, setDestinoWhats] = useState('');
+  const [destinoEmail, setDestinoEmail] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [enviando, setEnviando] = useState(false);
+  const [lendoFicha, setLendoFicha] = useState(false);
   const [erro, setErro] = useState('');
   const [aviso, setAviso] = useState('');
+  const cameraFichaRef = useRef<HTMLInputElement>(null);
+  const arquivoFichaRef = useRef<HTMLInputElement>(null);
 
   const carregar = useCallback(async () => {
     if (!obraId) return;
@@ -273,6 +303,27 @@ export const RhPage: React.FC = () => {
   useEffect(() => {
     carregar().catch(() => {});
   }, [carregar]);
+
+  const lerFotoFicha = async (file?: File) => {
+    if (!file || !obraId) return;
+    setLendoFicha(true);
+    setErro('');
+    try {
+      const fd = new FormData();
+      fd.append('files', file);
+      fd.append('obraId', obraId);
+      const res = await api.post('/rh/funcionarios/ler-ficha', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000,
+      });
+      setFicha((atual) => mesclarFicha(atual, res.data?.ficha));
+      setAviso(res.data?.aviso || 'A Luna preencheu o que conseguiu ler. Confira antes de salvar.');
+    } catch (err) {
+      setErro(msg(err, 'Não foi possível ler a foto da ficha.'));
+    } finally {
+      setLendoFicha(false);
+    }
+  };
 
   const abrirFicha = async (id?: string) => {
     setErro('');
@@ -362,7 +413,7 @@ export const RhPage: React.FC = () => {
     setEnviando(true);
     setErro('');
     try {
-      await api.post('/rh/entregas', {
+      const res = await api.post('/rh/entregas', {
         obraId,
         funcionarioId,
         insumoId,
@@ -372,13 +423,14 @@ export const RhPage: React.FC = () => {
         ca: ca.trim() || undefined,
         assinatura,
       });
-      setAviso('Recebimento assinado. O saldo do EPI baixou.');
+      setAviso('Recebimento assinado. Agora você pode gerar o PDF, imprimir ou enviar o termo.');
       setQuantidade('1');
       setValidadeEpi('');
       setCa('');
       setAssinatura(null);
       setTermoAberto(null);
       await carregar();
+      if (res.data?.id) await verTermoEpi(res.data.id);
     } catch (err) {
       setErro(msg(err, 'Não foi possível registrar a entrega.'));
     } finally {
@@ -458,8 +510,79 @@ export const RhPage: React.FC = () => {
     try {
       const res = await api.get(`/rh/entregas/${id}`);
       setTermoEpi(res.data);
+      setDestinoWhats(res.data?.funcionario?.telefone || '');
+      setDestinoEmail(res.data?.funcionario?.email || '');
     } catch (err) {
       setErro(msg(err, 'Não foi possível abrir o termo.'));
+    }
+  };
+
+  const pdfDoTermo = async (id: string) => {
+    const res = await api.get(`/rh/entregas/${id}/pdf`, { responseType: 'blob' });
+    return new Blob([res.data], { type: 'application/pdf' });
+  };
+
+  const baixarTermoPdf = async (item: TermoEpi) => {
+    setErro('');
+    try {
+      const blob = await pdfDoTermo(item.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `termo-epi-${(item.funcionario?.nome || 'funcionario').replace(/\s+/g, '-').toLowerCase()}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+      return blob;
+    } catch (err) {
+      setErro(msg(err, 'Não foi possível gerar o PDF do termo.'));
+      return null;
+    }
+  };
+
+  const imprimirTermoPdf = async (item: TermoEpi) => {
+    setErro('');
+    try {
+      const blob = await pdfDoTermo(item.id);
+      const url = URL.createObjectURL(blob);
+      const janela = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!janela) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'termo-epi.pdf';
+        link.click();
+      } else {
+        janela.addEventListener('load', () => janela.print());
+      }
+    } catch (err) {
+      setErro(msg(err, 'Não foi possível abrir o PDF para imprimir.'));
+    }
+  };
+
+  const enviarTermoWhats = async (item: TermoEpi) => {
+    const blob = await baixarTermoPdf(item);
+    if (!blob) return;
+    const arquivo = new File([blob], 'termo-epi.pdf', { type: 'application/pdf' });
+    const texto = `Termo de recebimento de EPI\n\n${textoTermoEpi(item)}\n\nO PDF do termo foi baixado neste aparelho para anexar.`;
+    if (typeof navigator.canShare === 'function') {
+      try {
+        if (navigator.canShare({ files: [arquivo] })) {
+          await navigator.share({ title: 'Termo de EPI', text: textoTermoEpi(item), files: [arquivo] });
+          return;
+        }
+      } catch {
+        /* cai no WhatsApp */
+      }
+    }
+    if (!abrirWhatsapp(destinoWhats, texto)) {
+      setErro('Informe o WhatsApp com DDD para enviar o termo.');
+    }
+  };
+
+  const enviarTermoEmail = async (item: TermoEpi) => {
+    const blob = await baixarTermoPdf(item);
+    if (!blob) return;
+    if (!abrirEmail(destinoEmail, 'Termo de recebimento de EPI', `${textoTermoEpi(item)}\n\nO PDF do termo foi baixado neste aparelho para anexar no e-mail.`)) {
+      setErro('Informe um e-mail para enviar o termo.');
     }
   };
 
@@ -498,7 +621,7 @@ export const RhPage: React.FC = () => {
           <div>
             <h1 className="text-2xl font-extrabold text-gray-900">Funcionários</h1>
             <p className="text-sm text-gray-500 mt-1">
-              Ficha de registro, entrega de EPI com validade e treinamentos de entrada e reciclagem.
+              Ficha de cadastro (nome completo e CPF). Entrega de EPI com termo assinado, PDF e envio.
             </p>
           </div>
           <button type="button" onClick={() => void abrirFicha()} className="hidden sm:inline-flex items-center justify-center gap-2 bg-lunardeli-red text-white font-bold rounded-xl px-4 py-3">
@@ -536,9 +659,9 @@ export const RhPage: React.FC = () => {
                   <button type="button" onClick={() => void abrirFicha(pessoa.id)} className="min-w-0 text-left">
                     <p className={`font-bold truncate ${pessoa.ativo ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{pessoa.nome}</p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {pessoa.funcao}
-                      {pessoa.cpfMascarado ? ` · ${pessoa.cpfMascarado}` : ''}
-                      {pessoa.cidade ? ` · ${pessoa.cidade}${pessoa.uf ? `/${pessoa.uf}` : ''}` : ''}
+                      {[pessoa.funcao, pessoa.cpfMascarado, pessoa.cidade ? `${pessoa.cidade}${pessoa.uf ? `/${pessoa.uf}` : ''}` : '']
+                        .filter(Boolean)
+                        .join(' · ') || 'Só cadastro inicial'}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
                       {pessoa.dataAdmissao ? `Admissão ${quando(pessoa.dataAdmissao)}` : 'Sem data de admissão'}
@@ -567,11 +690,11 @@ export const RhPage: React.FC = () => {
               <ShieldCheck size={18} className="text-lunardeli-red" />
               <h2 className="font-extrabold text-gray-900">Entregar EPI</h2>
             </div>
-            <p className="text-sm text-gray-500">Quem recebe assina o termo. A validade diz até quando aquele equipamento pode ser usado, e o saldo baixa no estoque.</p>
+            <p className="text-sm text-gray-500">Quem recebe assina o termo. Depois dá para gerar PDF, imprimir ou enviar por WhatsApp e e-mail.</p>
             <select className={entrada} value={funcionarioId} onChange={(e) => setFuncionarioId(e.target.value)} aria-label="Funcionário">
               <option value="">Quem recebeu</option>
               {ativos.map((pessoa) => (
-                <option key={pessoa.id} value={pessoa.id}>{pessoa.nome} · {pessoa.funcao}</option>
+                <option key={pessoa.id} value={pessoa.id}>{pessoa.funcao ? `${pessoa.nome} · ${pessoa.funcao}` : pessoa.nome}</option>
               ))}
             </select>
             <select className={entrada} value={insumoId} onChange={(e) => setInsumoId(e.target.value)} aria-label="EPI">
@@ -655,7 +778,7 @@ export const RhPage: React.FC = () => {
             <select className={entrada} value={treinoFuncionarioId} onChange={(e) => setTreinoFuncionarioId(e.target.value)} aria-label="Funcionário do treinamento">
               <option value="">Quem participou</option>
               {ativos.map((pessoa) => (
-                <option key={pessoa.id} value={pessoa.id}>{pessoa.nome} · {pessoa.funcao}</option>
+                <option key={pessoa.id} value={pessoa.id}>{pessoa.funcao ? `${pessoa.nome} · ${pessoa.funcao}` : pessoa.nome}</option>
               ))}
             </select>
             <div className="grid grid-cols-2 gap-2">
@@ -788,19 +911,76 @@ export const RhPage: React.FC = () => {
           <div className="bg-white w-full sm:max-w-2xl sm:rounded-2xl max-h-[100dvh] flex flex-col">
             <div className="px-4 pt-4 pb-3 border-b border-gray-100">
               <h2 className="text-xl font-extrabold text-gray-900">{fichaId ? 'Ficha do funcionário' : 'Incluir funcionário'}</h2>
-              <p className="text-sm text-gray-500 mt-1">Estes dados registram a pessoa na empresa: identidade, endereço, documentos e contrato.</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {fichaId
+                  ? 'Estes dados registram a pessoa na empresa: identidade, endereço, documentos e contrato.'
+                  : 'Pode fotografar a ficha de papel ou preencher na tela. Só nome completo e CPF são obrigatórios; o restante pode ficar para depois.'}
+              </p>
             </div>
             <div className="overflow-y-auto px-4 py-4 flex-1">
               {carregandoFicha ? (
                 <p className="py-10 text-sm text-gray-500 flex items-center justify-center gap-2"><Loader2 className="animate-spin" size={16} /> Abrindo ficha...</p>
               ) : (
-                <FichaFuncionario valores={ficha} onChange={setFicha} />
+                <>
+                  <div className="mb-5 rounded-2xl border border-gray-100 bg-gray-50 p-3 space-y-2">
+                    <p className="text-xs font-extrabold uppercase tracking-wider text-lunardeli-red">Foto da ficha existente</p>
+                    <p className="text-xs text-gray-500">
+                      Tire uma foto nítida da ficha de registro. Se tiver verso, mande outra depois — só entra o que ainda estiver em branco.
+                    </p>
+                    <input
+                      ref={cameraFichaRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void lerFotoFicha(file);
+                        e.target.value = '';
+                      }}
+                    />
+                    <input
+                      ref={arquivoFichaRef}
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void lerFotoFicha(file);
+                        e.target.value = '';
+                      }}
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={lendoFicha}
+                        onClick={() => cameraFichaRef.current?.click()}
+                        className="flex items-center justify-center gap-2 bg-lunardeli-red text-white font-bold rounded-xl py-3 text-sm disabled:opacity-60"
+                      >
+                        {lendoFicha ? <Loader2 className="animate-spin" size={16} /> : <Camera size={16} />}
+                        {lendoFicha ? 'Lendo...' : 'Tirar foto'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={lendoFicha}
+                        onClick={() => arquivoFichaRef.current?.click()}
+                        className="flex items-center justify-center gap-2 border border-gray-300 text-gray-900 font-bold rounded-xl py-3 text-sm disabled:opacity-60"
+                      >
+                        <Upload size={16} /> Galeria
+                      </button>
+                    </div>
+                  </div>
+                  {aviso && fichaAberta && (
+                    <p className="mb-4 text-sm font-bold text-emerald-800 bg-emerald-50 rounded-xl px-3 py-2">{aviso}</p>
+                  )}
+                  <FichaFuncionario valores={ficha} onChange={setFicha} />
+                </>
               )}
               {erro && <p className="mt-4 text-sm font-bold text-red-700 bg-red-50 rounded-xl px-3 py-2">{erro}</p>}
             </div>
             <div className="px-4 py-3 border-t border-gray-100 grid grid-cols-2 gap-2">
               <button type="button" onClick={() => { setFichaAberta(false); setErro(''); }} className="border rounded-xl py-3 text-sm font-bold text-gray-700">Cancelar</button>
-              <button type="button" disabled={enviando || carregandoFicha} onClick={() => void salvarFicha()} className="bg-lunardeli-red text-white rounded-xl py-3 text-sm font-bold disabled:opacity-50">
+              <button type="button" disabled={enviando || carregandoFicha || lendoFicha} onClick={() => void salvarFicha()} className="bg-lunardeli-red text-white rounded-xl py-3 text-sm font-bold disabled:opacity-50">
                 {enviando ? 'Salvando...' : 'Salvar ficha'}
               </button>
             </div>
@@ -867,7 +1047,30 @@ export const RhPage: React.FC = () => {
             </p>
             <Selo situacao={termoEpi.situacao} />
             {termoEpi.assinatura && <img src={termoEpi.assinatura} alt="Assinatura de quem recebeu" className="w-full rounded-xl border border-gray-200 bg-white" />}
-            <button type="button" onClick={() => setTermoEpi(null)} className="w-full border rounded-xl py-3 text-sm font-bold text-gray-700">Fechar</button>
+            {erro && termoEpi && <p className="text-sm font-bold text-red-700">{erro}</p>}
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => void baixarTermoPdf(termoEpi)} className="flex items-center justify-center gap-2 border rounded-xl py-3 text-sm font-bold text-gray-800">
+                <FileDown size={16} /> PDF
+              </button>
+              <button type="button" onClick={() => void imprimirTermoPdf(termoEpi)} className="flex items-center justify-center gap-2 border rounded-xl py-3 text-sm font-bold text-gray-800">
+                <Printer size={16} /> Imprimir
+              </button>
+            </div>
+            <label className="block space-y-1">
+              <span className="text-xs font-bold text-gray-600">WhatsApp</span>
+              <input className={entrada} inputMode="tel" placeholder="(11) 90000-0000" value={destinoWhats} onChange={(e) => setDestinoWhats(e.target.value)} />
+            </label>
+            <button type="button" onClick={() => void enviarTermoWhats(termoEpi)} className="w-full flex items-center justify-center gap-2 bg-lunardeli-red text-white font-bold rounded-xl py-3 text-sm">
+              <MessageCircle size={16} /> Enviar WhatsApp
+            </button>
+            <label className="block space-y-1">
+              <span className="text-xs font-bold text-gray-600">E-mail</span>
+              <input className={entrada} type="email" placeholder="email@empresa.com" value={destinoEmail} onChange={(e) => setDestinoEmail(e.target.value)} />
+            </label>
+            <button type="button" onClick={() => void enviarTermoEmail(termoEpi)} className="w-full flex items-center justify-center gap-2 border border-gray-300 text-gray-900 font-bold rounded-xl py-3 text-sm">
+              <Mail size={16} /> Enviar e-mail
+            </button>
+            <button type="button" onClick={() => { setTermoEpi(null); setErro(''); }} className="w-full border rounded-xl py-3 text-sm font-bold text-gray-700">Fechar</button>
           </div>
         </div>,
         document.body,
