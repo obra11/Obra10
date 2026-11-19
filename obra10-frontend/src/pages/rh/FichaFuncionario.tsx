@@ -398,13 +398,14 @@ export function FichaFuncionario({
 
       <Secao titulo="Contrato" texto="Pode ficar em branco. Completa o vínculo quando tiver o dado.">
         {obras && obras.length > 0 && (
-          <Campo label="Lotado na obra" className="sm:col-span-2">
+          <Campo label="Obra atual" className="sm:col-span-2">
             <select className={campo} value={valores.obraId} onChange={(e) => set('obraId', e.target.value)}>
               <option value="">RH da empresa — sem obra ainda</option>
               {obras.map((obra) => (
                 <option key={obra.id} value={obra.id}>{obra.nome}</option>
               ))}
             </select>
+            <p className="text-[11px] text-gray-500 mt-1">Para transferir depois, use a alocação no dossiê do funcionário.</p>
           </Campo>
         )}
         <Campo label="Função">

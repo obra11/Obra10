@@ -23,6 +23,7 @@ import { lerVisaoLuna } from '../ai/luna-visao';
 import { arquivoEntradaValido, gravarArquivoEntrada, imagemParaVisao } from '../estoque/estoque-storage';
 import { EstoqueService } from '../estoque/estoque.service';
 import { FICHA_SYSTEM, jsonDaLuna, parsearFichaExtraida, pedidoFicha } from './rh-ficha-leitura';
+import { gerarPdfDossie, type DossiePdfItem } from './rh-dossie-pdf';
 import { gerarPdfTermoEpi } from './rh-termo-pdf';
 
 const UFS = [
@@ -141,7 +142,7 @@ export class RhService {
   async listar(empresaId: string, userId: string, obraId?: string) {
     await this.assertAcesso(empresaId, userId, obraId);
     const pessoas = await this.prisma.funcionario.findMany({
-      where: { empresaId, deletedAt: null },
+      where: { empresaId, deletedAt: null, ...(obraId ? { obraId } : {}) },
       include: {
         obra: { select: { id: true, nome: true } },
         treinamentos: {
@@ -162,6 +163,134 @@ export class RhService {
     const pessoa = await this.buscar(empresaId, id);
     await this.assertPodeFuncionario(empresaId, userId, pessoa.obraId);
     return this.ficha(pessoa);
+  }
+
+  async dossie(empresaId: string, userId: string, id: string) {
+    const pessoa = await this.buscar(empresaId, id);
+    await this.assertPodeFuncionario(empresaId, userId, pessoa.obraId);
+    const [obra, treinamentos, exames, epis, alocacoes] = await Promise.all([
+      pessoa.obraId
+        ? this.prisma.obra.findFirst({
+            where: { id: pessoa.obraId, empresaId, deletedAt: null },
+            select: { nome: true },
+          })
+        : Promise.resolve(null),
+      this.prisma.treinamentoFuncionario.findMany({
+        where: { empresaId, funcionarioId: id, deletedAt: null },
+        orderBy: [{ dataRealizacao: 'desc' }, { createdAt: 'desc' }],
+      }),
+      this.prisma.exameFuncionario.findMany({
+        where: { empresaId, funcionarioId: id, deletedAt: null },
+        orderBy: [{ dataRealizacao: 'desc' }, { createdAt: 'desc' }],
+      }),
+      this.prisma.movimentoEstoque.findMany({
+        where: { empresaId, funcionarioId: id, tipo: 'SAIDA', insumo: { tipo: 'EPI' } },
+        include: {
+          insumo: { select: { nome: true, unidade: true } },
+          localOrigem: { select: { nome: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 80,
+      }),
+      this.prisma.alocacaoFuncionario.findMany({
+        where: { empresaId, funcionarioId: id, deletedAt: null },
+        include: { obra: { select: { nome: true } } },
+        orderBy: [{ dataInicio: 'desc' }, { createdAt: 'desc' }],
+      }),
+    ]);
+    const cadastro = this.ficha(pessoa);
+    return {
+      cadastro: {
+        ...cadastro,
+        ativo: pessoa.ativo,
+        obraNome: obra?.nome || null,
+      },
+      alocacoes: alocacoes.map((item) => ({
+        id: item.id,
+        obraId: item.obraId,
+        obraNome: item.obra.nome,
+        dataInicio: isoDe(item.dataInicio),
+        dataFim: isoDe(item.dataFim),
+        observacao: item.observacao,
+        atual: !item.dataFim,
+      })),
+      treinamentos: treinamentos.map((item) =>
+        this.treinamentoPublico({
+          ...item,
+          funcionario: { id: pessoa.id, nome: pessoa.nome, funcao: pessoa.funcao },
+        }),
+      ),
+      exames: exames.map((item) =>
+        this.examePublico({
+          ...item,
+          funcionario: { id: pessoa.id, nome: pessoa.nome, funcao: pessoa.funcao },
+        }),
+      ),
+      epis: epis.map((item) => {
+        const validade = isoDe(item.validadeEpi);
+        return {
+          id: item.id,
+          nome: item.insumo.nome,
+          unidade: item.insumo.unidade,
+          quantidade: Number(item.quantidade),
+          dataRecebimento: isoDe(item.dataRecebimento),
+          validadeEpi: validade,
+          ca: item.ca,
+          situacao: situacao(validade),
+          local: item.localOrigem?.nome || null,
+        };
+      }),
+    };
+  }
+
+  async relatorioPessoalPdf(empresaId: string, userId: string, idsBrutos: string[] | string | undefined) {
+    const ids = idsDoRelatorio(idsBrutos);
+    const pessoas: DossiePdfItem[] = [];
+    for (const id of ids) {
+      const dossie = await this.dossie(empresaId, userId, id);
+      const cad = dossie.cadastro;
+      const endereco = [cad.logradouro, cad.numero, cad.complemento, cad.bairro]
+        .filter(Boolean)
+        .join(', ');
+      pessoas.push({
+        nome: cad.nome,
+        funcao: cad.funcao,
+        ativo: cad.ativo !== false,
+        cpf: cad.cpf,
+        rg: [cad.rg, cad.rgOrgao, cad.rgUf].filter(Boolean).join(' '),
+        dataNascimento: cad.dataNascimento,
+        telefone: cad.telefone,
+        email: cad.email,
+        matricula: cad.matricula,
+        dataAdmissao: cad.dataAdmissao,
+        tipoContrato: cad.tipoContrato,
+        obraNome: cad.obraNome,
+        cidade: cad.cidade,
+        uf: cad.uf,
+        endereco,
+        alocacoes: dossie.alocacoes,
+        treinamentos: dossie.treinamentos,
+        exames: dossie.exames,
+        epis: dossie.epis.map((item) => ({
+          nome: item.nome,
+          quantidade: String(item.quantidade).replace('.', ','),
+          dataRecebimento: item.dataRecebimento,
+          validadeEpi: item.validadeEpi,
+          ca: item.ca,
+          situacao: item.situacao,
+        })),
+      });
+    }
+    const empresa = await this.prisma.empresa.findFirst({
+      where: { id: empresaId },
+      select: { nomeFantasia: true, razaoSocial: true, nomeCompleto: true, cnpj: true, cpfCnpj: true },
+    });
+    return gerarPdfDossie({
+      empresa: empresa?.nomeFantasia || empresa?.razaoSocial || empresa?.nomeCompleto || 'Obra 10',
+      documento: empresa?.cnpj || empresa?.cpfCnpj || undefined,
+      emitidoEm: emitidoEmSaoPaulo(),
+      pessoas,
+    });
   }
 
   async lerFicha(
@@ -225,6 +354,14 @@ export class RhService {
     const criada = await this.prisma.funcionario.create({
       data: { empresaId, obraId, ...ficha },
     });
+    if (obraId) {
+      await this.registrarAlocacao(
+        empresaId,
+        criada.id,
+        obraId,
+        ficha.dataAdmissao || dataObrigatoria(hojeIso(), 'a data de alocação'),
+      );
+    }
     return this.ficha(criada);
   }
 
@@ -256,7 +393,38 @@ export class RhService {
         ...(typeof body.ativo === 'boolean' ? { ativo: body.ativo } : {}),
       },
     });
+    if (obraId !== atual.obraId) {
+      await this.registrarAlocacao(
+        empresaId,
+        atual.id,
+        obraId,
+        dataObrigatoria(hojeIso(), 'a data de alocação'),
+      );
+    }
     return this.ficha(salva);
+  }
+
+  async alocar(
+    empresaId: string,
+    userId: string,
+    id: string,
+    body: { obraId?: string | null; dataInicio?: string; observacao?: string },
+  ) {
+    const atual = await this.buscar(empresaId, id);
+    await this.assertPodeRhEmpresa(empresaId, userId);
+    const obraId = await this.resolverObraId(empresaId, body.obraId);
+    if (obraId === atual.obraId) {
+      throw new BadRequestException(
+        obraId ? 'Este funcionário já está alocado nesta obra.' : 'Este funcionário já está sem obra.',
+      );
+    }
+    const dataInicio = dataObrigatoria(body.dataInicio || hojeIso(), 'a data da alocação');
+    await this.prisma.funcionario.update({
+      where: { id: atual.id },
+      data: { obraId },
+    });
+    await this.registrarAlocacao(empresaId, atual.id, obraId, dataInicio, body.observacao);
+    return this.dossie(empresaId, userId, atual.id);
   }
 
   async entregas(empresaId: string, userId: string, obraId?: string) {
@@ -573,6 +741,36 @@ export class RhService {
     });
     if (!pessoa) throw new NotFoundException('Funcionário não encontrado.');
     return pessoa;
+  }
+
+  private async registrarAlocacao(
+    empresaId: string,
+    funcionarioId: string,
+    obraId: string | null,
+    dataInicio: Date,
+    observacao?: string | null,
+  ) {
+    const aberta = await this.prisma.alocacaoFuncionario.findFirst({
+      where: { empresaId, funcionarioId, dataFim: null, deletedAt: null },
+      orderBy: { dataInicio: 'desc' },
+    });
+    if (aberta && aberta.obraId === obraId) return;
+    if (aberta) {
+      await this.prisma.alocacaoFuncionario.update({
+        where: { id: aberta.id },
+        data: { dataFim: dataInicio < aberta.dataInicio ? aberta.dataInicio : dataInicio },
+      });
+    }
+    if (!obraId) return;
+    await this.prisma.alocacaoFuncionario.create({
+      data: {
+        empresaId,
+        funcionarioId,
+        obraId,
+        dataInicio,
+        observacao: String(observacao || '').trim() || null,
+      },
+    });
   }
 
   private async assertAcesso(empresaId: string, userId: string, obraId?: string | null) {
@@ -1164,4 +1362,29 @@ function assinaturaPng(valor?: string) {
     throw new BadRequestException('A assinatura não pôde ser gravada. Assine de novo.');
   }
   return valor;
+}
+
+function idsDoRelatorio(idsBrutos: string[] | string | undefined) {
+  const lista = Array.isArray(idsBrutos)
+    ? idsBrutos
+    : String(idsBrutos || '')
+        .split(',')
+        .map((id) => id.trim());
+  const ids = [...new Set(lista.filter(Boolean))];
+  if (!ids.length) throw new BadRequestException('Escolha pelo menos um funcionário.');
+  if (ids.length > 25) throw new BadRequestException('Selecione no máximo 25 funcionários por relatório.');
+  return ids;
+}
+
+function emitidoEmSaoPaulo() {
+  const partes = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).formatToParts(new Date());
+  const pegar = (tipo: string) => partes.find((parte) => parte.type === tipo)?.value || '';
+  return `${pegar('day')}/${pegar('month')}/${pegar('year')} ${pegar('hour')}:${pegar('minute')}`;
 }

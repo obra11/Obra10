@@ -58,6 +58,7 @@ model Empresa {
   saldosEstoque       SaldoEstoque[]
   movimentosEstoque   MovimentoEstoque[]
   funcionarios        Funcionario[]
+  alocacoes           AlocacaoFuncionario[]
   treinamentos        TreinamentoFuncionario[]
   exames              ExameFuncionario[]
   agendasManutencao   AgendaManutencao[]
@@ -86,6 +87,7 @@ model Obra {
   userObraRole UserObraRole[]
   locaisEstoque LocalEstoque[]
   funcionarios  Funcionario[]
+  alocacoes     AlocacaoFuncionario[]
   treinamentos  TreinamentoFuncionario[]
   agendasManutencao AgendaManutencao[]
   fichasManutencao  FichaManutencao[]
@@ -1030,6 +1032,7 @@ model Funcionario {
 
   empresa      Empresa                  @relation(fields: [empresaId], references: [id])
   obra         Obra?                    @relation(fields: [obraId], references: [id])
+  alocacoes    AlocacaoFuncionario[]
   movimentos   MovimentoEstoque[]
   treinamentos TreinamentoFuncionario[]
   exames       ExameFuncionario[]
@@ -1038,6 +1041,27 @@ model Funcionario {
   @@unique([empresaId, pisHash])
   @@index([empresaId, obraId])
   @@map("funcionarios")
+}
+
+model AlocacaoFuncionario {
+  id            String    @id @default(uuid())
+  empresaId     String    @map("empresa_id")
+  funcionarioId String    @map("funcionario_id")
+  obraId        String    @map("obra_id")
+  dataInicio    DateTime  @map("data_inicio") @db.Date
+  dataFim       DateTime? @map("data_fim") @db.Date
+  observacao    String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  empresa     Empresa    @relation(fields: [empresaId], references: [id])
+  funcionario Funcionario @relation(fields: [funcionarioId], references: [id])
+  obra        Obra       @relation(fields: [obraId], references: [id])
+
+  @@index([empresaId, funcionarioId])
+  @@index([empresaId, obraId])
+  @@map("alocacoes_funcionario")
 }
 
 model TreinamentoFuncionario {

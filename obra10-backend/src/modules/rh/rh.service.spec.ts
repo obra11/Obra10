@@ -24,6 +24,12 @@ function makeSvc(extraPrisma: Record<string, unknown> = {}) {
     usuario: { findFirst: jest.fn().mockResolvedValue({ perfilGlobal: 'GESTOR', capabilities: {} }) },
     obra: { findFirst: jest.fn().mockImplementation(async ({ where }: any) => (where?.id ? { id: where.id } : null)) },
     funcionario: { findFirst: jest.fn().mockResolvedValue(null) },
+    alocacaoFuncionario: {
+      findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn().mockResolvedValue({ id: 'a1' }),
+      update: jest.fn().mockResolvedValue({}),
+    },
     ...extraPrisma,
   };
   const crypto = {
@@ -295,5 +301,102 @@ describe('RhService.registrarTreinamento', () => {
     );
     expect(treino.temCertificado).toBe(true);
     gravar.mockRestore();
+  });
+});
+
+describe('RhService.dossie', () => {
+  it('junta cadastro, treinamentos e exames do funcionário', async () => {
+    const validade = new Date('2027-01-10T12:00:00.000Z');
+    const { rh, estoque } = makeSvc({
+      funcionario: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'f1',
+          empresaId: 'emp-1',
+          obraId: null,
+          nome: 'João da Silva',
+          funcao: 'Pedreiro',
+          ativo: true,
+          cpf: null,
+          pis: null,
+          salario: null,
+        }),
+      },
+      treinamentoFuncionario: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 't1',
+            tipo: 'RECORRENTE',
+            nome: 'NR-18',
+            dataRealizacao: new Date('2026-01-10T12:00:00.000Z'),
+            cargaHoraria: null,
+            validade,
+            instrutor: null,
+            assinatura: null,
+            createdAt: validade,
+          },
+        ]),
+      },
+      exameFuncionario: { findMany: jest.fn().mockResolvedValue([]) },
+      movimentoEstoque: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    const dossie = await rh.dossie('emp-1', 'user-1', 'f1');
+    expect(estoque.listarLocais).not.toHaveBeenCalled();
+    expect(dossie.cadastro.nome).toBe('João da Silva');
+    expect(dossie.treinamentos).toHaveLength(1);
+    expect(dossie.treinamentos[0].nome).toBe('NR-18');
+    expect(dossie.exames).toHaveLength(0);
+    expect(dossie.epis).toHaveLength(0);
+    expect(dossie.alocacoes).toHaveLength(0);
+  });
+
+  it('transfere o funcionário para outra obra e registra o histórico', async () => {
+    const updateAloc = jest.fn().mockResolvedValue({});
+    const createAloc = jest.fn().mockResolvedValue({ id: 'a2' });
+    const pessoa = {
+      id: 'f1',
+      empresaId: 'emp-1',
+      obraId: 'obra-1',
+      nome: 'João da Silva',
+      funcao: 'Pedreiro',
+      ativo: true,
+      cpf: null,
+      pis: null,
+      salario: null,
+    };
+    const { rh } = makeSvc({
+      funcionario: {
+        findFirst: jest.fn().mockResolvedValue(pessoa),
+        update: jest.fn().mockResolvedValue({ ...pessoa, obraId: 'obra-2' }),
+      },
+      alocacaoFuncionario: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'a1',
+          obraId: 'obra-1',
+          dataInicio: new Date('2026-01-10T12:00:00.000Z'),
+        }),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: createAloc,
+        update: updateAloc,
+      },
+      treinamentoFuncionario: { findMany: jest.fn().mockResolvedValue([]) },
+      exameFuncionario: { findMany: jest.fn().mockResolvedValue([]) },
+      movimentoEstoque: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    await rh.alocar('emp-1', 'user-1', 'f1', { obraId: 'obra-2', dataInicio: '2026-11-19' });
+    expect(updateAloc).toHaveBeenCalled();
+    expect(createAloc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          empresaId: 'emp-1',
+          funcionarioId: 'f1',
+          obraId: 'obra-2',
+        }),
+      }),
+    );
+  });
+
+  it('recusa relatório sem funcionário', async () => {
+    const { rh } = makeSvc();
+    await expect(rh.relatorioPessoalPdf('emp-1', 'user-1', '')).rejects.toThrow(/pelo menos um/i);
   });
 });

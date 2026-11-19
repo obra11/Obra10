@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Activity, AlertTriangle, ArrowLeft, Camera, FileDown, FileText, GraduationCap, HardHat, Loader2, Mail, MessageCircle, Plus, Printer, ShieldCheck, Upload, X } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowLeft, Camera, FileDown, FileText, GraduationCap, HardHat, Loader2, Mail, MapPin, MessageCircle, Plus, Printer, ShieldCheck, Upload, X } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { getImageUrl } from '../../utils/image';
@@ -69,6 +69,33 @@ type Exame = {
   resultado?: string | null;
   clinica?: string | null;
   funcionario?: { id: string; nome: string; funcao: string };
+};
+type EpiDossie = {
+  id: string;
+  nome: string;
+  unidade?: string | null;
+  quantidade: number;
+  dataRecebimento?: string | null;
+  validadeEpi?: string | null;
+  ca?: string | null;
+  situacao?: Situacao;
+  local?: string | null;
+};
+type Alocacao = {
+  id: string;
+  obraId: string;
+  obraNome: string;
+  dataInicio?: string | null;
+  dataFim?: string | null;
+  observacao?: string | null;
+  atual?: boolean;
+};
+type Dossie = {
+  cadastro: FichaValores & { id?: string; ativo?: boolean; obraNome?: string | null };
+  alocacoes: Alocacao[];
+  treinamentos: Treinamento[];
+  exames: Exame[];
+  epis: EpiDossie[];
 };
 type AvisoItem = (Treinamento | Exame) & { especie: 'TREINAMENTO' | 'EXAME' };
 type Avisos = {
@@ -268,11 +295,102 @@ function msg(err: unknown, fallback: string) {
   return typeof corpo === 'string' && corpo.trim() ? corpo : fallback;
 }
 
+async function msgBlob(err: unknown, fallback: string) {
+  const data = err && typeof err === 'object' && 'response' in err
+    ? (err as { response?: { data?: unknown } }).response?.data
+    : undefined;
+  if (data instanceof Blob) {
+    try {
+      const json = JSON.parse(await data.text()) as { message?: unknown };
+      if (typeof json.message === 'string' && json.message.trim()) return json.message;
+    } catch {
+      /* não era JSON */
+    }
+  }
+  if (err instanceof Error && err.message && err.message !== 'Request failed with status code 400') return err.message;
+  return msg(err, fallback);
+}
+
 function Selo({ situacao }: { situacao?: Situacao }) {
   if (situacao === 'VENCIDO') return <span className="text-[11px] font-bold uppercase text-red-700 bg-red-50 rounded-full px-2 py-0.5">Vencido</span>;
   if (situacao === 'A_VENCER') return <span className="text-[11px] font-bold uppercase text-amber-800 bg-amber-50 rounded-full px-2 py-0.5">Vence em breve</span>;
   if (situacao === 'VIGENTE') return <span className="text-[11px] font-bold uppercase text-emerald-800 bg-emerald-50 rounded-full px-2 py-0.5">Vigente</span>;
   return null;
+}
+
+const SEXOS: Record<string, string> = {
+  FEMININO: 'Feminino',
+  MASCULINO: 'Masculino',
+  NAO_INFORMADO: 'Não informado',
+};
+const ESTADOS: Record<string, string> = {
+  SOLTEIRO: 'Solteiro',
+  CASADO: 'Casado',
+  UNIAO_ESTAVEL: 'União estável',
+  DIVORCIADO: 'Divorciado',
+  SEPARADO: 'Separado',
+  VIUVO: 'Viúvo',
+};
+const ESCOLAS: Record<string, string> = {
+  FUNDAMENTAL_INCOMPLETO: 'Fundamental incompleto',
+  FUNDAMENTAL: 'Fundamental',
+  MEDIO_INCOMPLETO: 'Médio incompleto',
+  MEDIO: 'Médio',
+  TECNICO: 'Técnico',
+  SUPERIOR_INCOMPLETO: 'Superior incompleto',
+  SUPERIOR: 'Superior',
+  POS_GRADUACAO: 'Pós-graduação',
+};
+const CONTAS: Record<string, string> = {
+  CORRENTE: 'Corrente',
+  POUPANCA: 'Poupança',
+  SALARIO: 'Salário',
+};
+
+function Campo({ rotulo, valor }: { rotulo: string; valor?: string | number | null }) {
+  if (valor === null || valor === undefined || valor === '') return null;
+  return (
+    <p className="text-sm text-gray-800">
+      <span className="text-gray-500">{rotulo}: </span>
+      {valor}
+    </p>
+  );
+}
+
+function AcoesEnvio({
+  gerando,
+  onPdf,
+  onImprimir,
+  onWhats,
+  onEmail,
+}: {
+  gerando?: boolean;
+  onPdf: () => void;
+  onImprimir: () => void;
+  onWhats: () => void;
+  onEmail: () => void;
+}) {
+  const btn = 'flex flex-col items-center justify-center gap-1 rounded-xl border border-gray-200 py-2.5 text-[11px] font-bold text-gray-800 disabled:opacity-50';
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      <button type="button" disabled={gerando} onClick={onPdf} className={btn}>
+        {gerando ? <Loader2 className="animate-spin" size={16} /> : <FileDown size={16} />}
+        PDF
+      </button>
+      <button type="button" disabled={gerando} onClick={onImprimir} className={btn}>
+        <Printer size={16} />
+        Imprimir
+      </button>
+      <button type="button" disabled={gerando} onClick={onWhats} className={`${btn} bg-lunardeli-red text-white border-lunardeli-red`}>
+        <MessageCircle size={16} />
+        WhatsApp
+      </button>
+      <button type="button" disabled={gerando} onClick={onEmail} className={btn} aria-label="Enviar por e-mail">
+        <Mail size={16} />
+        E-mail
+      </button>
+    </div>
+  );
 }
 
 const entrada = 'w-full border border-gray-200 rounded-xl p-3 text-sm bg-white';
@@ -340,6 +458,15 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
   const arquivoCertRef = useRef<HTMLInputElement>(null);
   const [certificado, setCertificado] = useState<File | null>(null);
   const [certificadoPreview, setCertificadoPreview] = useState<string | null>(null);
+  const [dossie, setDossie] = useState<Dossie | null>(null);
+  const [dossieId, setDossieId] = useState<string | null>(null);
+  const [carregandoDossie, setCarregandoDossie] = useState(false);
+  const [selecionados, setSelecionados] = useState<string[]>([]);
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
+  const [envioAberto, setEnvioAberto] = useState<null | 'whats' | 'email'>(null);
+  const [alocarObraId, setAlocarObraId] = useState('');
+  const [alocarData, setAlocarData] = useState(hoje);
+  const [alocando, setAlocando] = useState(false);
 
   const carregar = useCallback(async () => {
     if (!empresa && !obraId) return;
@@ -415,6 +542,190 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
     }
   };
 
+  const abrirDossie = async (id: string) => {
+    setErro('');
+    setDossieId(id);
+    setCarregandoDossie(true);
+    try {
+      const res = await api.get(`/rh/funcionarios/${id}/dossie`);
+      setDossie(res.data);
+      setDestinoWhats(res.data?.cadastro?.telefone || '');
+      setDestinoEmail(res.data?.cadastro?.email || '');
+      setAlocarObraId(res.data?.cadastro?.obraId || '');
+      setAlocarData(hoje());
+      setEnvioAberto(null);
+    } catch (err) {
+      setErro(msg(err, 'Não foi possível abrir o dossiê do funcionário.'));
+      setDossie(null);
+      setDossieId(null);
+    } finally {
+      setCarregandoDossie(false);
+    }
+  };
+
+  const fecharDossie = () => {
+    setDossie(null);
+    setDossieId(null);
+    setErro('');
+    setEnvioAberto(null);
+  };
+
+  const alocarFuncionario = async () => {
+    if (!dossieId) return;
+    setAlocando(true);
+    setErro('');
+    try {
+      const res = await api.post(`/rh/funcionarios/${dossieId}/alocacao`, {
+        obraId: alocarObraId || null,
+        dataInicio: alocarData || hoje(),
+      });
+      setDossie(res.data);
+      setAlocarObraId(res.data?.cadastro?.obraId || '');
+      await carregar();
+    } catch (err) {
+      setErro(msg(err, 'Não foi possível alocar o funcionário na obra.'));
+    } finally {
+      setAlocando(false);
+    }
+  };
+
+  const clicarWhatsRelatorio = (ids: string[]) => {
+    if (destinoWhats.replace(/\D/g, '').length >= 10 || typeof navigator.canShare === 'function') {
+      void enviarRelatorioWhats(ids);
+      return;
+    }
+    setEnvioAberto('whats');
+  };
+
+  const clicarEmailRelatorio = (ids: string[]) => {
+    if (destinoEmail.includes('@')) {
+      void enviarRelatorioEmail(ids);
+      return;
+    }
+    setEnvioAberto('email');
+  };
+
+  const slugNome = (nome?: string) =>
+    (nome || 'funcionario')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase() || 'funcionario';
+
+  const pdfRelatorio = async (ids: string[]) => {
+    const res = await api.get('/rh/relatorios/pessoal', {
+      params: { ids: ids.join(',') },
+      responseType: 'blob',
+      timeout: 90_000,
+    });
+    const tipo = String(res.headers?.['content-type'] || '');
+    if (tipo.includes('application/json')) {
+      const texto = res.data instanceof Blob ? await res.data.text() : String(res.data || '');
+      let mensagem = 'Não foi possível gerar o PDF do relatório.';
+      try {
+        const json = JSON.parse(texto) as { message?: string };
+        if (json.message) mensagem = json.message;
+      } catch {
+        /* blob inválido */
+      }
+      throw new Error(mensagem);
+    }
+    return new Blob([res.data], { type: 'application/pdf' });
+  };
+
+  const nomeDaPessoa = (id: string) =>
+    (dossieId === id ? dossie?.cadastro?.nome : undefined) ||
+    funcionarios.find((pessoa) => pessoa.id === id)?.nome;
+
+  const nomePdfRelatorio = (ids: string[]) => {
+    if (ids.length === 1) return `relatorio-pessoal-${slugNome(nomeDaPessoa(ids[0]))}.pdf`;
+    return 'relatorio-pessoal.pdf';
+  };
+
+  const baixarRelatorio = async (ids: string[]) => {
+    if (!ids.length) return null;
+    setGerandoRelatorio(true);
+    setErro('');
+    try {
+      const blob = await pdfRelatorio(ids);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = nomePdfRelatorio(ids);
+      link.click();
+      URL.revokeObjectURL(url);
+      return blob;
+    } catch (err) {
+      setErro(await msgBlob(err, 'Não foi possível gerar o PDF do relatório.'));
+      return null;
+    } finally {
+      setGerandoRelatorio(false);
+    }
+  };
+
+  const imprimirRelatorio = async (ids: string[]) => {
+    if (!ids.length) return;
+    setGerandoRelatorio(true);
+    setErro('');
+    try {
+      const blob = await pdfRelatorio(ids);
+      const url = URL.createObjectURL(blob);
+      const janela = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!janela) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = nomePdfRelatorio(ids);
+        link.click();
+      } else {
+        janela.addEventListener('load', () => janela.print());
+      }
+    } catch (err) {
+      setErro(await msgBlob(err, 'Não foi possível abrir o PDF para imprimir.'));
+    } finally {
+      setGerandoRelatorio(false);
+    }
+  };
+
+  const textoRelatorio = (ids: string[]) => {
+    const nomes = ids.map((id) => nomeDaPessoa(id) || 'funcionário').join(', ');
+    return ids.length === 1
+      ? `Segue o relatório de pessoal de ${nomes}, com cadastro, treinamentos, exames e EPIs.`
+      : `Segue o relatório de pessoal de ${ids.length} funcionários: ${nomes}.`;
+  };
+
+  const enviarRelatorioWhats = async (ids: string[]) => {
+    const blob = await baixarRelatorio(ids);
+    if (!blob) return;
+    const arquivo = new File([blob], nomePdfRelatorio(ids), { type: 'application/pdf' });
+    const texto = textoRelatorio(ids);
+    if (typeof navigator.canShare === 'function') {
+      try {
+        if (navigator.canShare({ files: [arquivo] })) {
+          await navigator.share({ title: 'Relatório de pessoal', text: texto, files: [arquivo] });
+          return;
+        }
+      } catch {
+        /* cai no WhatsApp */
+      }
+    }
+    if (!abrirWhatsapp(destinoWhats, `${texto}\n\nO PDF foi baixado neste aparelho para anexar no WhatsApp.`)) {
+      setErro('Informe o WhatsApp com DDD para enviar o relatório.');
+    }
+  };
+
+  const enviarRelatorioEmail = async (ids: string[]) => {
+    const blob = await baixarRelatorio(ids);
+    if (!blob) return;
+    if (!abrirEmail(destinoEmail, 'Relatório de pessoal', `${textoRelatorio(ids)}\n\nO PDF foi baixado neste aparelho para anexar no e-mail.`)) {
+      setErro('Informe um e-mail para enviar o relatório.');
+    }
+  };
+
+  const alternarSelecionado = (id: string) => {
+    setSelecionados((atual) => (atual.includes(id) ? atual.filter((item) => item !== id) : [...atual, id]));
+  };
+
   const abrirFicha = async (id?: string) => {
     setErro('');
     setAviso('');
@@ -449,6 +760,7 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
       setAviso(fichaId ? 'Ficha atualizada.' : 'Funcionário incluído.');
       setFichaAberta(false);
       await carregar();
+      if (dossieId) await abrirDossie(dossieId);
     } catch (err) {
       setErro(msg(err, 'Não foi possível salvar a ficha.'));
     } finally {
@@ -789,9 +1101,11 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
     return item.situacao === 'A_VENCER';
   });
   const fichas = empresa ? funcionarios : funcionarios.filter((pessoa) => pessoa.obraId === obraId);
+  const idsVisiveis = fichas.map((pessoa) => pessoa.id);
+  const todosSelecionados = idsVisiveis.length > 0 && idsVisiveis.every((id) => selecionados.includes(id));
   const abas = empresa
-    ? ([['avisos', 'Avisos'], ['pessoas', 'Fichas'], ['treinamentos', 'Treinamentos'], ['exames', 'Exames']] as const)
-    : ([['pessoas', 'Fichas'], ['epi', 'EPI'], ['treinamentos', 'Treinamentos']] as const);
+    ? ([['avisos', 'Avisos'], ['pessoas', 'Funcionários'], ['treinamentos', 'Treinamentos'], ['exames', 'Exames']] as const)
+    : ([['pessoas', 'Funcionários'], ['epi', 'EPI'], ['treinamentos', 'Treinamentos']] as const);
   const atraso = (avisos?.vencidos || 0) + (avisos?.aVencer || 0);
 
   return (
@@ -897,34 +1211,80 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
                 : 'Ninguém lotado nesta obra. Inclua aqui ou cadastre no RH da empresa.'}
             </p>
           ) : (
-            <ul className="divide-y divide-gray-100">
-              {fichas.map((pessoa) => (
-                <li key={pessoa.id} className="p-4 flex items-start justify-between gap-3">
-                  <button type="button" onClick={() => void abrirFicha(pessoa.id)} className="min-w-0 text-left">
-                    <p className={`font-bold truncate ${pessoa.ativo ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{pessoa.nome}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {[pessoa.funcao, pessoa.cpfMascarado, pessoa.obraNome || (empresa && !pessoa.obraId ? 'Sem obra' : ''), pessoa.cidade ? `${pessoa.cidade}${pessoa.uf ? `/${pessoa.uf}` : ''}` : '']
-                        .filter(Boolean)
-                        .join(' · ') || 'Só cadastro inicial'}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {pessoa.dataAdmissao ? `Admissão ${quando(pessoa.dataAdmissao)}` : 'Sem data de admissão'}
-                      {pessoa.tipoContrato ? ` · ${CONTRATOS[pessoa.tipoContrato] || pessoa.tipoContrato}` : ''}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {pessoa.fichaCompleta === false && <span className="text-[11px] font-bold uppercase text-amber-800 bg-amber-50 rounded-full px-2 py-0.5">Ficha incompleta</span>}
-                      {(pessoa.treinamentos?.vencidos || 0) > 0 && <span className="text-[11px] font-bold uppercase text-red-700 bg-red-50 rounded-full px-2 py-0.5">Treinamento vencido</span>}
-                      {(pessoa.treinamentos?.aVencer || 0) > 0 && <span className="text-[11px] font-bold uppercase text-amber-800 bg-amber-50 rounded-full px-2 py-0.5">Treinamento a vencer</span>}
-                      {(pessoa.exames?.vencidos || 0) > 0 && <span className="text-[11px] font-bold uppercase text-red-700 bg-red-50 rounded-full px-2 py-0.5">Exame vencido</span>}
-                      {(pessoa.exames?.aVencer || 0) > 0 && <span className="text-[11px] font-bold uppercase text-amber-800 bg-amber-50 rounded-full px-2 py-0.5">Exame a vencer</span>}
-                    </div>
-                  </button>
-                  <button type="button" onClick={() => void alternar(pessoa)} className="shrink-0 text-xs font-bold text-gray-700 border rounded-lg px-3 py-2">
-                    {pessoa.ativo ? 'Desativar' : 'Reativar'}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <>
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+                <label className="flex items-center gap-2 text-sm font-bold text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={todosSelecionados}
+                    onChange={() => setSelecionados(todosSelecionados ? [] : idsVisiveis)}
+                    aria-label="Selecionar todos os funcionários"
+                  />
+                  {selecionados.length ? `${selecionados.length} selecionado${selecionados.length === 1 ? '' : 's'}` : 'Selecionar para enviar'}
+                </label>
+                <p className="text-xs text-gray-500">Toque no nome para ver o dossiê</p>
+              </div>
+              <ul className="divide-y divide-gray-100">
+                {fichas.map((pessoa) => (
+                  <li key={pessoa.id} className="p-4 flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={selecionados.includes(pessoa.id)}
+                      onChange={() => alternarSelecionado(pessoa.id)}
+                      aria-label={`Selecionar ${pessoa.nome}`}
+                    />
+                    <button type="button" onClick={() => void abrirDossie(pessoa.id)} className="min-w-0 flex-1 text-left">
+                      <p className={`font-bold truncate ${pessoa.ativo ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{pessoa.nome}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {[pessoa.funcao, pessoa.cpfMascarado, pessoa.obraNome || (empresa && !pessoa.obraId ? 'Sem obra' : ''), pessoa.cidade ? `${pessoa.cidade}${pessoa.uf ? `/${pessoa.uf}` : ''}` : '']
+                          .filter(Boolean)
+                          .join(' · ') || 'Só cadastro inicial'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {pessoa.dataAdmissao ? `Admissão ${quando(pessoa.dataAdmissao)}` : 'Sem data de admissão'}
+                        {pessoa.tipoContrato ? ` · ${CONTRATOS[pessoa.tipoContrato] || pessoa.tipoContrato}` : ''}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {pessoa.fichaCompleta === false && <span className="text-[11px] font-bold uppercase text-amber-800 bg-amber-50 rounded-full px-2 py-0.5">Ficha incompleta</span>}
+                        {(pessoa.treinamentos?.vencidos || 0) > 0 && <span className="text-[11px] font-bold uppercase text-red-700 bg-red-50 rounded-full px-2 py-0.5">Treinamento vencido</span>}
+                        {(pessoa.treinamentos?.aVencer || 0) > 0 && <span className="text-[11px] font-bold uppercase text-amber-800 bg-amber-50 rounded-full px-2 py-0.5">Treinamento a vencer</span>}
+                        {(pessoa.exames?.vencidos || 0) > 0 && <span className="text-[11px] font-bold uppercase text-red-700 bg-red-50 rounded-full px-2 py-0.5">Exame vencido</span>}
+                        {(pessoa.exames?.aVencer || 0) > 0 && <span className="text-[11px] font-bold uppercase text-amber-800 bg-amber-50 rounded-full px-2 py-0.5">Exame a vencer</span>}
+                      </div>
+                    </button>
+                    <button type="button" onClick={() => void alternar(pessoa)} className="shrink-0 text-xs font-bold text-gray-700 border rounded-lg px-3 py-2">
+                      {pessoa.ativo ? 'Desativar' : 'Reativar'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+
+      {aba === 'pessoas' && selecionados.length > 0 && !dossieId && !fichaAberta && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
+          <p className="text-sm font-extrabold text-gray-900">
+            Relatório de {selecionados.length} funcionário{selecionados.length === 1 ? '' : 's'}
+          </p>
+          <p className="text-xs text-gray-500">
+            Gera um PDF formal com cadastro, treinamentos, exames e EPIs, pronto para cliente, WhatsApp ou e-mail.
+          </p>
+          {erro && !dossieId && !fichaAberta && <p className="text-sm font-bold text-red-700 bg-red-50 rounded-xl px-3 py-2">{erro}</p>}
+          <AcoesEnvio
+            gerando={gerandoRelatorio}
+            onPdf={() => void baixarRelatorio(selecionados)}
+            onImprimir={() => void imprimirRelatorio(selecionados)}
+            onWhats={() => clicarWhatsRelatorio(selecionados)}
+            onEmail={() => clicarEmailRelatorio(selecionados)}
+          />
+          {envioAberto === 'whats' && (
+            <input className={entrada} inputMode="tel" placeholder="WhatsApp com DDD" value={destinoWhats} onChange={(e) => setDestinoWhats(e.target.value)} />
+          )}
+          {envioAberto === 'email' && (
+            <input className={entrada} type="email" placeholder="e-mail do destinatário" value={destinoEmail} onChange={(e) => setDestinoEmail(e.target.value)} />
           )}
         </div>
       )}
@@ -1334,7 +1694,7 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
         </>
       )}
 
-      {aba === 'pessoas' && !fichaAberta && (
+      {aba === 'pessoas' && !fichaAberta && !dossieId && (
         <button
           type="button"
           onClick={() => void abrirFicha()}
@@ -1343,6 +1703,235 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
         >
           <Plus size={22} />
         </button>
+      )}
+
+      {dossieId && createPortal(
+        <div className="fixed inset-0 z-[200] bg-black/70 flex items-end sm:items-center justify-center sm:p-3">
+          <div className="bg-white w-full sm:max-w-2xl sm:rounded-2xl max-h-[100dvh] flex flex-col">
+            <div className="px-4 pt-4 pb-3 border-b border-gray-100 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-extrabold text-gray-900">Dossiê do funcionário</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Cadastro, treinamentos, exames e EPIs. O PDF formal serve para enviar a cliente.
+                </p>
+              </div>
+              <button type="button" onClick={fecharDossie} className="shrink-0 text-gray-500 p-1" aria-label="Fechar dossiê">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="overflow-y-auto px-4 py-4 flex-1 space-y-5">
+              {carregandoDossie || !dossie ? (
+                <p className="py-10 text-sm text-gray-500 flex items-center justify-center gap-2"><Loader2 className="animate-spin" size={16} /> Abrindo dossiê...</p>
+              ) : (
+                <>
+                  <section className="space-y-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-extrabold uppercase tracking-wider text-lunardeli-red">Identificação</p>
+                        <h3 className="text-lg font-extrabold text-gray-900 mt-1">{dossie.cadastro.nome}</h3>
+                        <p className="text-sm text-gray-500">
+                          {[dossie.cadastro.funcao, dossie.cadastro.ativo === false ? 'Inativo' : 'Ativo', dossie.cadastro.obraNome || (empresa && !dossie.cadastro.obraId ? 'Sem obra' : '')]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void abrirFicha(dossieId)}
+                        className="shrink-0 text-xs font-bold text-lunardeli-red border border-red-100 rounded-lg px-3 py-2"
+                      >
+                        Editar ficha
+                      </button>
+                    </div>
+                    <Campo rotulo="CPF" valor={dossie.cadastro.cpf} />
+                    <Campo rotulo="RG" valor={[dossie.cadastro.rg, dossie.cadastro.rgOrgao, dossie.cadastro.rgUf].filter(Boolean).join(' ')} />
+                    <Campo rotulo="Nascimento" valor={quando(dossie.cadastro.dataNascimento)} />
+                    <Campo rotulo="Sexo" valor={SEXOS[dossie.cadastro.sexo] || dossie.cadastro.sexo} />
+                    <Campo rotulo="Estado civil" valor={ESTADOS[dossie.cadastro.estadoCivil] || dossie.cadastro.estadoCivil} />
+                    <Campo rotulo="Nacionalidade" valor={dossie.cadastro.nacionalidade} />
+                    <Campo rotulo="Naturalidade" valor={dossie.cadastro.naturalidade} />
+                    <Campo rotulo="Mãe" valor={dossie.cadastro.nomeMae} />
+                    <Campo rotulo="Pai" valor={dossie.cadastro.nomePai} />
+                    <Campo rotulo="Escolaridade" valor={ESCOLAS[dossie.cadastro.escolaridade] || dossie.cadastro.escolaridade} />
+                    <Campo rotulo="PIS" valor={dossie.cadastro.pis} />
+                    <Campo
+                      rotulo="CTPS"
+                      valor={[dossie.cadastro.ctpsNumero, dossie.cadastro.ctpsSerie, dossie.cadastro.ctpsUf].filter(Boolean).join(' ')}
+                    />
+                  </section>
+                  {empresa && podeRhEmpresa && (
+                    <section className="space-y-2 rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                      <div className="flex items-center gap-2">
+                        <MapPin size={16} className="text-lunardeli-red" />
+                        <p className="text-xs font-extrabold uppercase tracking-wider text-lunardeli-red">Alocação na obra</p>
+                      </div>
+                      <p className="text-sm text-gray-700">
+                        {dossie.cadastro.obraNome
+                          ? `Hoje está em ${dossie.cadastro.obraNome}. Ao transferir, some do RH da obra anterior e entra no da nova.`
+                          : 'Ainda sem obra. Ao alocar, a pessoa passa a aparecer no RH daquela obra.'}
+                      </p>
+                      <select
+                        className={entrada}
+                        value={alocarObraId}
+                        onChange={(e) => setAlocarObraId(e.target.value)}
+                        aria-label="Obra de alocação"
+                      >
+                        <option value="">RH da empresa — sem obra</option>
+                        {obras.map((obra) => (
+                          <option key={obra.id} value={obra.id}>{obra.nome}</option>
+                        ))}
+                      </select>
+                      <input
+                        className={entrada}
+                        type="date"
+                        value={alocarData}
+                        onChange={(e) => setAlocarData(e.target.value)}
+                        aria-label="Data da alocação"
+                      />
+                      <button
+                        type="button"
+                        disabled={alocando || alocarObraId === (dossie.cadastro.obraId || '')}
+                        onClick={() => void alocarFuncionario()}
+                        className="w-full bg-lunardeli-red text-white font-bold rounded-xl py-3 text-sm disabled:opacity-50"
+                      >
+                        {alocando ? 'Alocando...' : alocarObraId ? 'Alocar / transferir' : 'Tirar da obra'}
+                      </button>
+                      {(dossie.alocacoes || []).length > 0 && (
+                        <ul className="space-y-1">
+                          {dossie.alocacoes.map((item) => (
+                            <li key={item.id} className="text-xs text-gray-600">
+                              <span className="font-bold text-gray-800">{item.obraNome}</span>
+                              {' · '}
+                              {item.dataInicio ? quando(item.dataInicio) : ''}
+                              {item.atual || !item.dataFim ? ' — atual' : item.dataFim ? ` a ${quando(item.dataFim)}` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  )}
+                  <section className="space-y-1">
+                    <p className="text-xs font-extrabold uppercase tracking-wider text-lunardeli-red">Contato e endereço</p>
+                    <Campo rotulo="Telefone" valor={dossie.cadastro.telefone} />
+                    <Campo rotulo="E-mail" valor={dossie.cadastro.email} />
+                    <Campo
+                      rotulo="Endereço"
+                      valor={[dossie.cadastro.logradouro, dossie.cadastro.numero, dossie.cadastro.complemento, dossie.cadastro.bairro].filter(Boolean).join(', ')}
+                    />
+                    <Campo rotulo="CEP" valor={dossie.cadastro.cep} />
+                    <Campo rotulo="Cidade" valor={[dossie.cadastro.cidade, dossie.cadastro.uf].filter(Boolean).join('/')} />
+                  </section>
+                  <section className="space-y-1">
+                    <p className="text-xs font-extrabold uppercase tracking-wider text-lunardeli-red">Contrato</p>
+                    <Campo rotulo="Função" valor={dossie.cadastro.funcao} />
+                    <Campo rotulo="CBO" valor={dossie.cadastro.cbo} />
+                    <Campo rotulo="Matrícula" valor={dossie.cadastro.matricula} />
+                    <Campo rotulo="Admissão" valor={quando(dossie.cadastro.dataAdmissao)} />
+                    <Campo rotulo="Contrato" valor={CONTRATOS[dossie.cadastro.tipoContrato] || dossie.cadastro.tipoContrato} />
+                    <Campo rotulo="Jornada" valor={dossie.cadastro.jornada} />
+                    <Campo rotulo="Salário" valor={dossie.cadastro.salario ? `R$ ${dossie.cadastro.salario}` : ''} />
+                  </section>
+                  <section className="space-y-1">
+                    <p className="text-xs font-extrabold uppercase tracking-wider text-lunardeli-red">Dados bancários</p>
+                    {!(dossie.cadastro.banco || dossie.cadastro.agencia || dossie.cadastro.conta || dossie.cadastro.pix) ? (
+                      <p className="text-sm text-gray-500">Nenhum dado bancário cadastrado.</p>
+                    ) : (
+                      <>
+                        <Campo rotulo="Banco" valor={dossie.cadastro.banco} />
+                        <Campo rotulo="Agência" valor={dossie.cadastro.agencia} />
+                        <Campo rotulo="Conta" valor={dossie.cadastro.conta} />
+                        <Campo rotulo="Tipo" valor={CONTAS[dossie.cadastro.tipoConta] || dossie.cadastro.tipoConta} />
+                        <Campo rotulo="PIX" valor={dossie.cadastro.pix} />
+                      </>
+                    )}
+                  </section>
+                  <section className="space-y-2">
+                    <p className="text-xs font-extrabold uppercase tracking-wider text-lunardeli-red">Treinamentos</p>
+                    {dossie.treinamentos.length === 0 ? (
+                      <p className="text-sm text-gray-500">Nenhum treinamento registrado até agora.</p>
+                    ) : dossie.treinamentos.map((item) => (
+                      <div key={item.id} className="rounded-xl border border-gray-100 p-3">
+                        <div className="flex justify-between gap-3">
+                          <p className="font-bold text-gray-900">{item.nome}</p>
+                          <Selo situacao={item.situacao} />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {item.tipo === 'ADMISSIONAL' ? 'Admissional' : 'Recorrente'}
+                          {item.dataRealizacao ? ` · ${quando(item.dataRealizacao)}` : ''}
+                          {item.validade ? ` · válido até ${quando(item.validade)}` : ''}
+                          {item.cargaHoraria ? ` · ${item.cargaHoraria}h` : ''}
+                          {item.instrutor ? ` · ${item.instrutor}` : ''}
+                        </p>
+                        {item.temCertificado && item.certificadoUrl && (
+                          <a href={getImageUrl(item.certificadoUrl)} target="_blank" rel="noopener noreferrer" className="inline-block mt-2 text-xs font-bold text-lunardeli-red">
+                            Ver certificado
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </section>
+                  <section className="space-y-2">
+                    <p className="text-xs font-extrabold uppercase tracking-wider text-lunardeli-red">Exames ocupacionais</p>
+                    {dossie.exames.length === 0 ? (
+                      <p className="text-sm text-gray-500">Nenhum exame registrado até agora.</p>
+                    ) : dossie.exames.map((item) => (
+                      <div key={item.id} className="rounded-xl border border-gray-100 p-3">
+                        <div className="flex justify-between gap-3">
+                          <p className="font-bold text-gray-900">{item.nome}</p>
+                          <Selo situacao={item.situacao} />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {TIPOS_EXAME.find(([valor]) => valor === item.tipo)?.[1] || item.tipo}
+                          {item.dataRealizacao ? ` · ${quando(item.dataRealizacao)}` : ''}
+                          {item.validade ? ` · válido até ${quando(item.validade)}` : ''}
+                          {item.resultado ? ` · ${RESULTADOS_EXAME.find(([valor]) => valor === item.resultado)?.[1] || item.resultado}` : ''}
+                          {item.clinica ? ` · ${item.clinica}` : ''}
+                        </p>
+                      </div>
+                    ))}
+                  </section>
+                  <section className="space-y-2">
+                    <p className="text-xs font-extrabold uppercase tracking-wider text-lunardeli-red">Entrega de EPI</p>
+                    {dossie.epis.length === 0 ? (
+                      <p className="text-sm text-gray-500">Nenhuma entrega de EPI registrada até agora.</p>
+                    ) : dossie.epis.map((item) => (
+                      <div key={item.id} className="rounded-xl border border-gray-100 p-3">
+                        <div className="flex justify-between gap-3">
+                          <p className="font-bold text-gray-900">{item.nome}</p>
+                          <Selo situacao={item.situacao} />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {item.quantidade} {item.unidade || 'un'}
+                          {item.dataRecebimento ? ` · recebido em ${quando(item.dataRecebimento)}` : ''}
+                          {item.validadeEpi ? ` · validade ${quando(item.validadeEpi)}` : ''}
+                          {item.ca ? ` · CA ${item.ca}` : ''}
+                          {item.local ? ` · ${item.local}` : ''}
+                        </p>
+                      </div>
+                    ))}
+                  </section>
+                  <section className="space-y-2 pt-2 border-t border-gray-100">
+                    {erro && <p className="text-sm font-bold text-red-700 bg-red-50 rounded-xl px-3 py-2">{erro}</p>}
+                    <AcoesEnvio
+                      gerando={gerandoRelatorio}
+                      onPdf={() => void baixarRelatorio([dossieId])}
+                      onImprimir={() => void imprimirRelatorio([dossieId])}
+                      onWhats={() => clicarWhatsRelatorio([dossieId])}
+                      onEmail={() => clicarEmailRelatorio([dossieId])}
+                    />
+                    {envioAberto === 'whats' && (
+                      <input className={entrada} inputMode="tel" placeholder="WhatsApp com DDD" value={destinoWhats} onChange={(e) => setDestinoWhats(e.target.value)} />
+                    )}
+                    {envioAberto === 'email' && (
+                      <input className={entrada} type="email" placeholder="e-mail do destinatário" value={destinoEmail} onChange={(e) => setDestinoEmail(e.target.value)} />
+                    )}
+                  </section>
+                </>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {fichaAberta && createPortal(
@@ -1490,29 +2079,31 @@ export const RhPage: React.FC<{ modo?: 'obra' | 'empresa' }> = ({ modo = 'obra' 
             <Selo situacao={termoEpi.situacao} />
             {termoEpi.assinatura && <img src={termoEpi.assinatura} alt="Assinatura de quem recebeu" className="w-full rounded-xl border border-gray-200 bg-white" />}
             {erro && termoEpi && <p className="text-sm font-bold text-red-700">{erro}</p>}
-            <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => void baixarTermoPdf(termoEpi)} className="flex items-center justify-center gap-2 border rounded-xl py-3 text-sm font-bold text-gray-800">
-                <FileDown size={16} /> PDF
-              </button>
-              <button type="button" onClick={() => void imprimirTermoPdf(termoEpi)} className="flex items-center justify-center gap-2 border rounded-xl py-3 text-sm font-bold text-gray-800">
-                <Printer size={16} /> Imprimir
-              </button>
-            </div>
-            <label className="block space-y-1">
-              <span className="text-xs font-bold text-gray-600">WhatsApp</span>
-              <input className={entrada} inputMode="tel" placeholder="(11) 90000-0000" value={destinoWhats} onChange={(e) => setDestinoWhats(e.target.value)} />
-            </label>
-            <button type="button" onClick={() => void enviarTermoWhats(termoEpi)} className="w-full flex items-center justify-center gap-2 bg-lunardeli-red text-white font-bold rounded-xl py-3 text-sm">
-              <MessageCircle size={16} /> Enviar WhatsApp
-            </button>
-            <label className="block space-y-1">
-              <span className="text-xs font-bold text-gray-600">E-mail</span>
-              <input className={entrada} type="email" placeholder="email@empresa.com" value={destinoEmail} onChange={(e) => setDestinoEmail(e.target.value)} />
-            </label>
-            <button type="button" onClick={() => void enviarTermoEmail(termoEpi)} className="w-full flex items-center justify-center gap-2 border border-gray-300 text-gray-900 font-bold rounded-xl py-3 text-sm">
-              <Mail size={16} /> Enviar e-mail
-            </button>
-            <button type="button" onClick={() => { setTermoEpi(null); setErro(''); }} className="w-full border rounded-xl py-3 text-sm font-bold text-gray-700">Fechar</button>
+            <AcoesEnvio
+              onPdf={() => void baixarTermoPdf(termoEpi)}
+              onImprimir={() => void imprimirTermoPdf(termoEpi)}
+              onWhats={() => {
+                if (destinoWhats.replace(/\D/g, '').length >= 10 || typeof navigator.canShare === 'function') {
+                  void enviarTermoWhats(termoEpi);
+                  return;
+                }
+                setEnvioAberto('whats');
+              }}
+              onEmail={() => {
+                if (destinoEmail.includes('@')) {
+                  void enviarTermoEmail(termoEpi);
+                  return;
+                }
+                setEnvioAberto('email');
+              }}
+            />
+            {envioAberto === 'whats' && (
+              <input className={entrada} inputMode="tel" placeholder="WhatsApp com DDD" value={destinoWhats} onChange={(e) => setDestinoWhats(e.target.value)} />
+            )}
+            {envioAberto === 'email' && (
+              <input className={entrada} type="email" placeholder="e-mail do destinatário" value={destinoEmail} onChange={(e) => setDestinoEmail(e.target.value)} />
+            )}
+            <button type="button" onClick={() => { setTermoEpi(null); setErro(''); setEnvioAberto(null); }} className="w-full border rounded-xl py-3 text-sm font-bold text-gray-700">Fechar</button>
           </div>
         </div>,
         document.body,

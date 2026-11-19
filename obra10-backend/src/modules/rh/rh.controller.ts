@@ -54,6 +54,41 @@ export class RhController {
     return this.rh.lerFicha(this.empresaId(req), this.userId(req), files, body?.obraId);
   }
 
+  @Get('relatorios/pessoal')
+  async relatorioPessoal(
+    @Req() req: any,
+    @Query('ids') ids: string,
+    @Res() res: any,
+  ) {
+    try {
+      const buffer = await this.rh.relatorioPessoalPdf(
+        this.empresaId(req),
+        this.userId(req),
+        ids,
+      );
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': 'attachment; filename="relatorio-pessoal.pdf"',
+        'Content-Length': buffer.length,
+      });
+      res.end(buffer);
+    } catch (err: any) {
+      if (res.headersSent) return;
+      const status = typeof err?.getStatus === 'function' ? err.getStatus() : 500;
+      const corpo = typeof err?.getResponse === 'function' ? err.getResponse() : null;
+      const message =
+        typeof corpo === 'string'
+          ? corpo
+          : corpo?.message || err?.message || 'Não foi possível gerar o relatório.';
+      res.status(status).json({ message });
+    }
+  }
+
+  @Get('funcionarios/:id/dossie')
+  dossie(@Req() req: any, @Param('id') id: string) {
+    return this.rh.dossie(this.empresaId(req), this.userId(req), id);
+  }
+
   @Get('funcionarios/:id')
   obter(@Req() req: any, @Param('id') id: string) {
     return this.rh.obter(this.empresaId(req), this.userId(req), id);
@@ -67,6 +102,15 @@ export class RhController {
   @Patch('funcionarios/:id')
   atualizar(@Req() req: any, @Param('id') id: string, @Body() body: FichaBody) {
     return this.rh.atualizar(this.empresaId(req), this.userId(req), id, body);
+  }
+
+  @Post('funcionarios/:id/alocacao')
+  alocar(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: { obraId?: string | null; dataInicio?: string; observacao?: string },
+  ) {
+    return this.rh.alocar(this.empresaId(req), this.userId(req), id, body);
   }
 
   @Get('entregas')
