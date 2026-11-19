@@ -215,6 +215,7 @@ export class ObraService {
     const obra = await this.prisma.obra.findFirst({ where: { id, empresaId } });
     if (!obra)
       throw new Error('Obra não encontrada ou não pertence a esta empresa.');
+    if (obra.deletedAt) return obra;
 
     const user = await this.prisma.usuario.findUnique({
       where: { id: userId },

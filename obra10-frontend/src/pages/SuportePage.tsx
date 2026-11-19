@@ -8,7 +8,6 @@ import {
   Headphones,
   Loader2,
   MessageCircle,
-  Plus,
   RefreshCw,
 } from 'lucide-react';
 import api from '../services/api';
@@ -76,10 +75,7 @@ export const SuportePage: React.FC = () => {
 
   const [chamados, setChamados] = useState<Chamado[]>([]);
   const [loadingLista, setLoadingLista] = useState(false);
-  const [chamadoAberto, setChamadoAberto] = useState<Chamado | null>(null);
-  const [loadingDetalhe, setLoadingDetalhe] = useState(false);
-  const [resposta, setResposta] = useState('');
-  const [enviandoResposta, setEnviandoResposta] = useState(false);
+  const [abrindoId, setAbrindoId] = useState<string | null>(null);
 
   const [assunto, setAssunto] = useState('');
   const [categoria, setCategoria] = useState('TECNICO');
@@ -118,50 +114,42 @@ export const SuportePage: React.FC = () => {
     if (tab === 'chamados') carregarChamados();
   }, [tab, carregarChamados]);
 
-  const abrirChamado = async (id: string) => {
-    setLoadingDetalhe(true);
-    setResposta('');
-    setError('');
-    try {
-      const res = await api.get(`/suporte/chamados/${id}`);
-      setChamadoAberto(res.data);
-    } catch {
-      setError('Não foi possível abrir o chamado.');
-    } finally {
-      setLoadingDetalhe(false);
-    }
-  };
-
-  const enviarResposta = async () => {
-    if (!chamadoAberto || !resposta.trim()) return;
-    setEnviandoResposta(true);
-    setError('');
-    try {
-      const res = await api.post(`/suporte/chamados/${chamadoAberto.id}/mensagens`, {
-        corpo: resposta.trim(),
-      });
-      setChamadoAberto(res.data);
-      setResposta('');
-      setSuccess('Mensagem enviada.');
-      await carregarChamados();
-    } catch (e: any) {
-      setError(e?.response?.data?.message || 'Erro ao enviar mensagem.');
-    } finally {
-      setEnviandoResposta(false);
-    }
-  };
-
-  const handleWhatsAppRapido = () => {
-    const msg = buildSupportWhatsAppMessage({
+  const mensagemDoChamado = (c: Partial<Chamado>) =>
+    buildSupportWhatsAppMessage({
       nome: user?.nome,
       email: user?.email,
       empresa: empresaNome,
+      assunto: c.assunto,
+      categoria: c.categoria,
+      descricao: c.descricao,
+      chamadoId: c.id,
       appVersion: appVersionSupportLine(),
     });
-    openSupportWhatsApp(msg);
+
+  const handleWhatsAppRapido = () => {
+    openSupportWhatsApp(mensagemDoChamado({}));
   };
 
-  const criarChamado = async (abrirWhatsapp: boolean) => {
+  const continuarChamadoNoWhatsApp = async (id: string) => {
+    setAbrindoId(id);
+    setError('');
+    try {
+      const res = await api.get(`/suporte/chamados/${id}`);
+      const chamado = res.data as Chamado;
+      try {
+        await api.patch(`/suporte/chamados/${id}`, { marcarWhatsapp: true });
+      } catch {
+        /* o WhatsApp ainda abre mesmo se o carimbo falhar */
+      }
+      openSupportWhatsApp(mensagemDoChamado(chamado));
+    } catch {
+      setError('Não foi possível abrir o chamado no WhatsApp.');
+    } finally {
+      setAbrindoId(null);
+    }
+  };
+
+  const criarChamado = async () => {
     setError('');
     setSuccess('');
     if (assunto.trim().length < 3 || descricao.trim().length < 5) {
@@ -174,27 +162,14 @@ export const SuportePage: React.FC = () => {
         assunto: assunto.trim(),
         categoria,
         descricao: descricao.trim(),
-        marcarWhatsapp: abrirWhatsapp,
+        marcarWhatsapp: true,
       });
       const criado = res.data as Chamado;
-      setSuccess('Chamado registrado com sucesso.');
+      setSuccess('Chamado registrado. Abrindo o WhatsApp para conversar com o suporte.');
       setAssunto('');
       setDescricao('');
       setCategoria('TECNICO');
-      if (abrirWhatsapp) {
-        openSupportWhatsApp(
-          buildSupportWhatsAppMessage({
-            nome: user?.nome,
-            email: user?.email,
-            empresa: empresaNome,
-            assunto: criado.assunto,
-            categoria: criado.categoria,
-            descricao: criado.descricao,
-            chamadoId: criado.id,
-            appVersion: appVersionSupportLine(),
-          }),
-        );
-      }
+      openSupportWhatsApp(mensagemDoChamado(criado));
       setTab('chamados');
       await carregarChamados();
     } catch (e: any) {
@@ -232,7 +207,7 @@ export const SuportePage: React.FC = () => {
                 Central de Suporte
               </h1>
               <p className="text-sm text-gray-500">
-                FAQ, chamados e contato via WhatsApp
+                FAQ e chamados — o atendimento é pelo WhatsApp
               </p>
             </div>
           </div>
@@ -396,8 +371,9 @@ export const SuportePage: React.FC = () => {
                   <li key={c.id}>
                     <button
                       type="button"
-                      onClick={() => abrirChamado(c.id)}
-                      className="w-full text-left px-5 py-4 hover:bg-gray-50 transition-colors"
+                      onClick={() => continuarChamadoNoWhatsApp(c.id)}
+                      disabled={abrindoId === c.id}
+                      className="w-full text-left px-5 py-4 hover:bg-gray-50 transition-colors disabled:opacity-60"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
                         <p className="font-semibold text-lunardeli-dark">{c.assunto}</p>
@@ -417,8 +393,9 @@ export const SuportePage: React.FC = () => {
                       <p className="text-sm text-gray-600 whitespace-pre-wrap line-clamp-2">
                         {c.descricao}
                       </p>
-                      <p className="text-xs font-semibold text-lunardeli-red mt-2">
-                        Ver conversa →
+                      <p className="text-xs font-semibold text-green-700 mt-2 inline-flex items-center gap-1">
+                        <MessageCircle size={12} />
+                        {abrindoId === c.id ? 'Abrindo WhatsApp…' : 'Continuar no WhatsApp'}
                       </p>
                     </button>
                   </li>
@@ -428,93 +405,11 @@ export const SuportePage: React.FC = () => {
           </div>
         )}
 
-        {chamadoAberto && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
-            <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl shadow-xl max-h-[92vh] flex flex-col">
-              <div className="px-5 py-4 border-b border-gray-100">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="text-lg font-bold text-lunardeli-dark truncate">
-                      {chamadoAberto.assunto}
-                    </h2>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {STATUS_LABEL[chamadoAberto.status] || chamadoAberto.status}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setChamadoAberto(null)}
-                    className="text-sm font-semibold text-gray-500 hover:text-lunardeli-red"
-                  >
-                    Fechar
-                  </button>
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 bg-gray-50">
-                {loadingDetalhe ? (
-                  <div className="py-12 flex justify-center text-gray-400">
-                    <Loader2 className="animate-spin" size={28} />
-                  </div>
-                ) : (
-                  (
-                    chamadoAberto.mensagens?.length
-                      ? chamadoAberto.mensagens
-                      : [
-                          {
-                            id: 'seed',
-                            corpo: chamadoAberto.descricao,
-                            autorTipo: 'USUARIO' as const,
-                            createdAt: chamadoAberto.createdAt,
-                          },
-                        ]
-                  ).map((m) => {
-                    const meu = m.autorTipo === 'USUARIO';
-                    return (
-                      <div
-                        key={m.id}
-                        className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm ${
-                          meu
-                            ? 'ml-auto bg-lunardeli-red text-white'
-                            : 'mr-auto bg-white border border-gray-200 text-gray-800'
-                        }`}
-                      >
-                        <p className="text-[10px] font-bold uppercase tracking-wide opacity-80 mb-1">
-                          {meu ? 'Você' : 'Suporte Obra 10'}
-                        </p>
-                        <p className="whitespace-pre-wrap leading-relaxed">{m.corpo}</p>
-                        <p className={`text-[10px] mt-2 ${meu ? 'text-red-100' : 'text-gray-400'}`}>
-                          {new Date(m.createdAt).toLocaleString('pt-BR')}
-                        </p>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-              {chamadoAberto.status !== 'FECHADO' && chamadoAberto.status !== 'RESOLVIDO' && (
-                <div className="px-5 py-4 border-t border-gray-100 space-y-2">
-                  <textarea
-                    value={resposta}
-                    onChange={(e) => setResposta(e.target.value)}
-                    rows={3}
-                    placeholder="Escreva uma mensagem para o suporte…"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lunardeli-red/30"
-                  />
-                  <button
-                    type="button"
-                    disabled={enviandoResposta || !resposta.trim()}
-                    onClick={enviarResposta}
-                    className="w-full py-2.5 bg-lunardeli-red hover:bg-red-700 disabled:opacity-50 text-white font-bold rounded-lg text-sm"
-                  >
-                    {enviandoResposta ? 'Enviando…' : 'Enviar mensagem'}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {tab === 'novo' && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6 space-y-4">
+            <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
+              O chamado fica registrado aqui e a conversa abre direto no WhatsApp com o suporte Obra 10.
+            </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">
                 Assunto
@@ -554,24 +449,15 @@ export const SuportePage: React.FC = () => {
                 placeholder="Conte o que aconteceu, o que já tentou e como reproduzir o problema."
               />
             </div>
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <div className="pt-2">
               <button
                 type="button"
                 disabled={saving}
-                onClick={() => criarChamado(false)}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 border border-gray-200 rounded-lg font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                onClick={() => criarChamado()}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg disabled:opacity-50"
               >
-                {saving ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />}
-                Salvar chamado
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => criarChamado(true)}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg disabled:opacity-50"
-              >
-                <MessageCircle size={18} />
-                Salvar e abrir WhatsApp
+                {saving ? <Loader2 className="animate-spin" size={18} /> : <MessageCircle size={18} />}
+                Abrir chamado no WhatsApp
               </button>
             </div>
           </div>

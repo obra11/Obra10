@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Settings, Save, Trash2, Loader2, Upload, AlertTriangle, CheckCircle, ShieldAlert } from 'lucide-react';
 import api from '../../services/api';
 import { getImageUrl } from '../../utils/image';
+import { confirmouExclusao } from '../../utils/confirmarExclusao';
 
 type CapaRascunho = {
   url: string;
@@ -45,6 +46,7 @@ export const Configuracoes: React.FC = () => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [confirmWord, setConfirmWord] = useState('');
+  const [deleteError, setDeleteError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [rascunhoCapa, setRascunhoCapa] = useState<CapaRascunho | null>(null);
   const [zoomCapa, setZoomCapa] = useState(1);
@@ -80,7 +82,8 @@ export const Configuracoes: React.FC = () => {
     };
   }, [rascunhoCapa]);
 
-  const isGestor = user?.perfilGlobal === 'GESTOR';
+  const isGestor =
+    user?.perfilGlobal === 'GESTOR' || user?.perfilGlobal === 'SUPER_ADMIN';
 
   const handleSave = async () => {
     if (!nome.trim() || !obraAtiva) return;
@@ -190,18 +193,21 @@ export const Configuracoes: React.FC = () => {
   };
 
   const handleDelete = async () => {
-    if (!obraAtiva || confirmWord !== 'EXCLUIR') return;
+    if (!obraAtiva || !confirmouExclusao(confirmWord)) return;
     setLoadingDelete(true);
+    setDeleteError('');
     try {
       await api.delete(`/obras/${obraAtiva.id}`);
+      setShowConfirmDelete(false);
       setObraAtiva(null);
       await fetchSession();
       navigate('/dashboard');
     } catch (e: any) {
-      alert('Erro ao excluir obra: ' + (e?.response?.data?.message || e.message));
+      setDeleteError(
+        e?.response?.data?.message || e.message || 'Não foi possível excluir a obra.',
+      );
     } finally {
       setLoadingDelete(false);
-      setShowConfirmDelete(false);
     }
   };
 
@@ -368,6 +374,7 @@ export const Configuracoes: React.FC = () => {
                 <button
                   onClick={() => {
                     setConfirmWord('');
+                    setDeleteError('');
                     setShowConfirmDelete(true);
                   }}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg uppercase tracking-wider flex items-center gap-2 shadow-sm transition-colors"
@@ -462,7 +469,7 @@ export const Configuracoes: React.FC = () => {
 
       {/* Confirm Delete Modal */}
       {showConfirmDelete && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[100]">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-fade-in">
             <div className="p-6">
               <div className="flex items-center gap-2 text-red-600 mb-4">
@@ -488,10 +495,23 @@ export const Configuracoes: React.FC = () => {
               <input
                 type="text"
                 value={confirmWord}
-                onChange={(e) => setConfirmWord(e.target.value)}
+                onChange={(e) => {
+                  setConfirmWord(e.target.value);
+                  if (deleteError) setDeleteError('');
+                }}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                autoComplete="off"
+                spellCheck={false}
+                enterKeyHint="done"
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none mt-4 font-bold uppercase tracking-wider text-center text-red-600 bg-red-50/50"
                 placeholder="Digite EXCLUIR"
               />
+              {deleteError && (
+                <p className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  {deleteError}
+                </p>
+              )}
             </div>
 
             <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
@@ -503,7 +523,7 @@ export const Configuracoes: React.FC = () => {
               </button>
               <button
                 onClick={handleDelete}
-                disabled={confirmWord !== 'EXCLUIR' || loadingDelete}
+                disabled={!confirmouExclusao(confirmWord) || loadingDelete}
                 className="px-5 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold rounded-lg text-sm flex items-center gap-1.5 transition-colors shadow-sm"
               >
                 {loadingDelete ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}

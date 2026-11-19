@@ -1,13 +1,14 @@
 /**
  * Helper WhatsApp Support — abre wa.me com mensagem pré-preenchida.
+ * No PWA instalado, window.open costuma ser bloqueado; aí navegamos direto.
  */
 
 const DEFAULT_SUPPORT_PHONE = '5548984047797';
 
 export function getSupportWhatsAppNumber(): string {
-  const raw =
-    (import.meta.env.VITE_SUPPORT_WHATSAPP as string | undefined) ||
-    DEFAULT_SUPPORT_PHONE;
+  const env = (import.meta as ImportMeta & { env?: { VITE_SUPPORT_WHATSAPP?: string } })
+    .env;
+  const raw = env?.VITE_SUPPORT_WHATSAPP || DEFAULT_SUPPORT_PHONE;
   return normalizeWhatsAppPhone(raw);
 }
 
@@ -24,6 +25,7 @@ export function normalizeWhatsAppPhone(phone: string): string {
 export type WhatsAppSupportMessageInput = {
   nome?: string;
   email?: string;
+  telefone?: string;
   empresa?: string;
   assunto?: string;
   categoria?: string;
@@ -39,6 +41,7 @@ export function buildSupportWhatsAppMessage(input: WhatsAppSupportMessageInput):
       input.empresa ? ` da empresa ${input.empresa}` : ''
     }.`,
   ];
+  if (input.telefone) lines.push(`Meu WhatsApp: ${input.telefone}`);
   if (input.assunto) lines.push(`Chamado: ${input.assunto}`);
   if (input.categoria) lines.push(`Categoria: ${input.categoria}`);
   if (input.descricao) lines.push(`Descrição: ${input.descricao}`);
@@ -48,8 +51,26 @@ export function buildSupportWhatsAppMessage(input: WhatsAppSupportMessageInput):
   return lines.join('\n');
 }
 
-export function openSupportWhatsApp(message: string, phone?: string): void {
+export function supportWhatsAppUrl(message: string, phone?: string): string {
   const number = normalizeWhatsAppPhone(phone || getSupportWhatsAppNumber());
-  const url = `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
-  window.open(url, '_blank', 'noopener,noreferrer');
+  return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
+}
+
+function isStandalonePwa(): boolean {
+  if (typeof window === 'undefined') return false;
+  const media = window.matchMedia?.('(display-mode: standalone)')?.matches;
+  const ios =
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return Boolean(media || ios);
+}
+
+export function openSupportWhatsApp(message: string, phone?: string): void {
+  const url = supportWhatsAppUrl(message, phone);
+  if (typeof window === 'undefined') return;
+  if (isStandalonePwa()) {
+    window.location.assign(url);
+    return;
+  }
+  const popup = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!popup) window.location.assign(url);
 }

@@ -122,7 +122,7 @@ export const AdminSuporte: React.FC = () => {
           <div>
             <h1 className="text-2xl font-extrabold text-gray-900">Suporte</h1>
             <p className="text-sm text-gray-500">
-              Chamados de todas as empresas — clique para responder
+              Registro dos chamados. A conversa com o cliente acontece no WhatsApp.
             </p>
           </div>
         </div>

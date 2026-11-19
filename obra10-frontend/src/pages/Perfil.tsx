@@ -214,7 +214,7 @@ export const Perfil: React.FC = () => {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-bold text-lunardeli-dark">Central de Suporte</p>
-            <p className="text-sm text-gray-500">FAQ, abrir chamado e falar no WhatsApp</p>
+            <p className="text-sm text-gray-500">FAQ, abrir chamado e conversar no WhatsApp</p>
           </div>
         </button>
 
