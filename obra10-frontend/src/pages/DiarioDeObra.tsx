@@ -482,6 +482,8 @@ export const DiarioDeObra: React.FC = () => {
   const tempRdoId = useRef(rdoId || generateUUID());
   const [initLoading, setInitLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [lastServerSaveAt, setLastServerSaveAt] = useState<string | null>(null);
   const [rdoIdAtual, setRdoIdAtual] = useState<string | null>(rdoId || null);
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== 'undefined' ? navigator.onLine : true,
@@ -492,8 +494,20 @@ export const DiarioDeObra: React.FC = () => {
   const syncingDraftRef = useRef(false);
   const mediaUploadLockRef = useRef<Promise<void> | null>(null);
   const autoUploadFnRef = useRef<() => Promise<void>>(async () => {});
+  const salvarRascunhoFnRef = useRef<(opts?: { silent?: boolean }) => Promise<void>>(async () => {});
+  const saveInFlightRef = useRef<Promise<void> | null>(null);
+  const autoSaveTimerRef = useRef<number | null>(null);
   const rdoIdAtualRef = useRef<string | null>(rdoId || null);
   const pendingNewDraftRef = useRef<OfflineRdoDraft | null>(null);
+
+  const agendarSalvarServidor = () => {
+    if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      salvarRascunhoFnRef.current({ silent: true }).catch((err) =>
+        console.warn('Autosave do rascunho falhou:', err),
+      );
+    }, 800);
+  };
   const [tipoRascunhoLocal, setTipoRascunhoLocal] = useState<TipoRelatorio | null>(null);
 
   const [status, setStatus] = useState<RdoStatus>('rascunho');
@@ -1361,6 +1375,7 @@ export const DiarioDeObra: React.FC = () => {
       return next >= q.files.length ? null : { files: q.files, index: next };
     });
     persistDraftLocal({ pendingSync: !navigator.onLine }).catch(() => undefined);
+    agendarSalvarServidor();
   };
 
   const handleFotosDrop = async (
@@ -1398,6 +1413,7 @@ export const DiarioDeObra: React.FC = () => {
       await commitFotoFile(file);
     }
     persistDraftLocal({ pendingSync: !navigator.onLine }).catch(() => undefined);
+    agendarSalvarServidor();
     if (compressed.length > 1) {
       showToast(`📷 ${compressed.length} fotos adicionadas.`);
     }
@@ -1422,6 +1438,7 @@ export const DiarioDeObra: React.FC = () => {
       }
     }
     persistDraftLocal({ pendingSync: !navigator.onLine }).catch(() => undefined);
+    agendarSalvarServidor();
   };
 
   const handleFotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1490,6 +1507,7 @@ export const DiarioDeObra: React.FC = () => {
       }
     }
     persistDraftLocal({ pendingSync: !navigator.onLine }).catch(() => undefined);
+    agendarSalvarServidor();
   };
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []).filter(
@@ -1554,6 +1572,7 @@ export const DiarioDeObra: React.FC = () => {
       }
     }
     persistDraftLocal({ pendingSync: !navigator.onLine }).catch(() => undefined);
+    agendarSalvarServidor();
   };
   const handleAnexoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     handleAnexosDrop(Array.from(e.target.files || []));
@@ -1766,6 +1785,21 @@ export const DiarioDeObra: React.FC = () => {
     atividadesExecutadas, atividadesPendentes, observacoes, aprovadorIdSelecionado,
     ordemMidia, fotos, videos, anexos, savedFiles,
   ]);
+
+  // Autosave no servidor a cada minuto (rascunho em edição)
+  useEffect(() => {
+    if (!autosaveReady.current || !obraId || isReadOnly || status !== 'rascunho' || initLoading || !tipoRelatorio) return;
+    const timer = window.setInterval(() => {
+      salvarRascunhoFnRef.current({ silent: true }).catch((err) =>
+        console.warn('Autosave periódico falhou:', err),
+      );
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [obraId, isReadOnly, status, initLoading, tipoRelatorio]);
+
+  useEffect(() => () => {
+    if (autoSaveTimerRef.current) window.clearTimeout(autoSaveTimerRef.current);
+  }, []);
 
   // Monitorar conexão e sincronizar rascunhos pendentes
   useEffect(() => {
@@ -2086,33 +2120,47 @@ export const DiarioDeObra: React.FC = () => {
     }
   };
 
-  const validarPeriodo = (): boolean => {
+  const validarPeriodo = (opts?: { silent?: boolean }): boolean => {
     if (tipoRelatorio !== 'PERIODO') return true;
     if (!data || !dataFim) {
-      showToast('Informe a data de início e a data de fim do período.');
+      if (!opts?.silent) showToast('Informe a data de início e a data de fim do período.');
       return false;
     }
     if (data > dataFim) {
-      showToast('A data de início não pode ser depois da data de fim.');
+      if (!opts?.silent) showToast('A data de início não pode ser depois da data de fim.');
       return false;
     }
     const n = Number(diasChuva);
     if (!Number.isFinite(n) || n < 0) {
-      showToast('Informe o número de dias de chuva (0 ou mais).');
+      if (!opts?.silent) showToast('Informe o número de dias de chuva (0 ou mais).');
       return false;
     }
     return true;
   };
 
+  const horaSaoPaulo = () =>
+    new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date());
+
   // ── Salvar Rascunho ──
-  const handleSalvarRascunho = async () => {
+  const salvarRascunho = async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
     if (!obraId) return;
     if (!tipoRelatorio) {
-      showToast('Escolha se este relatório é do dia ou de período.');
+      if (!silent) showToast('Escolha se este relatório é do dia ou de período.');
       return;
     }
-    if (!validarPeriodo()) return;
-    setSaving(true);
+    if (!validarPeriodo({ silent })) return;
+    if (saveInFlightRef.current) {
+      await saveInFlightRef.current;
+      if (silent) return;
+    }
+    if (!silent) setSaving(true);
+    else setAutoSaving(true);
+    const run = (async () => {
     let releaseLock: (() => void) | undefined;
     try {
       if (mediaUploadLockRef.current) {
@@ -2124,11 +2172,13 @@ export const DiarioDeObra: React.FC = () => {
         await persistDraftLocal({ pendingSync: true });
         const midias =
           fotos.length + videos.length + anexos.length;
-        showToast(
-          midias > 0
-            ? `📴 Sem sinal — rascunho e ${midias} mídia(s) salvos no aparelho. Sincronizam ao voltar a conexão.`
-            : '📴 Sem sinal — rascunho salvo no aparelho. Será enviado ao voltar a conexão.',
-        );
+        if (!silent) {
+          showToast(
+            midias > 0
+              ? `📴 Sem sinal — rascunho e ${midias} mídia(s) salvos no aparelho. Sincronizam ao voltar a conexão.`
+              : '📴 Sem sinal — rascunho salvo no aparelho. Será enviado ao voltar a conexão.',
+          );
+        }
         return;
       }
 
@@ -2170,8 +2220,9 @@ export const DiarioDeObra: React.FC = () => {
           nomeObra,
         });
         setDraftPendingSync(false);
+        setLastServerSaveAt(horaSaoPaulo());
         navigate(`/obras/${obraId}/rdos/${newId}`, { replace: true });
-        showToast('💾 Rascunho criado!');
+        if (!silent) showToast('💾 Rascunho criado!');
       } else {
         // Atualizar rascunho existente
         await api.put(`/rdos/${rdoIdAtual}/rascunho`, { dadosExtras }, { headers });
@@ -2190,24 +2241,38 @@ export const DiarioDeObra: React.FC = () => {
           nomeObra,
         });
         setDraftPendingSync(false);
-        showToast('💾 Rascunho salvo!');
+        setLastServerSaveAt(horaSaoPaulo());
+        if (!silent) showToast('💾 Rascunho salvo!');
       }
     } catch (err: any) {
       // Rede falhou no meio: salva localmente mesmo assim
       try {
         await flushPendingMediaToIdb();
         await persistDraftLocal({ pendingSync: true });
-        showToast(
-          '📴 Sem conexão estável — rascunho e mídias guardados no aparelho para sincronizar depois.',
-        );
+        if (!silent) {
+          showToast(
+            '📴 Sem conexão estável — rascunho e mídias guardados no aparelho para sincronizar depois.',
+          );
+        }
       } catch {
-        showToast(`❌ Erro ao salvar: ${err?.response?.data?.message || 'tente novamente'}`);
+        if (!silent) showToast(`❌ Erro ao salvar: ${err?.response?.data?.message || 'tente novamente'}`);
       }
     } finally {
       releaseLock?.();
-      setSaving(false);
+      if (!silent) setSaving(false);
+      else setAutoSaving(false);
+    }
+    })();
+    saveInFlightRef.current = run;
+    try {
+      await run;
+    } finally {
+      if (saveInFlightRef.current === run) saveInFlightRef.current = null;
     }
   };
+  salvarRascunhoFnRef.current = salvarRascunho;
+
+  const handleSalvarRascunho = () => salvarRascunho({ silent: false });
 
   // ── Enviar para aprovação ──
   const handleEnviar = async () => {
@@ -2217,6 +2282,7 @@ export const DiarioDeObra: React.FC = () => {
       return;
     }
     if (!validarPeriodo()) return;
+    if (saveInFlightRef.current) await saveInFlightRef.current;
     if (!navigator.onLine) {
       await flushPendingMediaToIdb();
       await persistDraftLocal({ pendingSync: true });
@@ -2434,7 +2500,23 @@ export const DiarioDeObra: React.FC = () => {
                     : `${fotos.length + videos.length + anexos.length} MÍDIA(S) NO APARELHO`}
               </span>
             )}
-            {isOnline && lastLocalSaveAt && !draftPendingSync && status === 'rascunho' && (
+            {status === 'rascunho' && !isReadOnly && tipoRelatorio && (
+              <button
+                type="button"
+                onClick={() => void handleSalvarRascunho()}
+                disabled={saving || autoSaving}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs md:text-sm font-bold text-gray-800 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-60"
+              >
+                <Save size={15} />
+                {saving || autoSaving ? 'Salvando...' : 'Salvar'}
+              </button>
+            )}
+            {status === 'rascunho' && !saving && !autoSaving && lastServerSaveAt && (
+              <span className="hidden sm:inline px-2.5 py-1 rounded-full text-[10px] md:text-xs font-medium border whitespace-nowrap bg-emerald-50 text-emerald-800 border-emerald-200">
+                Salvo {lastServerSaveAt}
+              </span>
+            )}
+            {isOnline && lastLocalSaveAt && !draftPendingSync && status === 'rascunho' && !lastServerSaveAt && !saving && !autoSaving && (
               <span className="hidden sm:inline px-2.5 py-1 rounded-full text-[10px] md:text-xs font-medium border whitespace-nowrap bg-gray-50 text-gray-500 border-gray-200">
                 Cópia local ok
               </span>
@@ -3581,21 +3663,17 @@ export const DiarioDeObra: React.FC = () => {
 
                  <div className="space-y-3">
                    {status === 'rascunho' && !isReadOnly && (
-                     <div className="flex gap-3">
+                     <div className="space-y-2">
                        <button
                          onClick={handleEnviar}
                          disabled={saving}
-                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-lunardeli-red text-white text-sm font-bold rounded-lg hover:bg-red-700 shadow-sm transition-colors disabled:opacity-60"
+                         className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-lunardeli-red text-white text-sm font-bold rounded-lg hover:bg-red-700 shadow-sm transition-colors disabled:opacity-60"
                        >
                          <Send size={16} /> {saving ? 'Enviando...' : 'Enviar para aprovação'}
                        </button>
-                       <button
-                         onClick={handleSalvarRascunho}
-                         disabled={saving}
-                         className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
-                       >
-                         <Save size={16} /> {saving ? 'Salvando...' : 'Salvar'}
-                       </button>
+                       <p className="text-xs text-gray-500">
+                         O rascunho grava sozinho a cada minuto e depois de cada foto. O botão Salvar fica no topo da tela.
+                       </p>
                      </div>
                    )}
 
@@ -3750,18 +3828,11 @@ export const DiarioDeObra: React.FC = () => {
       {/* ═══ Mobile Floating Action Bar ═══ */}
       {status === 'rascunho' && tipoRelatorio && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-          <div className="flex items-center gap-2 px-4 py-3">
-            <button
-              onClick={handleSalvarRascunho}
-              disabled={saving}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-3 bg-white border-2 border-gray-200 text-gray-700 text-sm font-bold rounded-xl active:bg-gray-50 transition-colors disabled:opacity-60"
-            >
-              <Save size={18} /> {saving ? '...' : 'Salvar'}
-            </button>
+          <div className="px-4 py-3">
             <button
               onClick={handleEnviar}
               disabled={saving}
-              className="flex-[2] flex items-center justify-center gap-2 px-3 py-3 bg-lunardeli-red text-white text-sm font-bold rounded-xl active:bg-red-700 shadow-sm transition-colors disabled:opacity-60"
+              className="w-full flex items-center justify-center gap-2 px-3 py-3 bg-lunardeli-red text-white text-sm font-bold rounded-xl active:bg-red-700 shadow-sm transition-colors disabled:opacity-60"
             >
               <Send size={18} /> {saving ? 'Enviando...' : 'Enviar p/ aprovação'}
             </button>
