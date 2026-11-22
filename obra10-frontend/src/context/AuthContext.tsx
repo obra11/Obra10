@@ -54,6 +54,7 @@ export interface Obra {
   endereco?: string;
   status: string;
   imageUrl?: string;
+  ordemExibicao?: number;
   minhasPermissoes?: string[];
   permissoes?: Record<string, string>;
 }
@@ -72,6 +73,7 @@ interface AuthContextType {
   updateEmpresaLogo: (url: string) => void;
   updateObraImage: (obraId: string, url: string) => void;
   updateUserPhoto: (url: string) => void;
+  reorderObras: (ordered: Obra[]) => void;
   fetchSession: () => Promise<void>;
 }
 
@@ -184,11 +186,15 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     if (user) setUser({ ...user, fotoUrl: url });
   };
 
+  const reorderObras = (ordered: Obra[]) => {
+    setObras(ordered);
+  };
+
   return (
     <AuthContext.Provider value={{ 
       isAuthenticated, isLoading, user, empresa, obras, obraAtiva, 
       setObraAtiva, login, trocarEmpresa, logout, updateEmpresaLogo, updateObraImage, updateUserPhoto,
-      fetchSession
+      reorderObras, fetchSession
     }}>
       {children}
     </AuthContext.Provider>

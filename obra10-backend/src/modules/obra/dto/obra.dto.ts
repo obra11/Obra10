@@ -1,4 +1,6 @@
 import {
+  ArrayMinSize,
+  IsArray,
   IsInt,
   IsObject,
   IsOptional,
@@ -44,6 +46,13 @@ export class AddColaboradorDto {
   @IsObject()
   @IsOptional()
   permissoes?: Record<string, any>;
+}
+
+export class ReordenarObrasDto {
+  @IsArray({ message: 'Informe as obras na nova ordem.' })
+  @ArrayMinSize(1, { message: 'Informe as obras na nova ordem.' })
+  @IsUUID('4', { each: true, message: 'Cada obra deve ser um UUID válido.' })
+  ids: string[];
 }
 
 export class EditColaboradorDto {

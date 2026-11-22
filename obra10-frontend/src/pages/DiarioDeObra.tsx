@@ -3117,7 +3117,7 @@ export const DiarioDeObra: React.FC = () => {
             onToggle={() => toggleSection('sec9')}
           >
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                {/* Fotos */}
                <div 
                   className="bg-gray-50 border border-gray-200 rounded-xl p-4 transition-colors hover:border-lunardeli-red border-dashed drag-active:bg-red-50"
@@ -3205,31 +3205,40 @@ export const DiarioDeObra: React.FC = () => {
                          const sf = fotosSalvas.find((item) => chaveSalva(item.id) === chave);
                          if (!sf) return null;
                          return (
-                        <div key={sf.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col relative group">
-                           <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer">
-                              <img src={getFileUrl(sf.urlS3)} alt={sf.nomeOriginal || 'Foto'} className="w-full h-24 object-cover hover:opacity-90 transition-opacity" />
-                           </a>
-                           <div className="p-2 flex flex-col gap-1.5 bg-green-50 border-t border-gray-100">
-                              <div className="flex items-center gap-1.5 w-full">
-                                 {setas}
-                                 <input 
-                                    className="flex-1 text-xs px-2 py-1 border rounded bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-lunardeli-red" 
-                                    placeholder="Legenda..." 
-                                    value={sf.nomeOriginal || ''} 
-                                    onChange={e => {
-                                       const newVal = e.target.value;
-                                       setSavedFiles(prev => prev.map(item => item.id === sf.id ? { ...item, nomeOriginal: newVal } : item));
-                                    }}
-                                    onBlur={() => handleSaveSavedFileLegenda(sf.id, sf.nomeOriginal)}
-                                    onKeyDown={e => {
-                                       if (e.key === 'Enter') {
-                                          (e.target as HTMLInputElement).blur();
-                                       }
-                                    }}
-                                    disabled={isReadOnly} 
-                                 />
-                                 <button onClick={() => handleDeleteAnexo(sf.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition-colors disabled:opacity-50" title="Excluir do RDO" disabled={isReadOnly}><Trash2 size={14}/></button>
-                              </div>
+                        <div key={sf.id} className="bg-white border border-gray-200 rounded-lg flex flex-col min-w-0">
+                           <div className="relative">
+                              <a href={getFileUrl(sf.urlS3)} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-t-lg">
+                                 <img src={getFileUrl(sf.urlS3)} alt={sf.nomeOriginal || 'Foto'} className="w-full h-28 object-cover hover:opacity-90 transition-opacity" />
+                              </a>
+                              {setas ? (
+                                 <div className="absolute top-1.5 left-1.5 z-10 rounded-md bg-white/95 shadow border border-gray-200">
+                                    {setas}
+                                 </div>
+                              ) : null}
+                              {!isReadOnly && (
+                                 <button
+                                    type="button"
+                                    onClick={() => handleDeleteAnexo(sf.id)}
+                                    className="absolute top-1.5 right-1.5 z-10 rounded-md bg-white/95 p-1.5 text-red-600 shadow border border-gray-200 hover:bg-red-50"
+                                    title="Excluir do RDO"
+                                 >
+                                    <Trash2 size={16}/>
+                                 </button>
+                              )}
+                           </div>
+                           <div className="p-2 bg-green-50 border-t border-gray-100">
+                              <textarea
+                                 rows={2}
+                                 className="w-full min-h-[2.75rem] text-xs px-2 py-1.5 border rounded bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-lunardeli-red resize-y break-words"
+                                 placeholder="Legenda..."
+                                 value={sf.nomeOriginal || ''}
+                                 onChange={e => {
+                                    const newVal = e.target.value;
+                                    setSavedFiles(prev => prev.map(item => item.id === sf.id ? { ...item, nomeOriginal: newVal } : item));
+                                 }}
+                                 onBlur={() => handleSaveSavedFileLegenda(sf.id, sf.nomeOriginal)}
+                                 disabled={isReadOnly}
+                              />
                            </div>
                         </div>
                          );
@@ -3238,58 +3247,84 @@ export const DiarioDeObra: React.FC = () => {
                        const f = fotos[i];
                        if (!f) return null;
                        return (
-                        <div key={chave} className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col relative">
-                           <img src={f.preview} alt="" className="w-full h-24 object-cover" />
-                           {/* Offline badge overlay */}
-                           {(f.isOfflinePending || f.isUploading || f.uploadFalhou) && (
-                              <div className="absolute top-1 left-1 right-1 flex flex-col gap-1 z-10">
-                                 {!f.isUploading && !f.uploadFalhou && (
-                                    <div className="flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-amber-600">
-                                       <span>☁️</span>
-                                       <span>{isOnline ? 'Na fila' : 'Offline'}</span>
-                                    </div>
-                                 )}
-                                 {f.isUploading && (
-                                    <div className="flex items-center justify-center gap-1 bg-blue-500 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-blue-600 animate-pulse">
-                                       <span className="animate-spin mr-0.5">🔄</span>
-                                       <span>Enviando</span>
-                                    </div>
-                                 )}
-                                 {f.uploadFalhou && (
-                                    <div className="flex flex-col gap-1 items-center justify-center bg-red-600 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-red-700">
-                                       <div className="flex items-center gap-1">
-                                          <span>⚠️</span>
-                                          <span>Falha</span>
-                                       </div>
-                                       <button
-                                          onClick={(e) => { e.preventDefault(); autoUploadFnRef.current(); }}
-                                          className="mt-0.5 bg-white text-red-600 px-2 py-0.5 rounded text-[8px] font-black hover:bg-gray-100 transition-colors shadow-sm"
-                                       >
-                                          Tentar
-                                       </button>
-                                    </div>
-                                 )}
+                        <div key={chave} className="bg-white border border-gray-200 rounded-lg flex flex-col min-w-0 relative">
+                           <div className="relative">
+                              <div className="overflow-hidden rounded-t-lg">
+                                 <img src={f.preview} alt="" className="w-full h-28 object-cover" />
                               </div>
-                           )}
-                           <div className="p-2 flex gap-1 items-center bg-gray-50">
-                              {setas}
-                              <input className="flex-1 text-xs px-2 py-1 border rounded" placeholder="Legenda..." value={f.legenda} onChange={async e => {
-                                  const newVal = e.target.value;
-                                  setFotos(prev => prev.map((item, idx) => idx === i ? { ...item, legenda: newVal } : item));
-                                  if (f.offlineId) {
-                                     await updateOfflineAttachmentLegenda(f.offlineId, newVal);
-                                  }
-                               }} disabled={isReadOnly} />
-                              <button
-                                type="button"
-                                onClick={() => setReeditFotoIndex(i)}
-                                className="text-lunardeli-red p-1 disabled:opacity-50"
-                                title="Marcar foto"
-                                disabled={isReadOnly || f.isUploading}
-                              >
-                                <Pencil size={14}/>
-                              </button>
-                              <button onClick={() => handleDeletePendingFoto(i, f.offlineId)} className="text-red-500 p-1 disabled:opacity-50" disabled={isReadOnly}><Trash2 size={14}/></button>
+                              {setas ? (
+                                 <div className="absolute top-1.5 left-1.5 z-20 rounded-md bg-white/95 shadow border border-gray-200">
+                                    {setas}
+                                 </div>
+                              ) : null}
+                              {!isReadOnly && (
+                                 <button
+                                    type="button"
+                                    onClick={() => handleDeletePendingFoto(i, f.offlineId)}
+                                    className="absolute top-1.5 right-1.5 z-20 rounded-md bg-white/95 p-1.5 text-red-600 shadow border border-gray-200 hover:bg-red-50 disabled:opacity-50"
+                                    title="Excluir do RDO"
+                                    disabled={isReadOnly}
+                                 >
+                                    <Trash2 size={16}/>
+                                 </button>
+                              )}
+                              {!isReadOnly && (
+                                 <button
+                                    type="button"
+                                    onClick={() => setReeditFotoIndex(i)}
+                                    className="absolute bottom-1.5 right-1.5 z-20 rounded-md bg-white/95 p-1.5 text-lunardeli-red shadow border border-gray-200 hover:bg-red-50 disabled:opacity-50"
+                                    title="Marcar foto"
+                                    disabled={isReadOnly || f.isUploading}
+                                 >
+                                    <Pencil size={14}/>
+                                 </button>
+                              )}
+                              {(f.isOfflinePending || f.isUploading || f.uploadFalhou) && (
+                                 <div className="absolute bottom-1.5 left-1.5 right-12 flex flex-col gap-1 z-10">
+                                    {!f.isUploading && !f.uploadFalhou && (
+                                       <div className="flex items-center justify-center gap-1 bg-amber-500 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-amber-600">
+                                          <span>☁️</span>
+                                          <span>{isOnline ? 'Na fila' : 'Offline'}</span>
+                                       </div>
+                                    )}
+                                    {f.isUploading && (
+                                       <div className="flex items-center justify-center gap-1 bg-blue-500 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-blue-600 animate-pulse">
+                                          <span className="animate-spin mr-0.5">🔄</span>
+                                          <span>Enviando</span>
+                                       </div>
+                                    )}
+                                    {f.uploadFalhou && (
+                                       <div className="flex flex-col gap-1 items-center justify-center bg-red-600 text-white text-[10px] font-black uppercase px-1.5 py-1 rounded shadow border border-red-700">
+                                          <div className="flex items-center gap-1">
+                                             <span>⚠️</span>
+                                             <span>Falha</span>
+                                          </div>
+                                          <button
+                                             onClick={(e) => { e.preventDefault(); autoUploadFnRef.current(); }}
+                                             className="mt-0.5 bg-white text-red-600 px-2 py-0.5 rounded text-[8px] font-black hover:bg-gray-100 transition-colors shadow-sm"
+                                          >
+                                             Tentar
+                                          </button>
+                                       </div>
+                                    )}
+                                 </div>
+                              )}
+                           </div>
+                           <div className="p-2 bg-gray-50 border-t border-gray-100">
+                              <textarea
+                                 rows={2}
+                                 className="w-full min-h-[2.75rem] text-xs px-2 py-1.5 border rounded bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-lunardeli-red resize-y break-words"
+                                 placeholder="Legenda..."
+                                 value={f.legenda}
+                                 onChange={async e => {
+                                    const newVal = e.target.value;
+                                    setFotos(prev => prev.map((item, idx) => idx === i ? { ...item, legenda: newVal } : item));
+                                    if (f.offlineId) {
+                                       await updateOfflineAttachmentLegenda(f.offlineId, newVal);
+                                    }
+                                 }}
+                                 disabled={isReadOnly}
+                              />
                            </div>
                         </div>
                        );

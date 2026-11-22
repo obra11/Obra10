@@ -4,6 +4,7 @@ import { EmailService } from '../email/email.service';
 import { perfilGlobalToObraNomeInterno } from '../../core/capabilities/obra-perfil';
 import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 import { mergePermissoesObra, podeReceberAprovacao } from '../../core/capabilities/role-capabilities';
+import { mesclarOrdemObras } from './ordem-obras';
 
 type AtividadePendentePainel = {
   descricao: string;
@@ -110,7 +111,7 @@ export class ObraService {
           some: { usuarioId },
         },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ ordemExibicao: 'asc' }, { createdAt: 'asc' }],
       include: {
         userObraRole: {
           where: { usuarioId },
@@ -188,12 +189,18 @@ export class ObraService {
       });
       if (recente) return recente;
 
+      const agg = await tx.obra.aggregate({
+        where: { empresaId, deletedAt: null },
+        _max: { ordemExibicao: true },
+      });
+
       const obra = await tx.obra.create({
         data: {
           empresaId,
           nome,
           endereco,
           status: 'ATIVA',
+          ordemExibicao: (agg._max.ordemExibicao ?? -1) + 1,
         },
       });
 
@@ -207,6 +214,37 @@ export class ObraService {
 
       return obra;
     });
+  }
+
+  async reordenarObras(empresaId: string, ids: string[]) {
+    const unique = [...new Set((ids || []).filter(Boolean))];
+    if (unique.length === 0) {
+      throw new BadRequestException('Informe as obras na nova ordem.');
+    }
+
+    const atuais = await this.prisma.obra.findMany({
+      where: { empresaId, deletedAt: null },
+      select: { id: true },
+      orderBy: [{ ordemExibicao: 'asc' }, { createdAt: 'asc' }],
+    });
+    const atuaisIds = atuais.map((o) => o.id);
+    const conhecidas = new Set(atuaisIds);
+    if (unique.some((id) => !conhecidas.has(id))) {
+      throw new BadRequestException(
+        'Uma ou mais obras não pertencem a esta empresa.',
+      );
+    }
+
+    const merged = mesclarOrdemObras(atuaisIds, unique);
+    await this.prisma.$transaction(
+      merged.map((id, index) =>
+        this.prisma.obra.update({
+          where: { id },
+          data: { ordemExibicao: index },
+        }),
+      ),
+    );
+    return { ok: true, ids: merged };
   }
 
   async excluirObra(id: string, empresaId: string, userId: string) {

@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useAuth, type Obra } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List, Headphones, FileText, Menu, X } from 'lucide-react';
+import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List, Headphones, FileText, Menu, X, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
+import { inserirObraAntesDe, moverObraNaLista } from '../utils/ordenarObras';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
 import {
@@ -11,7 +12,7 @@ import {
 } from '../utils/documentoFiscal';
 
 export const CompanyDashboard: React.FC = () => {
-  const { user, empresa, obras, logout, setObraAtiva, updateEmpresaLogo, updateUserPhoto } = useAuth();
+  const { user, empresa, obras, logout, setObraAtiva, updateEmpresaLogo, updateUserPhoto, reorderObras } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -26,6 +27,8 @@ export const CompanyDashboard: React.FC = () => {
     user?.capabilities?.gerenciarFinanceiro === true || isGestor;
   const canCriarObra =
     user?.capabilities?.criarObra === true || isGestor;
+  const canReordenarObras =
+    (user?.capabilities?.editarObra === true || isGestor) && (obras?.length || 0) > 1;
   const [menuContaAberto, setMenuContaAberto] = useState(false);
   const [showNovoModal, setShowNovoModal] = useState(false);
   const [novaObra, setNovaObra] = useState({ nome: '', endereco: '' });
@@ -59,6 +62,65 @@ export const CompanyDashboard: React.FC = () => {
     });
   }, [obras, searchQuery, statusFilter]);
 
+  const [salvandoOrdem, setSalvandoOrdem] = useState(false);
+  const [obraArrastando, setObraArrastando] = useState<string | null>(null);
+
+  const persistirOrdem = async (proxima: Obra[]) => {
+    const anterior = obras;
+    reorderObras(proxima);
+    setSalvandoOrdem(true);
+    try {
+      await api.patch('/obras/ordem', { ids: proxima.map((o) => o.id) });
+    } catch (e: any) {
+      reorderObras(anterior);
+      alert('Não foi possível salvar a ordem das obras: ' + (e?.response?.data?.message || e.message));
+    } finally {
+      setSalvandoOrdem(false);
+    }
+  };
+
+  const moverObra = (id: string, dir: -1 | 1) => {
+    if (!canReordenarObras) return;
+    const proxima = moverObraNaLista(obras || [], filteredObras, id, dir);
+    if (proxima === obras) return;
+    void persistirOrdem(proxima);
+  };
+
+  const soltarObraAntesDe = (alvoId: string) => {
+    if (!canReordenarObras || !obraArrastando || salvandoOrdem) return;
+    const proxima = inserirObraAntesDe(obras || [], obraArrastando, alvoId);
+    setObraArrastando(null);
+    if (proxima === obras) return;
+    void persistirOrdem(proxima);
+  };
+
+  const botoesOrdemObra = (obra: Obra, posicao: number) => {
+    if (!canReordenarObras) return null;
+    return (
+      <div className="flex flex-col shrink-0">
+        <button
+          type="button"
+          disabled={posicao === 0 || salvandoOrdem}
+          onClick={(e) => { e.stopPropagation(); moverObra(obra.id, -1); }}
+          className="p-0.5 text-gray-500 hover:text-lunardeli-red disabled:opacity-25"
+          aria-label="Subir obra"
+          title="Subir"
+        >
+          <ChevronUp size={16} />
+        </button>
+        <button
+          type="button"
+          disabled={posicao === filteredObras.length - 1 || salvandoOrdem}
+          onClick={(e) => { e.stopPropagation(); moverObra(obra.id, 1); }}
+          className="p-0.5 text-gray-500 hover:text-lunardeli-red disabled:opacity-25"
+          aria-label="Descer obra"
+          title="Descer"
+        >
+          <ChevronDown size={16} />
+        </button>
+      </div>
+    );
+  };
 
   const [showEditEmpresaModal, setShowEditEmpresaModal] = useState(false);
   const [empresaEdit, setEmpresaEdit] = useState({ 
@@ -407,6 +469,9 @@ export const CompanyDashboard: React.FC = () => {
             <div>
                 <h2 className="text-2xl font-bold text-gray-800">Suas Obras</h2>
                 <p className="text-gray-500 text-sm mt-1">Selecione um canteiro de obras para acessar seus módulos e RDOs.</p>
+                {canReordenarObras && (
+                  <p className="text-gray-400 text-xs mt-1">Use as setas{viewMode === 'list' ? ' ou arraste' : ''} para agrupar obras, por exemplo todos os canteiros do Naval juntos.</p>
+                )}
             </div>
             {canCriarObra && (
               <button onClick={() => setShowNovoModal(true)} className="px-3 md:px-4 py-2.5 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 active:bg-red-800 flex items-center gap-1.5 md:gap-2 text-sm shrink-0">
@@ -519,7 +584,7 @@ export const CompanyDashboard: React.FC = () => {
         ) : viewMode === 'grid' ? (
           /* Modo 1: Grade Grande (Cards Grandes) */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredObras.map(obra => (
+            {filteredObras.map((obra, posicao) => (
               <div key={obra.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow group flex flex-col">
                 <div className="h-48 bg-gray-100 relative group/cover">
                   {obra.imageUrl ? (
@@ -542,7 +607,10 @@ export const CompanyDashboard: React.FC = () => {
                 </div>
 
                 <div className="p-5 flex-1 flex flex-col">
-                  <h3 className="text-lg font-bold text-gray-800 mb-2 truncate">{obra.nome}</h3>
+                  <div className="flex items-start gap-2">
+                    <h3 className="text-lg font-bold text-gray-800 mb-2 truncate flex-1 min-w-0">{obra.nome}</h3>
+                    {botoesOrdemObra(obra, posicao)}
+                  </div>
                   {obra.endereco && (
                     <div className="flex items-start text-gray-500 text-sm mb-4">
                       <MapPin size={16} className="mr-1 mt-0.5 flex-shrink-0" />
@@ -565,7 +633,7 @@ export const CompanyDashboard: React.FC = () => {
         ) : viewMode === 'compact' ? (
           /* Modo 2: Grade Compacta (Miniaturas) */
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filteredObras.map(obra => (
+            {filteredObras.map((obra, posicao) => (
               <div key={obra.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-all flex flex-col">
                 <div className="h-28 bg-gray-100 relative">
                   {obra.imageUrl ? (
@@ -588,7 +656,10 @@ export const CompanyDashboard: React.FC = () => {
 
                 <div className="p-3.5 flex-1 flex flex-col justify-between">
                   <div>
-                    <h3 className="text-sm font-bold text-gray-800 truncate mb-1" title={obra.nome}>{obra.nome}</h3>
+                    <div className="flex items-start gap-1">
+                      <h3 className="text-sm font-bold text-gray-800 truncate mb-1 flex-1 min-w-0" title={obra.nome}>{obra.nome}</h3>
+                      {botoesOrdemObra(obra, posicao)}
+                    </div>
                     {obra.endereco ? (
                       <p className="text-xs text-gray-500 flex items-center gap-1 mb-3 truncate" title={obra.endereco}>
                         <MapPin size={12} className="shrink-0" />
@@ -612,9 +683,37 @@ export const CompanyDashboard: React.FC = () => {
         ) : (
           /* Modo 3: Lista Detalhada (Tabela / Linhas Horizontais) */
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden divide-y divide-gray-100">
-            {filteredObras.map(obra => (
-              <div key={obra.id} className="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50/80 transition-colors">
+            {filteredObras.map((obra, posicao) => (
+              <div
+                key={obra.id}
+                className={`p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50/80 transition-colors ${obraArrastando === obra.id ? 'opacity-60 bg-red-50/60' : ''}`}
+                onDragOver={(e) => {
+                  if (!canReordenarObras) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  soltarObraAntesDe(obra.id);
+                }}
+                onDragEnd={() => setObraArrastando(null)}
+              >
                 <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                  {canReordenarObras && (
+                    <span
+                      className="hidden sm:flex text-gray-400 cursor-grab active:cursor-grabbing shrink-0"
+                      title="Arrastar para reordenar"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', obra.id);
+                        setObraArrastando(obra.id);
+                      }}
+                    >
+                      <GripVertical size={18} />
+                    </span>
+                  )}
+                  {botoesOrdemObra(obra, posicao)}
                   <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden shrink-0 border border-gray-200 relative">
                     {obra.imageUrl ? (
                       <img src={getImageUrl(obra.imageUrl)} alt={obra.nome} className="w-full h-full object-cover" />

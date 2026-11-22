@@ -20,6 +20,7 @@ import {
   EditObraDto,
   AddColaboradorDto,
   EditColaboradorDto,
+  ReordenarObrasDto,
 } from './dto/obra.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -48,6 +49,14 @@ export class ObraController {
       throw new UnauthorizedException('Sessão inválida.');
     await this.assertCapability(req, 'criarObra', 'criar obras');
     return this.obraService.criarObra(empresaId, userId, dto);
+  }
+
+  @Patch('ordem')
+  async reordenarObras(@Req() req: any, @Body() dto: ReordenarObrasDto) {
+    const empresaId = req.user?.empresaId;
+    if (!empresaId) throw new UnauthorizedException('Sessão inválida.');
+    await this.assertCapability(req, 'editarObra', 'reordenar obras');
+    return this.obraService.reordenarObras(empresaId, dto.ids);
   }
 
   @Delete(':id')

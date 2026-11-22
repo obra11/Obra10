@@ -522,7 +522,7 @@ export class AuthService {
     const obrasBrutas = isPrivilegiado
       ? await this.prisma.obra.findMany({
           where: { empresaId, deletedAt: null },
-          orderBy: { createdAt: 'asc' },
+          orderBy: [{ ordemExibicao: 'asc' }, { createdAt: 'asc' }],
         })
       : await this.prisma.obra.findMany({
           where: {
@@ -532,7 +532,7 @@ export class AuthService {
             userObraRole: { some: { usuarioId: userId } },
           },
           include: { userObraRole: { where: { usuarioId: userId } } },
-          orderBy: { createdAt: 'asc' },
+          orderBy: [{ ordemExibicao: 'asc' }, { createdAt: 'asc' }],
         });
 
     return obrasBrutas.map((obra: any) => {
@@ -550,6 +550,7 @@ export class AuthService {
         endereco: obra.endereco,
         status: obra.status,
         imageUrl: obra.imageUrl,
+        ordemExibicao: obra.ordemExibicao ?? 0,
         minhasPermissoes: isPrivilegiado ? ['SUPER'] : Object.keys(permissoes),
         permissoes,
       };
