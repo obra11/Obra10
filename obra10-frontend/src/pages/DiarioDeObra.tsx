@@ -3707,7 +3707,7 @@ export const DiarioDeObra: React.FC = () => {
                          <Send size={16} /> {saving ? 'Enviando...' : 'Enviar para aprovação'}
                        </button>
                        <p className="text-xs text-gray-500">
-                         O rascunho grava sozinho a cada minuto e depois de cada foto. O botão Salvar fica no topo da tela.
+                         O rascunho grava sozinho a cada minuto e depois de cada foto. Use Salvar no topo ou na barra de baixo do celular. Enviar para aprovação fica só nesta seção.
                        </p>
                      </div>
                    )}
@@ -3860,16 +3860,17 @@ export const DiarioDeObra: React.FC = () => {
         )}
       </div>
 
-      {/* ═══ Mobile Floating Action Bar ═══ */}
-      {status === 'rascunho' && tipoRelatorio && (
+      {/* ═══ Mobile Floating Action Bar — só Salvar; envio fica na seção 10 ═══ */}
+      {status === 'rascunho' && !isReadOnly && tipoRelatorio && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           <div className="px-4 py-3">
             <button
-              onClick={handleEnviar}
-              disabled={saving}
+              type="button"
+              onClick={() => void handleSalvarRascunho()}
+              disabled={saving || autoSaving}
               className="w-full flex items-center justify-center gap-2 px-3 py-3 bg-lunardeli-red text-white text-sm font-bold rounded-xl active:bg-red-700 shadow-sm transition-colors disabled:opacity-60"
             >
-              <Send size={18} /> {saving ? 'Enviando...' : 'Enviar p/ aprovação'}
+              <Save size={18} /> {saving || autoSaving ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
         </div>
