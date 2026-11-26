@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { FileText, Users, LayoutDashboard, Image as ImageIcon, Loader2, ArrowRight, CheckCircle, Clock, AlertCircle, XCircle, ClipboardList, Printer } from 'lucide-react';
+import { FileText, Users, LayoutDashboard, Image as ImageIcon, Loader2, ArrowRight, CheckCircle, Clock, AlertCircle, XCircle, ClipboardList, Printer, HardHat, Package } from 'lucide-react';
 import api from '../services/api';
 import { format } from 'date-fns';
 import { parseUTCDate } from '../utils/date';
@@ -51,7 +51,7 @@ function nomeComparavel(valor: string) {
 }
 
 export const Dashboard: React.FC = () => {
-  const { obraAtiva, user } = useAuth();
+  const { obraAtiva, user, empresa } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,6 +77,16 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     carregarStats();
   }, [obraAtiva?.id]);
+
+  const temMateriais = (empresa?.modulos || []).some((m) => m.slug === 'MATERIAIS');
+  const temRdo = (empresa?.modulos || []).some((m) => m.slug === 'RDO');
+  const podeVerRh =
+    user?.perfilGlobal === 'GESTOR' ||
+    user?.perfilGlobal === 'SUPER_ADMIN' ||
+    user?.capabilities?.acessoTodasObras === true ||
+    user?.capabilities?.gerenciarUsuarios === true ||
+    obraAtiva?.minhasPermissoes?.includes('SUPER') ||
+    obraAtiva?.minhasPermissoes?.includes('MATERIAIS');
 
   const imprimirPendencias = async () => {
     if (!obraAtiva?.id) return;
@@ -134,6 +144,53 @@ export const Dashboard: React.FC = () => {
         {error && (
           <div className="mb-8 p-4 bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl">
             {error}
+          </div>
+        )}
+
+        {obraAtiva?.id && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+            {temRdo && (
+              <button
+                type="button"
+                onClick={() => navigate(`/obras/${obraAtiva.id}/rdos`)}
+                className="bg-white border border-gray-100 rounded-xl p-4 text-left hover:border-lunardeli-red hover:shadow-sm transition-all"
+              >
+                <FileText size={20} className="text-lunardeli-red mb-2" />
+                <p className="text-sm font-bold text-gray-800">Diário</p>
+                <p className="text-xs text-gray-500 mt-0.5">RDO desta obra</p>
+              </button>
+            )}
+            {podeVerRh && (
+              <button
+                type="button"
+                onClick={() => navigate(`/obras/${obraAtiva.id}/rh`)}
+                className="bg-white border border-gray-100 rounded-xl p-4 text-left hover:border-lunardeli-red hover:shadow-sm transition-all"
+              >
+                <HardHat size={20} className="text-lunardeli-red mb-2" />
+                <p className="text-sm font-bold text-gray-800">RH</p>
+                <p className="text-xs text-gray-500 mt-0.5">Pessoas e EPI do canteiro</p>
+              </button>
+            )}
+            {temMateriais && (
+              <button
+                type="button"
+                onClick={() => navigate(`/obras/${obraAtiva.id}/materiais`)}
+                className="bg-white border border-gray-100 rounded-xl p-4 text-left hover:border-lunardeli-red hover:shadow-sm transition-all"
+              >
+                <Package size={20} className="text-lunardeli-red mb-2" />
+                <p className="text-sm font-bold text-gray-800">Estoque</p>
+                <p className="text-xs text-gray-500 mt-0.5">Materiais desta obra</p>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => navigate(`/obras/${obraAtiva.id}/efetivo`)}
+              className="bg-white border border-gray-100 rounded-xl p-4 text-left hover:border-lunardeli-red hover:shadow-sm transition-all"
+            >
+              <Users size={20} className="text-lunardeli-red mb-2" />
+              <p className="text-sm font-bold text-gray-800">Efetivo</p>
+              <p className="text-xs text-gray-500 mt-0.5">Quem está no canteiro</p>
+            </button>
           </div>
         )}
 

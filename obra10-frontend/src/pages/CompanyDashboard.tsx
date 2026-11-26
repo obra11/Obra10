@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useAuth, type Obra } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List, Headphones, FileText, Menu, X, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
+import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List, Headphones, FileText, Menu, X, ChevronUp, ChevronDown, GripVertical, Package } from 'lucide-react';
 import { inserirObraAntesDe, moverObraNaLista } from '../utils/ordenarObras';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
@@ -29,6 +29,12 @@ export const CompanyDashboard: React.FC = () => {
     user?.capabilities?.criarObra === true || isGestor;
   const canReordenarObras =
     (user?.capabilities?.editarObra === true || isGestor) && (obras?.length || 0) > 1;
+  const temMateriais = (empresa?.modulos || []).some((m) => m.slug === 'MATERIAIS');
+  const podeVerRh =
+    canManageUsers ||
+    user?.capabilities?.acessoTodasObras === true ||
+    isGestor ||
+    temMateriais;
   const [menuContaAberto, setMenuContaAberto] = useState(false);
   const [showNovoModal, setShowNovoModal] = useState(false);
   const [novaObra, setNovaObra] = useState({ nome: '', endereco: '' });
@@ -239,7 +245,7 @@ export const CompanyDashboard: React.FC = () => {
     { label: 'Relatórios', icon: FileText, onClick: () => navigate('/relatorios'), visible: true },
     { label: 'Cadastro Base', icon: Boxes, onClick: () => navigate('/catalogo'), visible: true },
     { label: 'Equipe', icon: Users, onClick: () => navigate('/gestor/usuarios'), visible: canManageUsers },
-    { label: 'RH', icon: HardHat, onClick: () => navigate('/rh'), visible: canManageUsers || user?.capabilities?.acessoTodasObras === true },
+    { label: 'RH', icon: HardHat, onClick: () => navigate('/rh'), visible: podeVerRh },
     { label: 'Meu Plano', icon: Building2, onClick: () => navigate('/assinatura'), visible: canManageFinanceiro },
     { label: 'Suporte', icon: Headphones, onClick: () => navigate('/suporte'), visible: true },
     { label: 'Perfil', icon: User, onClick: () => navigate('/perfil'), visible: true },
@@ -465,6 +471,43 @@ export const CompanyDashboard: React.FC = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        {(podeVerRh || temMateriais || canManageUsers) && (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-8">
+            {podeVerRh && (
+              <button
+                type="button"
+                onClick={() => navigate('/rh')}
+                className="bg-white border border-gray-200 rounded-xl p-4 text-left hover:border-lunardeli-red hover:shadow-sm transition-all"
+              >
+                <HardHat size={20} className="text-lunardeli-red mb-2" />
+                <p className="text-sm font-bold text-gray-800">RH</p>
+                <p className="text-xs text-gray-500 mt-0.5">Pessoas, treinamentos e exames da empresa</p>
+              </button>
+            )}
+            {temMateriais && (
+              <button
+                type="button"
+                onClick={() => navigate('/estoque')}
+                className="bg-white border border-gray-200 rounded-xl p-4 text-left hover:border-lunardeli-red hover:shadow-sm transition-all"
+              >
+                <Package size={20} className="text-lunardeli-red mb-2" />
+                <p className="text-sm font-bold text-gray-800">Estoque</p>
+                <p className="text-xs text-gray-500 mt-0.5">Depósito central e transferências</p>
+              </button>
+            )}
+            {canManageUsers && (
+              <button
+                type="button"
+                onClick={() => navigate('/gestor/usuarios')}
+                className="bg-white border border-gray-200 rounded-xl p-4 text-left hover:border-lunardeli-red hover:shadow-sm transition-all"
+              >
+                <Users size={20} className="text-lunardeli-red mb-2" />
+                <p className="text-sm font-bold text-gray-800">Equipe</p>
+                <p className="text-xs text-gray-500 mt-0.5">Usuários e permissões</p>
+              </button>
+            )}
+          </div>
+        )}
         <div className="flex justify-between items-end mb-6">
             <div>
                 <h2 className="text-2xl font-bold text-gray-800">Suas Obras</h2>

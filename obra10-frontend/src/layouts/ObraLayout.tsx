@@ -112,9 +112,23 @@ export const ObraLayout: React.FC = () => {
     return obraAtiva.minhasPermissoes.includes(slug);
   };
 
+  const podeVerRh =
+    hasPerm('MATERIAIS') ||
+    hasPerm('SUPER') ||
+    user?.perfilGlobal === 'GESTOR' ||
+    user?.perfilGlobal === 'SUPER_ADMIN' ||
+    user?.capabilities?.acessoTodasObras === true ||
+    user?.capabilities?.gerenciarUsuarios === true;
+
   // Static permanent items
   const baseItems = [
     { name: 'Painel Geral', icon: LayoutDashboard, path: `/obras/${obraAtiva?.id}/dashboard`, visible: true },
+    {
+      name: 'RH',
+      icon: HardHat,
+      path: `/obras/${obraAtiva?.id}/rh`,
+      visible: podeVerRh,
+    },
   ];
 
   // Dynamic module items based on what the company contracted AND what the user has permission for
@@ -148,12 +162,6 @@ export const ObraLayout: React.FC = () => {
   // Final permanent items
   const footerItems = [
     { name: 'Efetivo', icon: Users, path: `/obras/${obraAtiva?.id}/efetivo`, visible: true },
-    {
-      name: 'RH',
-      icon: HardHat,
-      path: `/obras/${obraAtiva?.id}/rh`,
-      visible: hasPerm('MATERIAIS') || user?.perfilGlobal === 'GESTOR',
-    },
     { name: 'Cadastro Base', icon: Boxes, path: '/catalogo', visible: true },
     {
       name: 'Configurações',
@@ -166,11 +174,11 @@ export const ObraLayout: React.FC = () => {
   const menuItems = [...baseItems, ...moduleItems, ...extraItems, ...footerItems].filter(item => item.visible);
 
   const painelItem = menuItems.find((item) => /\/dashboard$/.test(item.path) && !item.path.includes('/rdos/'));
+  const rhItem = menuItems.find((item) => /\/rh$/.test(item.path));
   const diarioItem = menuItems.find((item) => /\/rdos$/.test(item.path));
-  const estoqueItem = menuItems.find((item) => /\/materiais$/.test(item.path));
   const mobilePrimaryItems = [
     painelItem ? { ...painelItem, name: 'Painel' } : null,
-    estoqueItem ? { ...estoqueItem, name: 'Estoque' } : null,
+    rhItem ? { ...rhItem, name: 'RH' } : null,
     diarioItem ? { ...diarioItem, name: 'Diário' } : null,
   ].filter((item): item is NonNullable<typeof item> => !!item);
 
