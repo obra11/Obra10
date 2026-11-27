@@ -136,12 +136,14 @@ export const Precos: React.FC = () => {
                     </div>
                     <div className="mt-3 sm:mt-0 sm:text-right shrink-0">
                       <p className="font-display text-2xl font-extrabold text-lunardeli-dark">
-                        R$ {valor.toFixed(2).replace('.', ',')}
+                        {valor <= 0 ? 'Incluso' : `R$ ${valor.toFixed(2).replace('.', ',')}`}
                       </p>
-                      <p className="text-xs text-gray-500">
-                        /{periodicidade === 'ANUAL' ? 'ano' : 'mês'} · Plano {labelPlano(plano)}
-                      </p>
-                      {periodicidade === 'ANUAL' && mensal > 0 && (
+                      {valor > 0 && (
+                        <p className="text-xs text-gray-500">
+                          /{periodicidade === 'ANUAL' ? 'ano' : 'mês'} · Plano {labelPlano(plano)}
+                        </p>
+                      )}
+                      {periodicidade === 'ANUAL' && mensal > 0 && valor > 0 && (
                         <p className="text-[11px] text-gray-400 mt-1">
                           mensal tabela: R$ {mensal.toFixed(2).replace('.', ',')}
                         </p>

@@ -405,7 +405,7 @@ export class TenantService {
     const modulos = empresa.tenantModulos.map((tm) => {
       const mensal = Number(tm.modulo.preco || 0);
       const anualCadastro = Number((tm.modulo as any).precoAnual || 0);
-      const anual = anualCadastro > 0 ? anualCadastro : mensal * 11;
+      const anual = anualCadastro > 0 ? anualCadastro : mensal * 10;
       const periodicidade =
         (tm as any).periodicidade === 'ANUAL' ? 'ANUAL' : 'MENSAL';
       const disponivelNoCatalogo = tm.modulo.ativo !== false;

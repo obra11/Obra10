@@ -263,7 +263,7 @@ export const Contratacao: React.FC = () => {
           >
             Anual
             <span className="block text-[10px] font-semibold opacity-80 mt-0.5">
-              Economize ~1 mês
+              2 meses grátis
             </span>
           </button>
         </div>
@@ -306,12 +306,18 @@ export const Contratacao: React.FC = () => {
                         <div className="flex items-center gap-3 shrink-0 ml-4">
                           <div className="text-right">
                             <p className="font-bold text-gray-900">
-                              R$ {precoModulo(m).toFixed(2)}
-                              <span className="text-xs text-gray-400 font-normal">
-                                /{periodicidade === 'ANUAL' ? 'ano' : 'mês'}
-                              </span>
+                              {precoModulo(m) <= 0 ? (
+                                'Incluso'
+                              ) : (
+                                <>
+                                  R$ {precoModulo(m).toFixed(2).replace('.', ',')}
+                                  <span className="text-xs text-gray-400 font-normal">
+                                    /{periodicidade === 'ANUAL' ? 'ano' : 'mês'}
+                                  </span>
+                                </>
+                              )}
                             </p>
-                            {periodicidade === 'ANUAL' && Number(m.preco) > 0 && (
+                            {periodicidade === 'ANUAL' && Number(m.preco) > 0 && precoModulo(m) > 0 && (
                               <p className="text-[10px] text-gray-400">
                                 equiv. R$ {(precoModulo(m) / 12).toFixed(2)}/mês
                               </p>

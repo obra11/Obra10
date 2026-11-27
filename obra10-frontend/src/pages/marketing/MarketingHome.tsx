@@ -96,7 +96,7 @@ export const MarketingHome: React.FC = () => {
             </Link>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-            {['RDO', 'FVS', 'Concretagem', 'IA Luna'].map((nome) => (
+            {['Diário de obra', 'Estoque', 'RH da obra', 'Visualizador'].map((nome) => (
               <div
                 key={nome}
                 className="bg-white border border-lunardeli-lightGray px-5 py-6 font-display font-bold text-lg"

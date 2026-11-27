@@ -50,6 +50,8 @@ interface PapelEmpresa {
 
 const MODULO_LABELS: Record<string, string> = {
   RDO: 'Relatório Diário',
+  MATERIAIS: 'Estoque',
+  RH: 'RH da obra',
   FVS: 'Ficha de Verificação',
   PROJETOS: 'Projetos/PDFs',
   VISUALIZADOR: 'Visualizador de Arquivos',
@@ -182,7 +184,7 @@ export const UserManagement: React.FC = () => {
       if (empresaModulos?.length) {
         setTenantModulos(empresaModulos);
       } else {
-        setTenantModulos(['RDO', 'FVS', 'PROJETOS', 'CONCRETO', 'IA', 'VISUALIZADOR']);
+        setTenantModulos(['RDO', 'MATERIAIS', 'RH', 'VISUALIZADOR']);
       }
     } finally {
       setLoading(false);

@@ -28,8 +28,8 @@ export const MarketingProduto: React.FC = () => {
             Módulos pensados para o dia a dia da obra.
           </h1>
           <p className="mt-5 text-white/80 max-w-2xl text-lg">
-            Ative o que precisa, por obra e por equipe. RDO, qualidade, concretagem
-            e inteligência artificial no mesmo ambiente.
+            Ative o que precisa, por obra e por equipe. Diário de obra, estoque,
+            RH e visualizador de arquivos no mesmo ambiente.
           </p>
         </div>
       </section>
@@ -51,14 +51,19 @@ export const MarketingProduto: React.FC = () => {
                       'Registre clima, efetivo, atividades e anexos com fluxo de aprovação.',
                   },
                   {
-                    slug: 'FVS',
-                    nome: 'Ficha de Verificação',
-                    descricao: 'Checklist de qualidade alinhado ao canteiro.',
+                    slug: 'MATERIAIS',
+                    nome: 'Controle de Materiais e Estoque',
+                    descricao: 'Almoxarifado da obra, com entrada, saída e saldo.',
                   },
                   {
-                    slug: 'IA',
-                    nome: 'Análise com IA',
-                    descricao: 'Luna consulta diários e fontes técnicas confiáveis.',
+                    slug: 'RH',
+                    nome: 'RH da obra',
+                    descricao: 'Ficha, entrega de EPI com assinatura e treinamentos com validade.',
+                  },
+                  {
+                    slug: 'VISUALIZADOR',
+                    nome: 'Visualizador de Arquivos',
+                    descricao: 'PDF, DWG e IFC no navegador, dentro da obra.',
                   },
                 ]
             ).map((m) => (

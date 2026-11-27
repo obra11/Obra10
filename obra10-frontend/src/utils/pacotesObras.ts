@@ -107,7 +107,7 @@ export function precoModuloPorPacote(
   const basePro = anual
     ? anualPro > 0
       ? anualPro
-      : mensalPro * 11
+      : mensalPro * 10
     : mensalPro;
   return precoComPacote(basePro, pacote);
 }

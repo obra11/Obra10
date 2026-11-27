@@ -113,6 +113,7 @@ export const ObraLayout: React.FC = () => {
   };
 
   const podeVerRh =
+    hasPerm('RH') ||
     hasPerm('MATERIAIS') ||
     hasPerm('SUPER') ||
     user?.perfilGlobal === 'GESTOR' ||
@@ -133,7 +134,7 @@ export const ObraLayout: React.FC = () => {
 
   // Dynamic module items based on what the company contracted AND what the user has permission for
   const moduleItems = (empresa?.modulos || [])
-    .filter(m => hasPerm(m.slug)) // Most items require permission in the Obra
+    .filter(m => hasPerm(m.slug) && m.slug !== 'RH')
     .map(m => ({
       name: m.nome,
       slug: m.slug,

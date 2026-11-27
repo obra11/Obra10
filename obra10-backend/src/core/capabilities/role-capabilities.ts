@@ -72,7 +72,7 @@ export const DEFAULT_CAPABILITIES_BY_TIPO: Record<
     verTodosRdos: true,
     verSoAprovados: false,
     verParcialAprovados: false,
-    modulosPadrao: { RDO: 'EDIT', FVS: 'EDIT', PROJETOS: 'EDIT', CONCRETO: 'EDIT', IA: 'EDIT', VISUALIZADOR: 'VIEW' },
+    modulosPadrao: { RDO: 'EDIT', MATERIAIS: 'EDIT', RH: 'EDIT', FVS: 'EDIT', PROJETOS: 'EDIT', CONCRETO: 'EDIT', IA: 'EDIT', VISUALIZADOR: 'VIEW' },
   },
   COLABORADOR: {
     gerenciarUsuarios: false,

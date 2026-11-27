@@ -13,22 +13,38 @@ const prisma = new PrismaClient({ adapter });
 
 // ===================== CATÁLOGO DE MÓDULOS =====================
 // NOTE: CONCRETO migrated from main module → SubModulo of CTRL_TEC
-const MODULOS = [
-  { slug: 'RDO',          nome: 'Relatório Diário de Obra',          sigla: 'RDO',         grupo: 'Operacional', descricao: 'Apontamento diário de atividades, efetivo e ocorrências.', preco: 49.90, ordemExibicao: 1 },
-  { slug: 'PLANEJAMENTO', nome: 'Planejamento e Cronograma',          sigla: 'Planning',    grupo: 'Operacional', descricao: 'Gestão de cronograma físico e progresso de execução.', preco: 29.90, ordemExibicao: 2 },
-  { slug: 'FVS',          nome: 'Ficha de Verificação de Serviço',    sigla: 'FVS',         grupo: 'Qualidade',   descricao: 'Checklist de qualidade por frente de serviço.', preco: 39.90, ordemExibicao: 3 },
-  { slug: 'PQO',          nome: 'Programa de Qualidade da Obra',      sigla: 'PQO / QMS',   grupo: 'Qualidade',   descricao: 'Não conformidades, indicadores e procedimentos de qualidade.', preco: 29.90, ordemExibicao: 4 },
-  { slug: 'CTRL_TEC',     nome: 'Controle Tecnológico',               sigla: 'Lab Control', grupo: 'Qualidade',   descricao: 'Controle de ensaios de concreto, solo, argamassa e pavimentação.', preco: 34.90, ordemExibicao: 5 },
-  { slug: 'CLIENTES',     nome: 'Inspeção e Entrega ao Cliente',      sigla: 'Client',      grupo: 'Qualidade',   descricao: 'Vistoria de entrega e assistência técnica pós-obra.', preco: 29.90, ordemExibicao: 6 },
-  { slug: 'PROJETOS',     nome: 'Gestão de Projetos e Documentos',    sigla: 'Docs',        grupo: 'Gestão',      descricao: 'Upload e visualização de pranchas PDF e documentos técnicos.', preco: 29.90, ordemExibicao: 7 },
-  { slug: 'MATERIAIS',    nome: 'Controle de Materiais e Estoque',    sigla: 'Material',    grupo: 'Gestão',      descricao: 'Requisições, estoque e rastreabilidade de materiais.', preco: 29.90, ordemExibicao: 8 },
-  { slug: 'EQUIPAMENTOS', nome: 'Manutenção e Aferição de Equipamentos', sigla: 'HSE/Maint', grupo: 'Gestão',   descricao: 'Manutenção preventiva e calibração de equipamentos.', preco: 29.90, ordemExibicao: 9 },
-  { slug: 'MEDICOES',     nome: 'Boletim de Medição',                 sigla: 'BM',          grupo: 'Gestão',      descricao: 'Boletins de medição e faturamento de progresso.', preco: 29.90, ordemExibicao: 10 },
-  { slug: 'SEGURANCA',    nome: 'Segurança do Trabalho',              sigla: 'HSE/Safety',  grupo: 'Pessoas',     descricao: 'APR, DDS, registro de acidentes e conformidade HSE.', preco: 29.90, ordemExibicao: 11 },
-  { slug: 'TREINAMENTOS', nome: 'Treinamento de Funcionários',        sigla: 'Training',    grupo: 'Pessoas',     descricao: 'Gestão de treinamentos, certificações e competências.', preco: 29.90, ordemExibicao: 12 },
-  { slug: 'VISUALIZADOR', nome: 'Visualizador de Arquivos',           sigla: 'Viewer',      grupo: 'Desenvolvimento', descricao: 'Abre PDF e IFC no navegador e converte DWG em PDF.', preco: 29.90, ordemExibicao: 13 },
-  // Legacy IA module
-  { slug: 'IA',           nome: 'Análise por IA (Claude)',            sigla: 'AI',          grupo: 'Operacional', descricao: 'Análise de RDOs e chat contextual com IA.', preco: 59.90, ordemExibicao: 99 },
+type ModuloSeed = {
+  slug: string;
+  nome: string;
+  sigla: string;
+  grupo: string;
+  descricao: string;
+  preco: number;
+  ordemExibicao: number;
+  ativo?: boolean;
+  precoAnual?: number;
+  precoBasico?: number;
+  precoAnualBasico?: number;
+  precoEnterprise?: number;
+  precoAnualEnterprise?: number;
+};
+
+const MODULOS: ModuloSeed[] = [
+  { slug: 'RDO', nome: 'Relatório Diário de Obra', sigla: 'RDO', grupo: 'Operacional', descricao: 'Apontamento diário de atividades, efetivo e ocorrências.', preco: 99, precoAnual: 990, precoBasico: 79, precoAnualBasico: 790, precoEnterprise: 149, precoAnualEnterprise: 1490, ordemExibicao: 1, ativo: true },
+  { slug: 'MATERIAIS', nome: 'Controle de Materiais e Estoque', sigla: 'Material', grupo: 'Gestão', descricao: 'Requisições, estoque e rastreabilidade de materiais.', preco: 59, precoAnual: 590, precoBasico: 39, precoAnualBasico: 390, precoEnterprise: 89, precoAnualEnterprise: 890, ordemExibicao: 2, ativo: true },
+  { slug: 'RH', nome: 'RH da obra', sigla: 'RH', grupo: 'Pessoas', descricao: 'Ficha do trabalhador, entrega de EPI com assinatura e treinamentos com validade.', preco: 49, precoAnual: 490, precoBasico: 39, precoAnualBasico: 390, precoEnterprise: 79, precoAnualEnterprise: 790, ordemExibicao: 3, ativo: true },
+  { slug: 'VISUALIZADOR', nome: 'Visualizador de Arquivos', sigla: 'Viewer', grupo: 'Operacional', descricao: 'Abre PDF e IFC no navegador e converte DWG em PDF.', preco: 0, precoAnual: 0, precoBasico: 0, precoAnualBasico: 0, precoEnterprise: 0, precoAnualEnterprise: 0, ordemExibicao: 4, ativo: true },
+  { slug: 'PLANEJAMENTO', nome: 'Planejamento e Cronograma', sigla: 'Planning', grupo: 'Operacional', descricao: 'Gestão de cronograma físico e progresso de execução.', preco: 29.90, ordemExibicao: 20, ativo: false },
+  { slug: 'FVS', nome: 'Ficha de Verificação de Serviço', sigla: 'FVS', grupo: 'Qualidade', descricao: 'Checklist de qualidade por frente de serviço.', preco: 39.90, ordemExibicao: 21, ativo: false },
+  { slug: 'PQO', nome: 'Programa de Qualidade da Obra', sigla: 'PQO / QMS', grupo: 'Qualidade', descricao: 'Não conformidades, indicadores e procedimentos de qualidade.', preco: 29.90, ordemExibicao: 22, ativo: false },
+  { slug: 'CTRL_TEC', nome: 'Controle Tecnológico', sigla: 'Lab Control', grupo: 'Qualidade', descricao: 'Controle de ensaios de concreto, solo, argamassa e pavimentação.', preco: 34.90, ordemExibicao: 23, ativo: false },
+  { slug: 'CLIENTES', nome: 'Inspeção e Entrega ao Cliente', sigla: 'Client', grupo: 'Qualidade', descricao: 'Vistoria de entrega e assistência técnica pós-obra.', preco: 29.90, ordemExibicao: 24, ativo: false },
+  { slug: 'PROJETOS', nome: 'Gestão de Projetos e Documentos', sigla: 'Docs', grupo: 'Gestão', descricao: 'Upload e visualização de pranchas PDF e documentos técnicos.', preco: 29.90, ordemExibicao: 25, ativo: false },
+  { slug: 'EQUIPAMENTOS', nome: 'Manutenção e Aferição de Equipamentos', sigla: 'HSE/Maint', grupo: 'Gestão', descricao: 'Manutenção preventiva e calibração de equipamentos.', preco: 29.90, ordemExibicao: 26, ativo: false },
+  { slug: 'MEDICOES', nome: 'Boletim de Medição', sigla: 'BM', grupo: 'Gestão', descricao: 'Boletins de medição e faturamento de progresso.', preco: 29.90, ordemExibicao: 27, ativo: false },
+  { slug: 'SEGURANCA', nome: 'Segurança do Trabalho', sigla: 'HSE/Safety', grupo: 'Pessoas', descricao: 'APR, DDS, registro de acidentes e conformidade HSE.', preco: 29.90, ordemExibicao: 28, ativo: false },
+  { slug: 'TREINAMENTOS', nome: 'Treinamento de Funcionários', sigla: 'Training', grupo: 'Pessoas', descricao: 'Gestão de treinamentos, certificações e competências.', preco: 29.90, ordemExibicao: 29, ativo: false },
+  { slug: 'IA', nome: 'Análise por IA (Claude)', sigla: 'AI', grupo: 'Operacional', descricao: 'Análise de RDOs e chat contextual com IA.', preco: 59.90, ordemExibicao: 99, ativo: false },
 ];
 
 // ===================== SUBMÓDULOS =====================
@@ -87,10 +103,18 @@ async function main() {
   console.log('\n📦 Populando catálogo de módulos...');
   const modulosMap: Record<string, string> = {};
   for (const m of MODULOS) {
+    const precos = {
+      preco: m.preco,
+      ...(m.precoAnual != null ? { precoAnual: m.precoAnual } : {}),
+      ...(m.precoBasico != null ? { precoBasico: m.precoBasico } : {}),
+      ...(m.precoAnualBasico != null ? { precoAnualBasico: m.precoAnualBasico } : {}),
+      ...(m.precoEnterprise != null ? { precoEnterprise: m.precoEnterprise } : {}),
+      ...(m.precoAnualEnterprise != null ? { precoAnualEnterprise: m.precoAnualEnterprise } : {}),
+    };
     const modulo = await (prisma as any).modulo.upsert({
       where: { slug: m.slug },
-      update: { preco: m.preco, nome: m.nome, descricao: m.descricao, grupo: m.grupo, sigla: m.sigla, ordemExibicao: m.ordemExibicao },
-      create: { slug: m.slug, nome: m.nome, descricao: m.descricao, sigla: m.sigla, grupo: m.grupo, ordemExibicao: m.ordemExibicao, preco: m.preco, versao: '1.0.0', dependencias: [] },
+      update: { ...precos, nome: m.nome, descricao: m.descricao, grupo: m.grupo, sigla: m.sigla, ordemExibicao: m.ordemExibicao, ativo: m.ativo !== false },
+      create: { slug: m.slug, nome: m.nome, descricao: m.descricao, sigla: m.sigla, grupo: m.grupo, ordemExibicao: m.ordemExibicao, ativo: m.ativo !== false, ...precos, versao: '1.0.0', dependencias: [] },
     });
     modulosMap[m.slug] = modulo.id;
     console.log(`  ✅ ${m.slug.padEnd(16)} | ${m.grupo.padEnd(12)} | R$ ${m.preco.toFixed(2)}`);

@@ -22,12 +22,12 @@ export const ModalColaboradorObra: React.FC<ModalColaboradorObraProps> = ({ obra
   // permissoes form state: { "RDO": "EDIT", "FVS": "VIEW" }
   const [permissoes, setPermissoes] = useState<Record<string, string>>({});
 
-  const modulosDisponiveis = [
+  const [modulosDisponiveis, setModulosDisponiveis] = useState([
     { slug: 'RDO', nome: 'Diário de Obra (RDO)' },
-    { slug: 'FVS', nome: 'Ficha de Verificação (FVS)' },
-    { slug: 'PROJETOS', nome: 'Gestão de Projetos' },
+    { slug: 'MATERIAIS', nome: 'Controle de Materiais e Estoque' },
+    { slug: 'RH', nome: 'RH da obra' },
     { slug: 'VISUALIZADOR', nome: 'Visualizador de Arquivos' },
-  ];
+  ]);
 
   useEffect(() => {
     const fetchUsuarios = async () => {
@@ -38,6 +38,15 @@ export const ModalColaboradorObra: React.FC<ModalColaboradorObraProps> = ({ obra
         console.error('Erro ao buscar usuários', err);
       } finally {
         setLoadingUsers(false);
+      }
+      try {
+        const catalogo = await api.get('/modulos');
+        const lista = (catalogo.data || [])
+          .filter((m: { slug?: string; nome?: string }) => m.slug && m.nome)
+          .map((m: { slug: string; nome: string }) => ({ slug: m.slug, nome: m.nome }));
+        if (lista.length) setModulosDisponiveis(lista);
+      } catch {
+        // Mantém a lista dos módulos que já têm tela.
       }
     };
     fetchUsuarios();

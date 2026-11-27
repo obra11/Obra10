@@ -21,7 +21,7 @@ import { Modulo } from '../../core/decorators/modulo.decorator';
 import { RhService, type FichaBody } from './rh.service';
 
 @Controller('rh')
-@Modulo('MATERIAIS')
+@Modulo('RH')
 @UseGuards(JwtAuthGuard, ModuloGuard)
 export class RhController {
   constructor(private readonly rh: RhService) {}
