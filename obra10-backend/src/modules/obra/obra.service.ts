@@ -1,10 +1,14 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { perfilGlobalToObraNomeInterno } from '../../core/capabilities/obra-perfil';
 import { CapabilitiesService } from '../../core/capabilities/capabilities.service';
 import { mergePermissoesObra, podeReceberAprovacao } from '../../core/capabilities/role-capabilities';
 import { mesclarOrdemObras } from './ordem-obras';
+import {
+  idsDuplicatasVaziasParaExcluir,
+  normalizarNomeObra,
+} from './nome-obra';
 
 type AtividadePendentePainel = {
   descricao: string;
@@ -78,12 +82,27 @@ function agruparPorResponsavel(itens: AtividadePendentePainel[]) {
 }
 
 @Injectable()
-export class ObraService {
+export class ObraService implements OnModuleInit {
+  private readonly logger = new Logger(ObraService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
     private readonly capabilities: CapabilitiesService,
   ) {}
+
+  async onModuleInit() {
+    try {
+      const n = await this.limparDuplicatasVazias();
+      if (n > 0) {
+        this.logger.warn(
+          `Excluí ${n} obra(s) duplicada(s) vazia(s) (mesmo nome, sem RDO/anexo/RH).`,
+        );
+      }
+    } catch (err) {
+      this.logger.error('Falha ao limpar obras duplicadas vazias', err as Error);
+    }
+  }
 
   /** Garante um registro em `perfis` pelo nomeInterno (cria se não existir). */
   private async ensurePerfil(nomeInterno: string) {
@@ -102,6 +121,21 @@ export class ObraService {
   }
 
   async listarObrasDoUsuario(usuarioId: string) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: { empresaId: true },
+    });
+    if (usuario?.empresaId) {
+      try {
+        await this.limparDuplicatasVazias(usuario.empresaId);
+      } catch (err) {
+        this.logger.error(
+          'Falha ao limpar obras duplicadas vazias na listagem',
+          err as Error,
+        );
+      }
+    }
+
     // Busca as obras ATIVAS nas quais o usuário tem um perfil
     const obras = await this.prisma.obra.findMany({
       where: {
@@ -170,24 +204,26 @@ export class ObraService {
     const nome = data.nome.trim().replace(/\s+/g, ' ');
     if (!nome) throw new BadRequestException('Informe o nome da obra.');
     const endereco = data.endereco?.trim() || null;
+    const nomeNormalizado = normalizarNomeObra(nome);
+    if (!nomeNormalizado) throw new BadRequestException('Informe o nome da obra.');
 
     // 1. Garante que o perfil ENGENHEIRO existe (FORA da transação para não abortar em caso de erro de constraint)
     const perfil = await this.ensurePerfil('ENGENHEIRO');
 
-    // 2. Toque duplo em Salvar criava duas obras iguais e a vazia escondia os diários.
-    const chave = `${empresaId}|${nome.toLowerCase()}`;
+    // 2. Toque duplo / acento diferente ("Condominio" vs "Condomínio") criava duas obras.
+    const chave = `${empresaId}|${nomeNormalizado}`;
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${chave}))`;
-      const recente = await tx.obra.findFirst({
-        where: {
-          empresaId,
-          deletedAt: null,
-          nome: { equals: nome, mode: 'insensitive' },
-          createdAt: { gte: new Date(Date.now() - 30_000) },
-        },
-        orderBy: { createdAt: 'desc' },
+      const vivas = await tx.obra.findMany({
+        where: { empresaId, deletedAt: null },
+        select: { id: true, nome: true },
       });
-      if (recente) return recente;
+      const existente = vivas.find(
+        (obra) => normalizarNomeObra(obra.nome) === nomeNormalizado,
+      );
+      if (existente) {
+        return tx.obra.findUniqueOrThrow({ where: { id: existente.id } });
+      }
 
       const agg = await tx.obra.aggregate({
         where: { empresaId, deletedAt: null },
@@ -214,6 +250,46 @@ export class ObraService {
 
       return obra;
     });
+  }
+
+  async limparDuplicatasVazias(empresaId?: string): Promise<number> {
+    const obras = await this.prisma.obra.findMany({
+      where: { deletedAt: null, ...(empresaId ? { empresaId } : {}) },
+      select: {
+        id: true,
+        empresaId: true,
+        nome: true,
+        createdAt: true,
+        _count: {
+          select: {
+            rdos: { where: { deletedAt: null } },
+            anexos: { where: { deletedAt: null } },
+            funcionarios: { where: { deletedAt: null } },
+            treinamentos: { where: { deletedAt: null } },
+            alocacoes: { where: { deletedAt: null } },
+          },
+        },
+      },
+    });
+    const ids = idsDuplicatasVaziasParaExcluir(
+      obras.map((obra) => ({
+        id: obra.id,
+        empresaId: obra.empresaId,
+        nome: obra.nome,
+        createdAt: obra.createdAt,
+        rdos: obra._count.rdos,
+        anexos: obra._count.anexos,
+        funcionarios: obra._count.funcionarios,
+        treinamentos: obra._count.treinamentos,
+        alocacoes: obra._count.alocacoes,
+      })),
+    );
+    if (!ids.length) return 0;
+    const result = await this.prisma.obra.updateMany({
+      where: { id: { in: ids }, deletedAt: null },
+      data: { deletedAt: new Date(), status: 'EXCLUIDA' },
+    });
+    return result.count;
   }
 
   async reordenarObras(empresaId: string, ids: string[]) {
@@ -289,10 +365,27 @@ export class ObraService {
     if (!obra)
       throw new Error('Obra não encontrada ou não pertence a esta empresa.');
 
+    const nome = data.nome?.trim().replace(/\s+/g, ' ');
+    if (nome) {
+      const nomeNormalizado = normalizarNomeObra(nome);
+      const irmas = await this.prisma.obra.findMany({
+        where: { empresaId, deletedAt: null, id: { not: id } },
+        select: { nome: true },
+      });
+      const colisao = irmas.find(
+        (outra) => normalizarNomeObra(outra.nome) === nomeNormalizado,
+      );
+      if (colisao) {
+        throw new BadRequestException(
+          `Já existe a obra «${colisao.nome}» nesta empresa.`,
+        );
+      }
+    }
+
     return this.prisma.obra.update({
       where: { id },
       data: {
-        ...(data.nome && { nome: data.nome }),
+        ...(nome && { nome }),
         ...(data.endereco !== undefined && { endereco: data.endereco }),
         ...(data.status && { status: data.status }),
       },

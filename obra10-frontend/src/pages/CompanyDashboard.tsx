@@ -3,6 +3,7 @@ import { useAuth, type Obra } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { HardHat, LogOut, Upload, Building2, MapPin, Loader2, Plus, Edit2, Users, AlertTriangle, DollarSign, ExternalLink, User, Boxes, Search, LayoutGrid, Grid, List, Headphones, FileText, Menu, X, ChevronUp, ChevronDown, GripVertical, Package } from 'lucide-react';
 import { inserirObraAntesDe, moverObraNaLista } from '../utils/ordenarObras';
+import { normalizarNomeObra, obraComMesmoNome } from '../utils/nomeObra';
 import api from '../services/api';
 import { getImageUrl } from '../utils/image';
 import {
@@ -67,6 +68,18 @@ export const CompanyDashboard: React.FC = () => {
       return matchSearch && matchStatus;
     });
   }, [obras, searchQuery, statusFilter]);
+
+  const obrasComNomeParecido = useMemo(() => {
+    const grupos = new Map<string, Obra[]>();
+    for (const obra of obras || []) {
+      const chave = normalizarNomeObra(obra.nome);
+      if (!chave) continue;
+      const grupo = grupos.get(chave);
+      if (grupo) grupo.push(obra);
+      else grupos.set(chave, [obra]);
+    }
+    return [...grupos.values()].filter((grupo) => grupo.length > 1);
+  }, [obras]);
 
   const [salvandoOrdem, setSalvandoOrdem] = useState(false);
   const [obraArrastando, setObraArrastando] = useState<string | null>(null);
@@ -156,6 +169,13 @@ export const CompanyDashboard: React.FC = () => {
 
   const handleCriarObra = async () => {
     if (criandoObra.current || !novaObra.nome.trim()) return;
+    const existente = obraComMesmoNome(obras || [], novaObra.nome);
+    if (existente) {
+      alert(
+        `Já existe a obra «${existente.nome}». Abra essa em vez de cadastrar outra com o mesmo nome.`,
+      );
+      return;
+    }
     criandoObra.current = true;
     setLoadingCriar(true);
     try {
@@ -607,6 +627,19 @@ export const CompanyDashboard: React.FC = () => {
           </div>
         )}
 
+        {obrasComNomeParecido.length > 0 && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Há obras com o mesmo nome (acento não conta). A duplicata vazia some ao atualizar; se as duas tiverem conteúdo, exclua a errada em Configurações.
+            <ul className="mt-2 list-disc pl-5 space-y-1">
+              {obrasComNomeParecido.map((grupo) => (
+                <li key={grupo.map((o) => o.id).join('-')}>
+                  {grupo.map((o) => o.nome).join(' · ')}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Exibição das Obras */}
         {obras.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center text-gray-500">
@@ -809,6 +842,9 @@ export const CompanyDashboard: React.FC = () => {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Nome da Obra *</label>
                 <input value={novaObra.nome} onChange={e => setNovaObra({...novaObra, nome: e.target.value})} className="w-full px-3 py-2 border rounded-lg focus:ring-red-500 focus:border-red-500 outline-none" placeholder="Ex: Residencial Lumière" />
+                {obraComMesmoNome(obras || [], novaObra.nome) && (
+                  <p className="text-xs text-amber-700 mt-1">Já existe uma obra com este nome. Não cadastre outra.</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Endereço (opcional)</label>
